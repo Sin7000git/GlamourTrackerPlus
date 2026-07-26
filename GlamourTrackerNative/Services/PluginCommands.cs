@@ -1,0 +1,101 @@
+using Dalamud.Game.Command;
+using Dalamud.Plugin.Services;
+
+namespace GlamourTracker.Services;
+
+internal sealed class PluginCommands : IDisposable
+{
+    private readonly ICommandManager commandManager;
+    private readonly IChatGui chatGui;
+    private readonly Plugin plugin;
+
+    public PluginCommands(ICommandManager commandManager, IChatGui chatGui, Plugin plugin)
+    {
+        this.commandManager = commandManager;
+        this.chatGui = chatGui;
+        this.plugin = plugin;
+
+        this.commandManager.AddHandler(Plugin.CommandName, new CommandInfo(OnCommand)
+        {
+            HelpMessage = "Glamour Tracker+ Native ImGui UI. Use /glamnative for the native Fashion Report shell.",
+        });
+        this.commandManager.AddHandler(Plugin.NativeCommandName, new CommandInfo(OnNativeCommand)
+        {
+            HelpMessage = "Open the native (KamiToolKit) Fashion Report shell.",
+        });
+    }
+
+    public void Dispose()
+    {
+        this.commandManager.RemoveHandler(Plugin.CommandName);
+        this.commandManager.RemoveHandler(Plugin.NativeCommandName);
+    }
+
+    private void OnNativeCommand(string command, string args)
+    {
+        this.plugin.ToggleNativeFashionReport();
+        _ = this.plugin.FashionReport.RefreshAsync(force: false);
+    }
+
+    private void OnCommand(string command, string args)
+    {
+        var verb = args.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.ToLowerInvariant() ?? string.Empty;
+
+        switch (verb)
+        {
+            case "":
+            case "open":
+            case "ui":
+                this.plugin.ToggleMainUi();
+                return;
+
+            case "native":
+            case "nui":
+                this.plugin.ToggleNativeFashionReport();
+                _ = this.plugin.FashionReport.RefreshAsync(force: false);
+                return;
+
+            case "refresh":
+                this.plugin.RefreshAll(true);
+                this.chatGui.Print("Glamour Tracker+ Native refreshed dresser and armoire data.");
+                return;
+
+            case "randomize":
+            case "rand":
+            case "roll":
+                _ = Plugin.Framework.RunOnFrameworkThread(() =>
+                {
+                    var result = this.plugin.BeginRandomizeOpenPlate(r =>
+                    {
+                        if (!r.InProgress)
+                            this.chatGui.Print($"[Glamour Tracker+ Native] {r.Message}");
+                        if (r is { Success: true, InProgress: false })
+                            this.plugin.RefreshAll(true);
+                    });
+                    this.chatGui.Print($"[Glamour Tracker+ Native] {result.Message}");
+                });
+                return;
+
+            case "fashion":
+            case "fr":
+            case "report":
+                this.plugin.OpenFashionReportTab();
+                _ = this.plugin.FashionReport.RefreshAsync(force: false);
+                return;
+
+            case "gcdebug":
+            case "gcicons":
+                this.plugin.DebugGcExpertDelivery();
+                return;
+
+            case "help":
+                this.chatGui.Print(
+                    "Glamour Tracker+ Native: /glamplusn | /glamnative | /glamplusn fashion | /glamplusn help");
+                return;
+
+            default:
+                this.chatGui.Print($"Unknown option \"{verb}\". Use /glamplusn help.");
+                return;
+        }
+    }
+}

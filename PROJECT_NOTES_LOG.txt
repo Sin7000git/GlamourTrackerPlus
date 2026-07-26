@@ -1,0 +1,63 @@
+# Glamour Tracker+ — project notes
+
+## 2026-07-26 — Fork + Fashion Report helper
+
+- Forked from GlamourTracker.PlateRandomizer as InternalName `GlamourTrackerPlus`, command `/glamplus`, display name Glamour Tracker+.
+- Fashion Report tab loads weekly state from fashionreportxiv.com:
+  - `/api/report-state` (theme, hints, dyes, Easy 80/100)
+  - `/api/hint` (items per hint/slot)
+  - `/api/item` (vendor locations/prices)
+- Ownership matched via existing dresser/armoire index (Lumina item-name lookup).
+- Offline-only weekly answers are not viable: game FashionCheck UI exposes theme/hints, but gold items + dyes are community-discovered.
+- Logs: `~/.config/glamour-tracker-plus/logs/app.log`
+- Dev DLL: `GlamourTrackerPlus/bin/Release/GlamourTrackerPlus.dll`
+
+## 2026-07-26 — Fashion Report UI + sources (0.6.1.0)
+
+- Parse full `/api/item` sections (vendor, craft, quest, exchange, GC, duty, market, …).
+- Prefer cheapest vendor, then same city/area as the player (e.g. Ul'dah Gwalter over North Shroud).
+- Column UI closer to fashionreportxiv.com: hint columns, dyes / Easy 100 / Easy 80, item icons, expand for details.
+- Button: Update nearby vendors (re-scores without full refresh).
+
+## 2026-07-26 — Parse fix + icons + autocraft hook (0.6.1.2)
+
+- Bug: barter NPCs were scored as "NPC vendor 0 gil"; exchange no longer sets PreferredVendor; gil shops require price > 0.
+- Icons ~1.5× (42 / 33 / 27).
+
+## 2026-07-26 — Autocraft via Artisan directly (0.6.1.3)
+
+- Reverted Gil Advisor IPC stubs (IsLoaded / TryStartCraftItem).
+- Autocraft calls Artisan.CraftItem after Lumina recipe lookup; button hidden if Artisan IPC missing.
+- Teal color-coded Autocraft button for visibility.
+
+## 2026-07-26 — Bags/armoury/saddlebag + craft mats (0.6.1.4)
+
+- Fashion ownership: bags, armoury, saddlebag, dresser, armoire.
+- Craft sections show owned material counts (green have N / red N/required).
+- Update ownership button re-scans inventories.
+
+## 2026-07-26 — Auto ownership + Artisan detect (0.6.1.6)
+
+- Attempt: Subscribe IGameInventory.InventoryChanged → debounced RebindOwnership (400ms); RefreshOwnership also rebinds Fashion Report.
+- Artisan button: IsAvailable = InstalledPlugins Artisan.IsLoaded + CraftItem IPC (no Artisan source changes).
+- Files: FashionReportService.cs, ArtisanIpcClient.cs, Plugin.cs
+- Outcome: built
+- Next: verify buy updates Owned/mats in UI; toggle Artisan off → Autocraft hidden.
+
+## 2026-07-26 — Local FFXIV-ish ImGui theme (0.6.1.9)
+
+- Attempt: PluginLocalUiTheme pushed in TrackerWindow PreDraw/PostDraw; Settings toggle Use Glamour Tracker+ theme; Edit theme colors + Reset.
+- Outcome: built
+- Note: local theme is editable in Settings and saved in plugin config.
+
+## 2026-07-26 — Progress badge + layout + perf (0.6.1.7)
+
+- Attempt: Standalone Fashion Report completion via Masked Rose ProcessEventPlay (same as DailyDuty); optional read of DailyDuty FashionReport.data.json. Color badge next to week title. Bottom row fills remaining height. Removed Artisan-hidden tooltip line. Cached Artisan IsAvailable; precomputed craft mats on items; less LINQ in Draw.
+- Files: FashionReportProgressTracker.cs, FashionReportWeek.cs, FashionReportPanel.cs, FashionReportService.cs, ArtisanIpcClient.cs, Plugin.cs, CharacterGlamourCache.cs
+- Outcome: built
+- Next: talk to Masked Rose / use DailyDuty → badge Complete/Incomplete; confirm no bottom gap.
+
+## 2026-07-26 — Full theme knobs (0.6.2.0)
+- Attempt: Dictionary-based theme exposing every ImGuiCol + ImGuiStyleVar; migrate legacy fields; Settings sections Colors / Sizes / Padding.
+- Outcome: built
+- Note: your existing colors migrate into the new dictionaries on load.

@@ -7,7 +7,7 @@ namespace GlamourTracker;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 6;
+    public int Version { get; set; } = 8;
 
     public bool Enabled { get; set; } = true;
 
@@ -39,6 +39,35 @@ public sealed class Configuration : IPluginConfiguration
     /// When true, overlay sits on the top-right of the plate window (avoids Glamaholic's top-left menu).
     /// </summary>
     public bool PlateEditorOverlayOnRight { get; set; } = true;
+
+    // --- Manual reroll placement (fractions of plate on-screen size, plus pixel nudges) ---
+
+    /// <summary>Top of the first slot row as a fraction of plate height (0–1).</summary>
+    public float SlotRerollFirstRowY { get; set; } = 0.17f;
+
+    /// <summary>Top of the last slot row as a fraction of plate height (0–1).</summary>
+    public float SlotRerollLastRowY { get; set; } = 0.591f;
+
+    /// <summary>Left column icon left edge as a fraction of plate width (0–1).</summary>
+    public float SlotRerollLeftColumnX { get; set; } = 0.137f;
+
+    /// <summary>Right column icon right edge as a fraction of plate width (0–1, from the left).</summary>
+    public float SlotRerollRightColumnX { get; set; } = 0.867f;
+
+    /// <summary>Slot icon size as a fraction of plate height.</summary>
+    public float SlotRerollIconSize { get; set; } = 0.02f;
+
+    /// <summary>When true, buttons sit toward the character preview; when false, on the outer edges.</summary>
+    public bool SlotRerollTowardCenter { get; set; } = true;
+
+    /// <summary>Extra horizontal nudge in UI-scaled pixels (positive = toward plate center).</summary>
+    public float SlotRerollNudgeX { get; set; }
+
+    /// <summary>Extra vertical nudge in UI-scaled pixels (positive = down).</summary>
+    public float SlotRerollNudgeY { get; set; }
+
+    /// <summary>Gap between slot edge and button in UI-scaled pixels.</summary>
+    public float SlotRerollGap { get; set; }
 
     /// <summary>Per-slot locks for plate randomization (length 12). Locked slots are left unchanged.</summary>
     public bool[] RandomizeLockedSlots { get; set; } = new bool[12];

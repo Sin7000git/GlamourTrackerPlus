@@ -21,8 +21,8 @@ internal sealed class PlateEditorOverlay
     private const string OverlayId = "glamour-tracker-plate-overlay";
     private const string SlotOverlayId = "glamour-tracker-slot-reroll";
 
-    // Gap between slot edge and button, in ImGui points (uses GlobalScale with button chrome).
-    private const float SlotRerollGap = 3f;
+    // Reroll button side length as a fraction of the plate window height (tracks UI scale).
+    private const float SlotRerollButtonHFrac = 0.036f;
 
     private static readonly ImGuiWindowFlags HelperWindowFlags =
         ImGuiWindowFlags.NoBackground
@@ -33,9 +33,11 @@ internal sealed class PlateEditorOverlay
         | ImGuiWindowFlags.NoNavFocus
         | ImGuiWindowFlags.NoNavInputs
         | ImGuiWindowFlags.NoResize
+        | ImGuiWindowFlags.NoMove
         | ImGuiWindowFlags.NoScrollbar
         | ImGuiWindowFlags.NoSavedSettings
         | ImGuiWindowFlags.NoFocusOnAppearing
+        | ImGuiWindowFlags.NoBringToFrontOnFocus
         | ImGuiWindowFlags.AlwaysAutoResize
         | ImGuiWindowFlags.NoDocking;
 
@@ -49,9 +51,11 @@ internal sealed class PlateEditorOverlay
         | ImGuiWindowFlags.NoNavFocus
         | ImGuiWindowFlags.NoNavInputs
         | ImGuiWindowFlags.NoResize
+        | ImGuiWindowFlags.NoMove
         | ImGuiWindowFlags.NoScrollbar
         | ImGuiWindowFlags.NoSavedSettings
         | ImGuiWindowFlags.NoFocusOnAppearing
+        | ImGuiWindowFlags.NoBringToFrontOnFocus
         | ImGuiWindowFlags.NoDocking;
 
     private readonly IGameGui gameGui;
@@ -106,11 +110,26 @@ internal sealed class PlateEditorOverlay
             return;
         }
 
-        if (config.ShowPlateEditorOverlay)
-            DrawTopBar(addon, config);
+        var styleVars = 0;
+        var styleColors = 0;
+        if (config.UseLocalUiStyle)
+        {
+            config.LocalUiTheme ??= PluginLocalUiTheme.CreateDefault();
+            (styleVars, styleColors) = config.LocalUiTheme.Push();
+        }
 
-        if (config.ShowSlotRerollButtons)
-            DrawSlotRerollButtons(addon, config);
+        try
+        {
+            if (config.ShowPlateEditorOverlay)
+                DrawTopBar(addon, config);
+
+            if (config.ShowSlotRerollButtons)
+                DrawSlotRerollButtons(addon, config);
+        }
+        finally
+        {
+            PluginLocalUiTheme.Pop(styleVars, styleColors);
+        }
     }
 
     private void DrawTopBar(AtkUnitBasePtr addon, Configuration config)
@@ -123,7 +142,8 @@ internal sealed class PlateEditorOverlay
         ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowMinSize, Vector2.Zero);
 
-        ImGui.SetNextWindowPos(drawPos.Value, ImGuiCond.Appearing);
+        // Always — Appearing + SetWindowPos after Begin flicker when the button takes focus.
+        ImGui.SetNextWindowPos(drawPos.Value, ImGuiCond.Always);
         var began = ImGui.Begin($"##{OverlayId}", HelperWindowFlags);
         ImGui.PopStyleVar(3);
 
@@ -134,7 +154,6 @@ internal sealed class PlateEditorOverlay
         }
 
         DrawControls(config);
-        ImGui.SetWindowPos(drawPos.Value);
         ImGui.End();
     }
 
@@ -151,6 +170,7 @@ internal sealed class PlateEditorOverlay
         if (!PlateSlotNodeLocator.TryGetSlotScreenRects(
                 unit,
                 addon,
+                config,
                 slots,
                 widths,
                 heights,
@@ -159,20 +179,31 @@ internal sealed class PlateEditorOverlay
             return;
 
         var busy = this.plateRandomizer.IsBusy;
-        var canRandomize = (config.RandomizeIncludeDresser || config.RandomizeIncludeArmoire) && !busy;
+        var sourcesOk = config.RandomizeIncludeDresser || config.RandomizeIncludeArmoire;
         var buttonLabel = FontAwesomeIcon.Sync.ToIconString();
 
-        // Button chrome is ImGui-native (avoids ATK-vs-GlobalScale clipping). Position uses ATK slot center.
-        Vector2 buttonSize;
-        using (Plugin.PluginInterface.UiBuilder.IconFontHandle.Push())
+        // Size with the plate window, not Dalamud GlobalScale — so 80%/200% HUD stay proportional.
+        var plateH = Math.Max(addon.ScaledHeight, 1f);
+        unsafe
         {
-            var glyph = ImGui.CalcTextSize(buttonLabel);
-            var pad = ImGui.GetStyle().FramePadding;
-            var side = Math.Max(ImGui.GetFrameHeight(), Math.Max(glyph.X, glyph.Y) + pad.X * 2f);
-            buttonSize = new Vector2(side, side);
+            var root = unit->RootNode;
+            if (root != null)
+            {
+                var rootH = root->Height * Math.Max(root->ScaleY, 0.01f);
+                if (rootH > 8f)
+                    plateH = rootH;
+            }
         }
 
-        var gap = SlotRerollGap * ImGuiHelpers.GlobalScale;
+        // Button + icon both track plate on-screen height (dresser/plate window scale).
+        var buttonSide = Math.Max(12f, plateH * SlotRerollButtonHFrac);
+        var buttonSize = new Vector2(buttonSide, buttonSide);
+        // FA Sync ink fills most of the em-box; ~55% of the button leaves visible padding.
+        var iconPx = buttonSide * 0.55f;
+
+        var gap = Math.Clamp(config.SlotRerollGap, 0f, 40f) * (plateH / 700f);
+        var nudgeX = config.SlotRerollNudgeX * (plateH / 700f);
+        var nudgeY = config.SlotRerollNudgeY * (plateH / 700f);
 
         for (var slot = 0; slot < GlamourPlateSlotMap.SlotCount; slot++)
         {
@@ -185,22 +216,24 @@ internal sealed class PlateEditorOverlay
             if (iconW < 8f || iconH < 8f)
                 continue;
 
-            // Center of the ATK slot rect, then offset inward so the button clears the icon.
             var slotCenter = slotPos + new Vector2(iconW, iconH) * 0.5f;
-            var inward = PlateSlotNodeLocator.IsLeftColumnSlot(slot) ? 1f : -1f;
+            var sideSign = buttonOnLeft[slot] ? -1f : 1f;
+            var towardCenter = PlateSlotNodeLocator.IsLeftColumnSlot(slot) ? 1f : -1f;
             var buttonCenter = new Vector2(
-                slotCenter.X + inward * (iconW * 0.5f + gap + buttonSize.X * 0.5f),
-                slotCenter.Y);
+                slotCenter.X + sideSign * (iconW * 0.5f + gap + buttonSize.X * 0.5f) + towardCenter * nudgeX,
+                slotCenter.Y + nudgeY);
             var pos = buttonCenter - buttonSize * 0.5f;
 
             ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
             ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0);
             ImGui.PushStyleVar(ImGuiStyleVar.WindowMinSize, Vector2.Zero);
+            ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, Vector2.Zero);
+            ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 0);
 
-            ImGui.SetNextWindowPos(pos, ImGuiCond.Appearing);
-            ImGui.SetNextWindowSize(buttonSize);
+            ImGui.SetNextWindowPos(pos, ImGuiCond.Always);
+            ImGui.SetNextWindowSize(buttonSize, ImGuiCond.Always);
             var began = ImGui.Begin($"##{SlotOverlayId}-{slot}", SlotHelperWindowFlags);
-            ImGui.PopStyleVar(3);
+            ImGui.PopStyleVar(5);
 
             if (!began)
             {
@@ -208,19 +241,46 @@ internal sealed class PlateEditorOverlay
                 continue;
             }
 
-            ImGui.BeginDisabled(!canRandomize);
+            // Invisible hit-target + manual icon draw — Button() leaves FA glyphs optically left of center.
+            ImGui.BeginDisabled(!sourcesOk);
+            var pressed = ImGui.InvisibleButton($"##{SlotOverlayId}-hit-{slot}", buttonSize);
+            if (pressed && !busy)
+                StartRandomizeSlot(slot);
+
+            var hovered = ImGui.IsItemHovered();
+            var active = ImGui.IsItemActive();
+            var min = ImGui.GetItemRectMin();
+            var max = ImGui.GetItemRectMax();
+            var rounding = ImGui.GetStyle().FrameRounding;
+            var bgCol = active ? ImGuiCol.ButtonActive : hovered ? ImGuiCol.ButtonHovered : ImGuiCol.Button;
+            var draw = ImGui.GetWindowDrawList();
+            draw.AddRectFilled(min, max, ImGui.GetColorU32(bgCol), rounding);
+            draw.AddRect(min, max, ImGui.GetColorU32(ImGuiCol.Border), rounding, ImDrawFlags.None, 2f);
+
+            // RenderChar/RenderText take an explicit pixel size — IconFont ignores Scale/SetWindowFontScale.
             using (Plugin.PluginInterface.UiBuilder.IconFontHandle.Push())
             {
-                if (ImGui.Button($"{buttonLabel}##slot{slot}", buttonSize))
-                    StartRandomizeSlot(slot);
+                var font = ImGui.GetFont();
+                var clip = new Vector4(min.X, min.Y, max.X, max.Y);
+                // FA glyphs sit optically left of the em-box; nudge +X for visual center.
+                var textPos = new Vector2(
+                    min.X + (buttonSize.X - iconPx) * 0.5f + iconPx * 0.12f,
+                    min.Y + (buttonSize.Y - iconPx) * 0.5f);
+                font.RenderText(
+                    draw,
+                    iconPx,
+                    textPos,
+                    ImGui.GetColorU32(ImGuiCol.Text),
+                    clip,
+                    buttonLabel,
+                    wrapWidth: 0f,
+                    cpuFineClip: false);
             }
 
-            if (ImGui.IsItemHovered())
-                ImGui.SetTooltip($"Reroll {GlamourPlateSlotMap.Labels[slot]}");
-
             ImGui.EndDisabled();
-            ImGui.SetWindowPos(pos);
-            ImGui.SetWindowSize(buttonSize);
+            if (hovered)
+                ImGui.SetTooltip($"Randomize {GlamourPlateSlotMap.Labels[slot]}");
+
             ImGui.End();
         }
     }
@@ -228,9 +288,9 @@ internal sealed class PlateEditorOverlay
     private void DrawControls(Configuration config)
     {
         var busy = this.plateRandomizer.IsBusy;
-        var canRandomize = (config.RandomizeIncludeDresser || config.RandomizeIncludeArmoire) && !busy;
-        ImGui.BeginDisabled(!canRandomize);
-        if (ImGui.Button("Randomize plate"))
+        var sourcesOk = config.RandomizeIncludeDresser || config.RandomizeIncludeArmoire;
+        ImGui.BeginDisabled(!sourcesOk);
+        if (ImGui.Button("Randomize plate") && !busy)
             StartRandomize();
         ImGui.EndDisabled();
 
@@ -265,6 +325,13 @@ internal sealed class PlateEditorOverlay
         {
             config.ShowSlotRerollButtons = showSlotButtons;
             config.Save();
+        }
+
+        if (ImGui.BeginMenu("Adjust slot button positions"))
+        {
+            if (DrawSlotRerollPlacementControls(config, "overlay"))
+                config.Save();
+            ImGui.EndMenu();
         }
 
         ImGui.Separator();
@@ -307,6 +374,93 @@ internal sealed class PlateEditorOverlay
         }
 
         ImGui.EndCombo();
+    }
+
+    /// <summary>Shared sliders for manual slot-button placement. Returns true if anything changed.</summary>
+    internal static bool DrawSlotRerollPlacementControls(Configuration config, string idSuffix)
+    {
+        var changed = false;
+        ImGui.TextDisabled("Tune while the plate editor is open. Values save automatically.");
+        ImGui.PushItemWidth(220f * ImGuiHelpers.GlobalScale);
+
+        var firstY = config.SlotRerollFirstRowY * 100f;
+        if (ImGui.SliderFloat($"First row (top %)##{idSuffix}", ref firstY, 5f, 70f, "%.1f%%"))
+        {
+            config.SlotRerollFirstRowY = firstY / 100f;
+            changed = true;
+        }
+
+        var lastY = config.SlotRerollLastRowY * 100f;
+        if (ImGui.SliderFloat($"Last row (top %)##{idSuffix}", ref lastY, 20f, 95f, "%.1f%%"))
+        {
+            config.SlotRerollLastRowY = lastY / 100f;
+            changed = true;
+        }
+
+        if (config.SlotRerollLastRowY < config.SlotRerollFirstRowY + 0.05f)
+            config.SlotRerollLastRowY = config.SlotRerollFirstRowY + 0.05f;
+
+        var leftX = config.SlotRerollLeftColumnX * 100f;
+        if (ImGui.SliderFloat($"Left column (%)##{idSuffix}", ref leftX, 1f, 40f, "%.1f%%"))
+        {
+            config.SlotRerollLeftColumnX = leftX / 100f;
+            changed = true;
+        }
+
+        var rightX = config.SlotRerollRightColumnX * 100f;
+        if (ImGui.SliderFloat($"Right column (%)##{idSuffix}", ref rightX, 60f, 99f, "%.1f%%"))
+        {
+            config.SlotRerollRightColumnX = rightX / 100f;
+            changed = true;
+        }
+
+        var icon = config.SlotRerollIconSize * 100f;
+        if (ImGui.SliderFloat($"Slot size (%)##{idSuffix}", ref icon, 2f, 12f, "%.1f%%"))
+        {
+            config.SlotRerollIconSize = icon / 100f;
+            changed = true;
+        }
+
+        var gap = config.SlotRerollGap;
+        if (ImGui.SliderFloat($"Gap from slot##{idSuffix}", ref gap, 0f, 24f, "%.0f"))
+        {
+            config.SlotRerollGap = gap;
+            changed = true;
+        }
+
+        var towardCenter = config.SlotRerollTowardCenter;
+        if (ImGui.Checkbox($"Place toward character preview##{idSuffix}", ref towardCenter))
+        {
+            config.SlotRerollTowardCenter = towardCenter;
+            changed = true;
+        }
+
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("Off = outer edges of the plate. On = beside the preview.");
+
+        var nudgeX = config.SlotRerollNudgeX;
+        if (ImGui.SliderFloat($"Nudge sideways##{idSuffix}", ref nudgeX, -40f, 40f, "%.0f"))
+        {
+            config.SlotRerollNudgeX = nudgeX;
+            changed = true;
+        }
+
+        var nudgeY = config.SlotRerollNudgeY;
+        if (ImGui.SliderFloat($"Nudge up/down##{idSuffix}", ref nudgeY, -40f, 40f, "%.0f"))
+        {
+            config.SlotRerollNudgeY = nudgeY;
+            changed = true;
+        }
+
+        ImGui.PopItemWidth();
+
+        if (ImGui.Button($"Reset placement defaults##{idSuffix}"))
+        {
+            PlateSlotNodeLocator.ResetSlotRerollDefaults(config);
+            changed = true;
+        }
+
+        return changed;
     }
 
     private void StartRandomize()

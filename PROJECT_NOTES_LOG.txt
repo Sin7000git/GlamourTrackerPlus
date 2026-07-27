@@ -158,3 +158,50 @@
 ## Likely next steps
 - User verify 0.1.24.0 Y alignment
 - Jackpot III detection when user can apply FC buff
+
+[2026-07-27 13:45] RECOVERY — accidental master checkout wiped WIP
+- Cause: move_agent_to_root tried to checkout master; created stash + early checkpoint commit; working tree rolled back to 0.1.0 shell (TrackerNativeAddon missing).
+- Recovered from: git stash@{0} (0.1.24 tracked), c927115 untracked (TrackerNativeAddon + Native helpers + MGP/travel), backup 133316 (intact PlateSlot*).
+- Outcome: build succeeded 0.1.24 with TrackerNativeAddon.cs present again.
+- Next: verify /glamnative + main native UI in-game; re-do manual slot placement only after confirming native window OK.
+
+[2026-07-27 13:45] RECOVERY — accidental master checkout wiped WIP
+- Cause: move_agent_to_root tried to checkout master; created stash + early checkpoint; tree rolled back to 0.1.0 shell (TrackerNativeAddon missing).
+- Recovered from: stash@{0} (0.1.24), c927115 untracked (TrackerNativeAddon + helpers), backup 133316 (PlateSlot*).
+- Outcome: build OK on branch recover-pre-restore @ 0.1.24 with native window restored.
+- Next: verify /glamplusn and /glamnative in-game; keep stash@{0}/@{1} until confirmed.
+
+[2026-07-27 13:50] Plate slot reroll — manual placement (0.1.25)
+- Attempt: Config-driven paperdoll only (no ATK discovery); sliders in plate menu + Settings.
+- Files: PlateSlotNodeLocator.cs, PlateEditorOverlay.cs, Configuration.cs, TrackerWindow.cs, csproj
+- Outcome: built
+- Next: user tunes First/Last row % and Left/Right column % live on plate; Gap + Nudge for fine adjust.
+
+[2026-07-27 14:00] Slot reroll defaults + button scale (0.1.26)
+- Attempt: Bake user calibration as defaults (17/59.1/13.7/86.7/2%/gap0/toward preview); button side = 3.6% of plate height + font scale; migrate config Version 8.
+- Outcome: built
+- Next: confirm 80%/200% button size looks right.
+
+[2026-07-27 14:05] Plate overlay uses local theme (0.1.27)
+- Attempt: Push/Pop PluginLocalUiTheme around plate editor overlay draw when UseLocalUiStyle is on (same as TrackerWindow).
+- Outcome: built
+
+[2026-07-27 14:12] Theme defaults + plate button flicker (0.1.28)
+- Attempt: Bake snapshot floats (FrameRounding 13, WindowBorder 3.4, FrameBorder 1.8) into CreateDefault; fix overlay flicker via Always pos, no post-SetWindowPos, no BeginDisabled-while-busy.
+- Outcome: built
+
+[2026-07-27 14:15] Slot tooltip font-scale flicker (0.1.29)
+- Attempt: Reset SetWindowFontScale before SetTooltip; rename tip to Randomize {slot}.
+- Outcome: built
+
+[2026-07-27 15:03] slot icon optical nudge
+- Attempt: bump FA Sync +X optical nudge 0.06 → 0.12 of iconPx; keep 0.55 icon fraction
+- Files changed: PlateEditorOverlay.cs, csproj 0.1.42
+- Outcome: pending user check
+- Next: dial nudge if still off
+
+[2026-07-27 15:03] slot icon optical nudge
+- Attempt: bump FA Sync +X optical nudge 0.06 → 0.12 of iconPx; keep 0.55 icon fraction
+- Files changed: PlateEditorOverlay.cs, csproj 0.1.42
+- Outcome: pending user check
+- Next: dial nudge if still off

@@ -796,6 +796,9 @@ internal sealed class TrackerNativeAddon : NativeAddon
             config.ShowSlotRerollButtons = v;
             config.Save();
         }));
+        list.AddNode(MakeMuted(
+            "Adjust positions from the plate menu or ImGui Settings → Slot button positions.",
+            width));
     }
 
     // ── Outfit sets browser ───────────────────────────────────────────────

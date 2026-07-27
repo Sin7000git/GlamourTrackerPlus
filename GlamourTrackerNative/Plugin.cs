@@ -378,6 +378,13 @@ public sealed class Plugin : IDalamudPlugin
             dirty = true;
         }
 
+        if (config.Version < 8)
+        {
+            PlateSlotNodeLocator.ResetSlotRerollDefaults(config);
+            config.Version = 8;
+            dirty = true;
+        }
+
         if (dirty)
             config.Save();
     }

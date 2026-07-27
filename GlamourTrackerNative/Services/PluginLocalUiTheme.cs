@@ -8,7 +8,7 @@ namespace GlamourTracker.Services;
 
 /// <summary>
 /// Full local ImGui theme (all pushable colors + style vars) for Glamour Tracker+.
-/// Defaults match the user-tuned in-game-like style (2026-07-26).
+/// Defaults match the user-tuned in-game-like style (2026-07-27).
 /// Stored in config; edited under Settings → Edit theme colors.
 /// </summary>
 [Serializable]
@@ -55,12 +55,12 @@ public sealed class PluginLocalUiTheme
     public Vector4 ResizeGripActive { get; set; } = new(0.9f, 0.78f, 0.4f, 0.95f);
     public float WindowRounding { get; set; } = 8.0f;
     public float ChildRounding { get; set; } = 6.0f;
-    public float FrameRounding { get; set; } = 6.0f;
+    public float FrameRounding { get; set; } = 13.0f;
     public float TabRounding { get; set; } = 16.0f;
     public float PopupRounding { get; set; } = 2.0f;
-    public float WindowBorderSize { get; set; } = 0.1f;
+    public float WindowBorderSize { get; set; } = 3.4f;
     public float ChildBorderSize { get; set; } = 0.1f;
-    public float FrameBorderSize { get; set; } = 0.0f;
+    public float FrameBorderSize { get; set; } = 1.8f;
 
     private static readonly HashSet<string> VectorStyleVars = new(StringComparer.Ordinal)
     {
@@ -489,8 +489,8 @@ public sealed class PluginLocalUiTheme
         "ChildBorderSize" => 0.1f,
         "ChildRounding" => 6.0f,
         "DisabledAlpha" => 0.6f,
-        "FrameBorderSize" => 0.0f,
-        "FrameRounding" => 6.0f,
+        "FrameBorderSize" => 1.8f,
+        "FrameRounding" => 13.0f,
         "GrabMinSize" => 13.0f,
         "GrabRounding" => 10.0f,
         "IndentSpacing" => 5.0f,
@@ -499,7 +499,7 @@ public sealed class PluginLocalUiTheme
         "ScrollbarRounding" => 10.0f,
         "ScrollbarSize" => 9.0f,
         "TabRounding" => 16.0f,
-        "WindowBorderSize" => 0.1f,
+        "WindowBorderSize" => 3.4f,
         "WindowRounding" => 8.0f,
         _ => 0f,
     };

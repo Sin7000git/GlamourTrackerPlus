@@ -167,8 +167,8 @@ internal sealed class FashionReportPanel
     private static (Vector4 Color, string Label) FormatProgress(FashionReportProgressView progress) =>
         progress.Kind switch
         {
-            FashionReportProgressKind.Complete => (ColorComplete, $"Complete · {progress.HighestScore}"),
-            FashionReportProgressKind.Incomplete => (ColorIncomplete, $"Incomplete · best {progress.HighestScore}"),
+            FashionReportProgressKind.Complete => (ColorComplete, $"Complete · Score {progress.HighestScore}"),
+            FashionReportProgressKind.Incomplete => (ColorIncomplete, $"Incomplete · Score {progress.HighestScore}"),
             FashionReportProgressKind.Unknown => (ColorUnknown, "Not synced yet"),
             _ => (ColorUnavailable, "Judging opens Friday"),
         };
@@ -425,7 +425,7 @@ internal sealed class FashionReportPanel
         ImGui.SameLine();
         ImGui.TextColored(
             item.CraftMatsReady == item.CraftMatsTotal ? ColorMatsReady : ColorMatsMissing,
-            $"mats {item.CraftMatsReady}/{item.CraftMatsTotal}");
+            $"Materials {item.CraftMatsReady}/{item.CraftMatsTotal}");
     }
 
     private void DrawAutocraftControls(FashionResolvedItem item)

@@ -440,13 +440,6 @@ internal sealed class TrackerWindow : Window
 
         changed |= ImGui.Checkbox("Show reroll next to each slot", ref showSlotReroll);
 
-        if (showSlotReroll && ImGui.CollapsingHeader("Slot button positions"))
-        {
-            ImGui.Indent();
-            changed |= PlateEditorOverlay.DrawSlotRerollPlacementControls(config, "settings");
-            ImGui.Unindent();
-        }
-
         if (showGc && ImGui.CollapsingHeader("GC icon atlas (tuning)"))
             changed |= DrawGcIconTuning(config);
 

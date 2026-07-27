@@ -77,11 +77,9 @@ internal sealed class FashionReportService : IDisposable
 
     public Task RefreshAsync(bool force = false)
     {
+        CancellationToken ct;
         lock (stateGate)
         {
-            if (IsRefreshing)
-                return Task.CompletedTask;
-
             if (!force
                 && Snapshot != null
                 && LastFetchUtc is { } last
@@ -91,14 +89,35 @@ internal sealed class FashionReportService : IDisposable
                 return Task.CompletedTask;
             }
 
+            // Soft refreshes should not pile up; forced refresh may supersede an in-flight one.
+            if (IsRefreshing && !force)
+                return Task.CompletedTask;
+
             refreshCts?.Cancel();
             refreshCts?.Dispose();
             refreshCts = new CancellationTokenSource();
+            ct = refreshCts.Token;
             IsRefreshing = true;
             LastError = null;
-            var ct = refreshCts.Token;
-            return Task.Run(() => RefreshCoreAsync(ct), ct);
         }
+
+        // Do not pass ct into Task.Run — a pre-cancelled token can skip the body and leave
+        // IsRefreshing stuck true ("Loading…" forever on later opens).
+        return Task.Run(async () =>
+        {
+            try
+            {
+                await RefreshCoreAsync(ct).ConfigureAwait(false);
+            }
+            finally
+            {
+                lock (stateGate)
+                {
+                    if (refreshCts is null || refreshCts.Token == ct)
+                        IsRefreshing = false;
+                }
+            }
+        });
     }
 
     public void RebindOwnership()
@@ -288,18 +307,14 @@ internal sealed class FashionReportService : IDisposable
         }
         catch (OperationCanceledException)
         {
-            // ignored
+            PluginFileLog.Info("fashion.sync", "Refresh cancelled");
         }
         catch (Exception ex)
         {
+            // Keep any previous Snapshot so the UI does not blank out on a failed refresh.
             LastError = "Fashion Report refresh failed. See log for details.";
             PluginFileLog.Error("fashion.sync", "Refresh failed", ex);
             this.log.Error(ex, "Fashion Report refresh failed");
-        }
-        finally
-        {
-            lock (stateGate)
-                IsRefreshing = false;
         }
     }
 
@@ -682,6 +697,16 @@ internal sealed class FashionReportService : IDisposable
 
         itemNameToId = map;
         PluginFileLog.Info("fashion.index", $"item name index built ({map.Count} names)");
+    }
+
+    /// <summary>Resolve acquisition for an arbitrary item name (Outfit sets, etc.).</summary>
+    public async Task<FashionResolvedItem> ResolveNamedItemAsync(string name, CancellationToken ct = default)
+    {
+        var (playerContext, inventory) = await framework
+            .RunOnFrameworkThread(() => (vendorLocator.CapturePlayerContext(), inventoryIndex.Scan()))
+            .ConfigureAwait(false);
+        var detail = await GetCachedItemDetailAsync(name, ct).ConfigureAwait(false);
+        return ResolveItem(name, detail?.GarlandUrl, detail, null, null, playerContext, inventory);
     }
 
     private uint LookupItemId(string name)

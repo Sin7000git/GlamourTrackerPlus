@@ -32,11 +32,13 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IObjectTable ObjectTable { get; private set; } = null!;
     [PluginService] internal static IGameInventory GameInventory { get; private set; } = null!;
     [PluginService] internal static IGameInteropProvider GameInterop { get; private set; } = null!;
+    [PluginService] internal static IAetheryteList AetheryteList { get; private set; } = null!;
     public Configuration Configuration { get; }
 
     public readonly WindowSystem WindowSystem = new("GlamourTrackerNative");
     private TrackerWindow TrackerWindow { get; }
     private FashionReportNativeAddon? fashionNativeAddon;
+    private TrackerNativeAddon? trackerNativeAddon;
 
     private readonly CabinetCatalog cabinetCatalog;
     private readonly GlamourOwnershipIndex ownershipIndex;
@@ -47,6 +49,8 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ItemDetailEnhancer itemDetailEnhancer;
     private readonly GcExpertDeliveryEnhancer gcExpertDeliveryEnhancer;
     private readonly FashionReportService fashionReport;
+    private readonly FashionMgpBuffService fashionMgpBuff;
+    private readonly FashionVendorTravel vendorTravel;
     private readonly FashionReportProgressTracker fashionProgress;
     private readonly ArtisanIpcClient artisanIpc;
     private readonly FashionRecipeLookup recipeLookup;
@@ -107,6 +111,21 @@ public sealed class Plugin : IDalamudPlugin
             GameInventory,
             Framework,
             Log);
+        fashionMgpBuff = new FashionMgpBuffService(
+            DataManager,
+            ObjectTable,
+            Framework,
+            ChatGui,
+            Log);
+        vendorTravel = new FashionVendorTravel(
+            DataManager,
+            AetheryteList,
+            GameGui,
+            ChatGui,
+            CommandManager,
+            PluginInterface,
+            Framework,
+            Log);
         artisanIpc = new ArtisanIpcClient(PluginInterface, Log);
         recipeLookup = new FashionRecipeLookup(DataManager);
         fashionProgress = new FashionReportProgressTracker(
@@ -119,11 +138,17 @@ public sealed class Plugin : IDalamudPlugin
 
         TrackerWindow = new TrackerWindow(this);
         WindowSystem.AddWindow(TrackerWindow);
+        trackerNativeAddon = new TrackerNativeAddon(this)
+        {
+            InternalName = "GlamNativeMain",
+            Title = "Glamour Tracker+",
+            Size = new System.Numerics.Vector2(920f, 640f),
+        };
         fashionNativeAddon = new FashionReportNativeAddon(this)
         {
             InternalName = "GlamNativeFR",
             Title = "Fashion Report",
-            Size = new System.Numerics.Vector2(480f, 320f),
+            Size = new System.Numerics.Vector2(960f, 640f),
         };
 
         Framework.Update += OnFrameworkUpdate;
@@ -141,13 +166,16 @@ public sealed class Plugin : IDalamudPlugin
             RefreshAll(true);
 
         _ = fashionReport.RefreshAsync(force: false);
-        Log.Information("Glamour Tracker+ Native loaded. /glamplusn = ImGui, /glamnative = native Fashion Report shell.");
+        Log.Information(
+            "Glamour Tracker+ Native loaded. /glamplusn = main UI, /glamnative = Fashion Report, /glamplusn imgui = ImGui fallback.");
     }
 
     public void Dispose()
     {
         ownershipIndex.OnCharacterLogout();
 
+        trackerNativeAddon?.Dispose();
+        trackerNativeAddon = null;
         fashionNativeAddon?.Dispose();
         fashionNativeAddon = null;
 
@@ -179,6 +207,8 @@ public sealed class Plugin : IDalamudPlugin
     internal CabinetCatalog CabinetCatalog => cabinetCatalog;
     internal GlamourPlateRandomizer PlateRandomizer => plateRandomizer;
     internal FashionReportService FashionReport => fashionReport;
+    internal FashionMgpBuffService FashionMgpBuff => fashionMgpBuff;
+    internal FashionVendorTravel VendorTravel => vendorTravel;
     internal FashionReportProgressTracker FashionProgress => fashionProgress;
     internal ArtisanIpcClient ArtisanIpc => artisanIpc;
     internal FashionRecipeLookup RecipeLookup => recipeLookup;
@@ -209,9 +239,18 @@ public sealed class Plugin : IDalamudPlugin
 
     internal ulong GetLocalContentId() => GetLocalContentIdStatic();
 
-    public void ToggleMainUi() => TrackerWindow.Toggle();
+    public void ToggleMainUi()
+    {
+        _ = Framework.RunOnFrameworkThread(() => trackerNativeAddon?.Toggle());
+    }
 
-    public void OpenFashionReportTab() => TrackerWindow.OpenFashionReportTab();
+    public void ToggleImGuiMainUi() => TrackerWindow.Toggle();
+
+    public void OpenFashionReportTab()
+    {
+        ToggleNativeFashionReport();
+        _ = fashionReport.RefreshAsync(force: false);
+    }
 
     /// <summary>Opens the KamiToolKit native Fashion Report shell (main-thread).</summary>
     public void ToggleNativeFashionReport()
@@ -225,7 +264,7 @@ public sealed class Plugin : IDalamudPlugin
 
     internal void RefreshGcIconPath() => gcExpertDeliveryEnhancer.RecaptureIconTexturePath();
 
-    private void OpenSettingsUi() => TrackerWindow.OpenSettingsTab();
+    private void OpenSettingsUi() => trackerNativeAddon?.OpenSettingsTab();
 
     private void DrawUi()
     {
@@ -278,12 +317,14 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnDresserUiRefresh(AddonEvent type, AddonArgs args)
     {
+        PlateSlotNodeLocator.InvalidateLock();
         RefreshAll(true);
         this.lastBackgroundRefresh = DateTime.UtcNow;
     }
 
     private void OnPlateUiRefresh(AddonEvent type, AddonArgs args)
     {
+        PlateSlotNodeLocator.InvalidateLock();
         RefreshAll(true);
         this.lastBackgroundRefresh = DateTime.UtcNow;
     }

@@ -1,70 +1,160 @@
-# Glamour Tracker+ — project notes
+# Glamour Tracker+ Native — project notes
 
-## 2026-07-26 — Fork + Fashion Report helper
+## Current unresolved issues
+- (none active — verify 0.1.14.0 GC relative-cache drag + DragDrop plate anchors)
 
-- Forked from GlamourTracker.PlateRandomizer as InternalName `GlamourTrackerPlus`, command `/glamplus`, display name Glamour Tracker+.
-- Fashion Report tab loads weekly state from fashionreportxiv.com:
-  - `/api/report-state` (theme, hints, dyes, Easy 80/100)
-  - `/api/hint` (items per hint/slot)
-  - `/api/item` (vendor locations/prices)
-- Ownership matched via existing dresser/armoire index (Lumina item-name lookup).
-- Offline-only weekly answers are not viable: game FashionCheck UI exposes theme/hints, but gold items + dyes are community-discovered.
-- Logs: `~/.config/glamour-tracker-plus/logs/app.log`
-- Dev DLL: `GlamourTrackerPlus/bin/Release/GlamourTrackerPlus.dll`
+## Resolved issues
+- Native KamiToolKit window opens via /glamnative (user confirmed)
+- Native Fashion Report feature port (0.1.1.0) — user: looks really good
 
-## 2026-07-26 — Fashion Report UI + sources (0.6.1.0)
+## Recent attempts
 
-- Parse full `/api/item` sections (vendor, craft, quest, exchange, GC, duty, market, …).
-- Prefer cheapest vendor, then same city/area as the player (e.g. Ul'dah Gwalter over North Shroud).
-- Column UI closer to fashionreportxiv.com: hint columns, dyes / Easy 100 / Easy 80, item icons, expand for details.
-- Button: Update nearby vendors (re-scores without full refresh).
+[2026-07-26 20:37] Port Fashion Report to native shell
+- Attempt: Full native FR UI
+- Outcome: worked (user confirmed)
+- Next: polish bugs from feedback
 
-## 2026-07-26 — Parse fix + icons + autocraft hook (0.6.1.2)
+[2026-07-26 21:11] Native FR bugfixes + teleport/crafting log
+- Attempt: IsRefreshing race; icons; Materials; Teleport/Crafting Log
+- Outcome: failed for Loading on 2nd open (user report); teleport cities only flagged map
+- Next: fix text cache + Teleporter integration
 
-- Bug: barter NPCs were scored as "NPC vendor 0 gil"; exchange no longer sets PreferredVendor; gil shops require price > 0.
-- Icons ~1.5× (42 / 33 / 27).
+[2026-07-26 21:44] Loading cache + Teleporter travel
+- Attempt: Reset lastWeekText/status/meta on OnFinalize; city hub aliases; Sinus Ardorum/Phaenna→Bestways Burrow; Teleporter IPC + /tp fallback
+- Backup: .cursor/backups/2026-07-26_214414
+- Outcome: partial (build 0.1.3.0 ok)
+- Evidence: root cause = weekNode recreated with "Loading…" while lastWeekText still held "Week 443…" so RefreshChrome skipped update
+- Next: user reload verify
 
-## 2026-07-26 — Autocraft via Artisan directly (0.6.1.3)
+[2026-07-26 21:59] Oizys/Auxesia + exchange teleports + dedupe
+- Attempt: SpecialDestinations += Oizys/Auxesia; Teleport on any coord line; skip redundant summary/headline/quest dupes
+- Backup: .cursor/backups/2026-07-26_215920
+- Outcome: worked (user: works good enough for now)
+- Next: VIP Card button + score label polish
 
-- Reverted Gil Advisor IPC stubs (IsLoaded / TryStartCraftItem).
-- Autocraft calls Artisan.CraftItem after Lumina recipe lookup; button hidden if Artisan IPC missing.
-- Teal color-coded Autocraft button for visibility.
+[2026-07-26 22:24] VIP Card button + Score label
+- Attempt: FashionMgpBuffService (item 14947 / status 1079 / Jackpot 902); native icon+button; grey when out / VIP running / Jackpot III; FormatProgress "Complete · Score N" font 22
+- Backup: .cursor/backups/2026-07-26_222045
+- Outcome: worked (user confirmed; Jackpot III untested)
+- Evidence: tooltip override wording trimmed per feedback
+- Next: native main window for Overview/Outfit sets/Plates/Randomize/Settings
 
-## 2026-07-26 — Bags/armoury/saddlebag + craft mats (0.6.1.4)
+[2026-07-26 22:50] Native main window (0.1.6.0)
+- Attempt: TrackerNativeAddon tabs Overview/Outfit sets/Glamour plates/Randomize/Settings; /glamplusn → native; /glamplusn imgui fallback; FR stays /glamnative; Settings without theme/atlas
+- Backup: .cursor/backups/2026-07-26_225017
+- Outcome: partial (user: working, needs UI polish)
+- Files: TrackerNativeAddon.cs, TrackerNativeHelpers.cs, Plugin.cs, PluginCommands.cs
+- Next: list+detail outfits/plates; trim randomize actions; Character Config styling
 
-- Fashion ownership: bags, armoury, saddlebag, dresser, armoire.
-- Craft sections show owned material counts (green have N / red N/required).
-- Update ownership button re-scans inventories.
+[2026-07-26 23:05] Native main UI polish (0.1.7.0)
+- Attempt: Outfit sets/Plates → FR-style list+detail with icons; remove Randomize plate/reroll buttons; CategoryText sections + indents; less help text
+- Backup: .cursor/backups/2026-07-26_230443
+- Outcome: partial (user: scroll bug, Not acquired wrong, wants plates removed + acquire features)
+- Next: 0.1.8 outfit overhaul
 
-## 2026-07-26 — Auto ownership + Artisan detect (0.6.1.6)
+[2026-07-26 23:30] Outfit sets overhaul (0.1.8.0)
+- Attempt: Remove Glamour plates tab; ownership-based Complete status; ListNode scroll fix; Owned/Missing only; sort+source filters; FRXIV acquire + Teleport/Duty/Crafting Log
+- Backup: .cursor/backups/2026-07-26_232425
+- Outcome: partial (user: sources incomplete/slow; want per-piece expand + Try on; owned=partial; slot icons)
+- Next: 0.1.9
 
-- Attempt: Subscribe IGameInventory.InventoryChanged → debounced RebindOwnership (400ms); RefreshOwnership also rebinds Fashion Report.
-- Artisan button: IsAvailable = InstalledPlugins Artisan.IsLoaded + CraftItem IPC (no Artisan source changes).
-- Files: FashionReportService.cs, ArtisanIpcClient.cs, Plugin.cs
-- Outcome: built
-- Next: verify buy updates Owned/mats in UI; toggle Artisan off → Autocraft hidden.
+[2026-07-26 23:45] Outfit piece expand + full acquire (0.1.9.0)
+- Attempt: Item-level cache, all pieces, background scan all sets; per-piece collapse + Try on; Owned pieces includes partial; Randomize slot IconButtons
+- Backup: .cursor/backups/2026-07-26_234022
+- Outcome: partial (user: piece headers flicker; Randomize slot icons wrong)
+- Next: 0.1.10 flicker + Emperor icons
 
-## 2026-07-26 — Local FFXIV-ish ImGui theme (0.6.1.9)
+[2026-07-26 23:56] Flicker fix + Emperor slot icons (0.1.10.0)
+- Attempt: Stop detail rebuild on list/scan ticks (rebuildDetail default false); dedupe set acquire loads; ToggleableHeaderNode double-toggle fix; EmptySlotIconIds = Emperor's New Attire icons (31104/30150/41227/…)
+- Backup: .cursor/backups/2026-07-26_235058
+- Outcome: partial — lock IconButton crash (RebuildForm mid-click); expanders don't reflow siblings
+- Next: 0.1.11
 
-- Attempt: PluginLocalUiTheme pushed in TrackerWindow PreDraw/PostDraw; Settings toggle Use Glamour Tracker+ theme; Edit theme colors + Reset.
-- Outcome: built
-- Note: local theme is editable in Settings and saved in plugin config.
+[2026-07-27 00:04] Lock crash + expander reflow (0.1.11.0)
+- Attempt: Slot lock updates visuals in-place (no dispose); ScheduleRebuildForm via RunOnTick for other clicks; CollapsingHeader PropagateParentLayout + RelayoutBrowserDetail/RecalculateSizes
+- Evidence: crash.log C0000005 in ComponentNode.OnReceiveEvent after IconButton OnClick→RebuildForm
+- Backup: .cursor/backups/2026-07-27_000425
+- Outcome: worked (user: lock no longer crashes); expanders still needed icons + cost clarity
+- Next: 0.1.12
 
-## 2026-07-26 — Progress badge + layout + perf (0.6.1.7)
+[2026-07-27 00:16] Piece icons + costs + filled lock icons (0.1.12.0)
+- Attempt: Icon left of piece CollapsingHeader (HorizontalListNode); Cost: lines for vendor/barter/GC; IconButton IconPadding=1.5 for locks
+- Backup: .cursor/backups/2026-07-27_001445
+- Outcome: worked; follow-ups: GC owned icons lag on drag; want item tooltips on outfit icons
+- Next: 0.1.13
 
-- Attempt: Standalone Fashion Report completion via Masked Rose ProcessEventPlay (same as DailyDuty); optional read of DailyDuty FashionReport.data.json. Color badge next to week title. Bottom row fills remaining height. Removed Artisan-hidden tooltip line. Cached Artisan IsAvailable; precomputed craft mats on items; less LINQ in Draw.
-- Files: FashionReportProgressTracker.cs, FashionReportWeek.cs, FashionReportPanel.cs, FashionReportService.cs, ArtisanIpcClient.cs, Plugin.cs, CharacterGlamourCache.cs
-- Outcome: built
-- Next: talk to Masked Rose / use DailyDuty → badge Complete/Incomplete; confirm no bottom gap.
+[2026-07-27 00:38] GC marker SetWindowPos + outfit ItemTooltip (0.1.13.0)
+- Attempt: Draw GC dresser/armoire markers via NoInputs ImGui windows + SetWindowPos (plate overlay pattern); piece IconImageNode.ItemTooltip = itemId
+- Backup: .cursor/backups/2026-07-27_003752
+- Outcome: failed for GC (overshoots ahead + flicker on fast drag); outfit tooltips ok; reroll icons jump after clearing plate gear
+- Next: 0.1.14
 
-## 2026-07-26 — Full theme knobs (0.6.2.0)
-- Attempt: Dictionary-based theme exposing every ImGuiCol + ImGuiStyleVar; migrate legacy fields; Settings sections Colors / Sizes / Padding.
-- Outcome: built
-- Note: your existing colors migrate into the new dictionaries on load.
+[2026-07-27 00:52] GC relative cache + plate DragDrop anchors (0.1.14.0)
+- Attempt: Revert GC ImGui windows; cache marker positions relative to addon root and only refresh when not dragging / list scrolls; plate slot discovery prefers DragDrop frames over item Image/Icon
+- Backup: .cursor/backups/2026-07-27_005021
+- Outcome: failed — user: GC still lags like pre-fix; rerolls still wrong unless all slots filled
+- Next: 0.1.15
 
-[2026-07-27 13:40] Plate slot reroll — manual placement (0.1.25)
-- Attempt: Drop ATK auto-discovery; place 12 buttons from config fractions of plate size + gap/nudge; sliders in plate menu and Settings.
-- Files: PlateSlotNodeLocator.cs, PlateEditorOverlay.cs, Configuration.cs, TrackerWindow.cs, GlamourTrackerNative.csproj
-- Outcome: built (awaiting user tune)
-- Evidence: prior auto layouts failed (center pile-up, wrong pitch at non-100%/200% scales)
-- Next: user tunes First/Last row % and Left/Right column % while plate is open; Gap + Nudge for fine adjust; Place toward preview if wanted inward.
+[2026-07-27 01:06] GC relative+SetWindowPos + sticky plate NodeIds (0.1.15.0)
+- Attempt: GC = cache markers relative to addon root (skip rebuild while dragging) AND draw via ImGui SetWindowPos+viewport (not BackgroundDrawList). Plate = lock DragDrop NodeIds after first validated layout; re-resolve by id (include hidden empty frames); never recluster while plate open; tighter column X/pitch validation; ClearCache when plate closes
+- Backup: .cursor/backups/2026-07-27_010619
+- Outcome: partial — rerolls stable but X inset toward preview (“scaled to middle”); Y correct
+- Next: 0.1.16
+
+[2026-07-27 12:49] Plate reroll edge-snap X (0.1.16.0)
+- Attempt: Keep discovered/locked Y; snap column X to paperdoll edge fractions (8.6% / 91.4%); drop old L/R magic offsets; place outer side via IsLeftColumnSlot
+- Backup: .cursor/backups/2026-07-27_124948
+- Outcome: partial — X better; Y still compressed toward center (pitch too small / start too low). Logs: DragDrop finds 0 nodes → geometric Y
+- Next: 0.1.17
+
+[2026-07-27 12:54] Plate reroll full paperdoll grid XY (0.1.17.0)
+- Attempt: FinishLayout always applies calibrated paperdoll grid (X+Y): firstRow=17.2%, lastRow=66.8%, icon=6.2%H, left/right 8.6%/91.4%
+- Backup: .cursor/backups/2026-07-27_125428
+- Outcome: failed — Y pitch too large; cumulative downward drift (MH ok-ish, feet far below)
+- Next: 0.1.18
+
+[2026-07-27 12:59] Live Icon Y + X edge-snap (0.1.18.0)
+- Attempt: Restore Icon/DragDrop/Collision discovery for Y (skip Image); FinishLayout only snaps X; geometric Y fallback tightened to first=18.8% last=54.8%; sticky NodeId lock
+- Backup: .cursor/backups/2026-07-27_125901
+- Outcome: partial — OK at 160%; gaps don’t shrink at 100% (pixel cache); user wants inward X
+- Next: 0.1.19
+
+[2026-07-27 13:05] Fractional cache + inward rerolls (0.1.19.0)
+- Attempt: Cache anchors as fractions of root on-screen size; drop outer X snap; place buttons inward (toward preview); unlock NodeIds on large scale change; remove 36–58px icon clamps
+- Backup: .cursor/backups/2026-07-27_130519
+- Outcome: partial — better overall; 100%/200% centered but 120–180% look offset (GlobalScale vs ATK)
+- Next: 0.1.20
+
+[2026-07-27 13:12] Center-anchor rerolls, ATK-only sizing (0.1.20.0)
+- Attempt: Place from slot center + inward offset; button/gap sized as fractions of ATK icon (no ImGui GlobalScale clamps); scale FA glyph via SetWindowFontScale to fit
+- Backup: .cursor/backups/2026-07-27_131232
+- Outcome: failed — still off at 120–180%; buttons clipped on bottom/right (font scale + ATK-sized button)
+- Next: 0.1.21
+
+[2026-07-27 13:16] ImGui button size + cumulative ATK scale (0.1.21.0)
+- Attempt: Button sized from ImGui frame/glyph (no SetWindowFontScale); SetNextWindowSize; drop AlwaysAutoResize on slot windows; ATK node size = Width*Height × all parent ScaleX/Y for correct centers; still center-anchor + inward
+- Backup: .cursor/backups/2026-07-27_131600
+- Outcome: partial — user: wrong on first open at 160%; correct after any scale change (and stay correct)
+- Next: 0.1.22
+
+[2026-07-27 13:20] Stable lock after ATK settles (0.1.22.0)
+- Attempt: Require 4 stable discover frames + pitch sanity vs plate height before NodeId lock; don’t sticky-cache geometric; ClearCache on plate open; InvalidateLock on plate/dresser PostRefresh; unlock if resolved layout fails sanity
+- Backup: .cursor/backups/2026-07-27_132041
+- Outcome: failed — still wrong at non-100/200% until visiting 100% or 200% first (Width×parent Scale broken at odd HUD scales)
+- Next: 0.1.23
+
+[2026-07-27 13:24] Pitch-derived icon size (0.1.23.0)
+- Attempt: Stop using Width×Scale for placement; keep raw ScreenY; derive icon H/W and tops from median row pitch (works at every HUD scale); Icon = bottom-anchored
+- Backup: .cursor/backups/2026-07-27_132405
+- Outcome: partial — consistent across scales but Y gaps too small / not centered (ATK Y still compressed)
+- Next: 0.1.24
+
+[2026-07-27 13:30] Paperdoll Y always (0.1.24.0)
+- Attempt: FinishLayout always applies paperdoll row Y (first=14.2% last=66.2% icon=7.8%H); keep live X when present
+- Backup: .cursor/backups/2026-07-27_133029
+- Outcome: build ok
+- Next: user verify Y centering/gaps; nudge First/Last fracs if still off
+
+## Likely next steps
+- User verify 0.1.24.0 Y alignment
+- Jackpot III detection when user can apply FC buff

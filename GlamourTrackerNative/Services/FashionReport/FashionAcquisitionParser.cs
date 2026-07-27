@@ -60,7 +60,7 @@ internal static class FashionAcquisitionParser
                         {
                             Type = type,
                             Label = "NPC Vendor",
-                            Headline = $"{price:N0} gil",
+                            Headline = $"Cost: {price:N0} gil",
                             Lines = lines,
                         });
                         break;
@@ -101,25 +101,41 @@ internal static class FashionAcquisitionParser
                         break;
 
                     case "duty_drop":
+                    {
+                        var duties = ReadStringArray(element, "duties")
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .ToList();
                         dutySection = new FashionAcquireSection
                         {
                             Type = type,
                             Label = "Chest Drop",
-                            Lines = ReadStringArray(element, "duties"),
+                            Headline = duties.Count == 1 ? duties[0] : null,
+                            Lines = duties.Count == 1 ? [] : duties,
                         };
                         parsed.Add(dutySection);
                         break;
+                    }
 
                     case "coffer":
+                    {
+                        var cofferName = GetString(element, "name");
+                        var duties = ReadStringArray(element, "duties")
+                            .Distinct(StringComparer.OrdinalIgnoreCase)
+                            .Select(d => $"From: {d}")
+                            .ToList();
                         cofferSection = new FashionAcquireSection
                         {
                             Type = type,
                             Label = "Treasure Coffer",
-                            Headline = GetString(element, "name"),
-                            Lines = ReadStringArray(element, "duties").Select(d => $"From: {d}").ToList(),
+                            Headline = cofferName,
+                            Lines = duties
+                                .Where(d => !string.Equals(d, cofferName, StringComparison.OrdinalIgnoreCase)
+                                            && !string.Equals(d, $"From: {cofferName}", StringComparison.OrdinalIgnoreCase))
+                                .ToList(),
                         };
                         parsed.Add(cofferSection);
                         break;
+                    }
                 }
             }
         }
@@ -133,8 +149,8 @@ internal static class FashionAcquisitionParser
         if (preferredVendor is { Gil: > 0 })
         {
             var summary = preferredVendor.SameArea
-                ? $"Nearby vendor · {preferredVendor.Gil:N0} gil · {preferredVendor.Name} · {preferredVendor.Location}"
-                : $"NPC vendor · {preferredVendor.Gil:N0} gil · {preferredVendor.Name} · {preferredVendor.Location}";
+                ? $"Nearby · Cost: {preferredVendor.Gil:N0} gil · {preferredVendor.Name} · {preferredVendor.Location}"
+                : $"Vendor · Cost: {preferredVendor.Gil:N0} gil · {preferredVendor.Name} · {preferredVendor.Location}";
             return (FashionItemAcquireKind.Vendor, summary, preferredVendor, parsed);
         }
 
@@ -160,7 +176,7 @@ internal static class FashionAcquisitionParser
             return (FashionItemAcquireKind.Achievement, achieveSection.Headline ?? "Achievement", preferredVendor, parsed);
 
         if (dutySection != null)
-            return (FashionItemAcquireKind.DutyDrop, "Chest drop", preferredVendor, parsed);
+            return (FashionItemAcquireKind.DutyDrop, dutySection.Headline ?? "Chest drop", preferredVendor, parsed);
 
         if (cofferSection != null)
             return (FashionItemAcquireKind.TreasureCoffer, cofferSection.Headline ?? "Treasure coffer", preferredVendor, parsed);
@@ -223,13 +239,16 @@ internal static class FashionAcquisitionParser
         FashionVendorLocator.PlayerAreaContext? playerContext,
         ref FashionVendorPick? preferredVendor)
     {
-        var quests = ReadStringArray(element, "quests");
+        var quests = ReadStringArray(element, "quests")
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
         var price = GetInt(element, "price");
         var vendors = ReadVendors(element);
         if (preferredVendor == null && vendors.Count > 0 && price is > 0)
             preferredVendor = locator.PickBest(vendors, price.Value, playerContext);
 
-        var lines = quests.ToList();
+        // Headline carries the primary quest; lines are extras + repurchase NPCs (no duplicate title).
+        var lines = quests.Skip(1).ToList();
         if (vendors.Count > 0)
         {
             lines.Add(price is > 0 ? $"Repurchase ({price:N0} gil):" : "Repurchase:");
@@ -259,25 +278,34 @@ internal static class FashionAcquisitionParser
         {
             Type = "barter",
             Label = "Exchange",
-            Headline = amount is { } a ? $"{currency} ×{a}" : currency,
+            Headline = amount is { } a
+                ? $"Cost: {a:N0}× {currency}"
+                : $"Cost: {currency}",
             Lines = lines,
         };
     }
 
     private static FashionAcquireSection? ParseAchievement(JsonElement element)
     {
-        var achievements = ReadStringArray(element, "achievements");
+        var achievements = ReadStringArray(element, "achievements")
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
         var price = GetInt(element, "price");
-        var lines = achievements.ToList();
+        var headline = price is { } p
+            ? $"Cost: {p:N0} gil (after achievement)"
+            : achievements.Count == 1
+                ? achievements[0]
+                : "Achievement reward";
+        var lines = achievements.Count == 1 && price is null
+            ? new List<string>()
+            : achievements.Where(a => !string.Equals(a, headline, StringComparison.OrdinalIgnoreCase)).ToList();
         lines.AddRange(ReadVendors(element).Select(v => FormatVendorLine(v.Name, v.Loc)));
 
         return new FashionAcquireSection
         {
             Type = "achievement",
             Label = "Achievement",
-            Headline = price is { } p
-                ? $"Purchasable for {p:N0} gil after completion"
-                : "Achievement reward",
+            Headline = headline,
             Lines = lines,
         };
     }
@@ -287,9 +315,9 @@ internal static class FashionAcquisitionParser
         var amount = GetInt(element, "amount");
         var shop = GetString(element, "shop");
         if (amount is { } a && !string.IsNullOrWhiteSpace(shop))
-            return $"{a:N0} seals · {shop}";
+            return $"Cost: {a:N0} Company Seals · {shop}";
         if (amount is { } a2)
-            return $"{a2:N0} seals";
+            return $"Cost: {a2:N0} Company Seals";
         return shop ?? "Grand Company shop";
     }
 

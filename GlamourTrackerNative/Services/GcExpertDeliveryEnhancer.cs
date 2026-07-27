@@ -2,6 +2,8 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
+using Dalamud.Interface.Textures;
+using Dalamud.Interface.Utility;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
@@ -16,10 +18,32 @@ namespace GlamourTracker.Services;
 internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
 {
     private const string SupplyAddonName = "GrandCompanySupplyList";
+    private const string MarkerOverlayId = "glamour-tracker-gc-marker";
     private const int ExpertDeliveryTab = 2;
     private const int ExpertDeliveryStartPosition = 11;
     private const float MarkerGapBeforeIcon = 4f;
     private const float MarkerIconSpacing = 2f;
+
+    /// <summary>
+    /// Relative cache (skip ATK list ScreenX while dragging) + ImGui SetWindowPos
+    /// (BackgroundDrawList lags; live ScreenX + SetWindowPos overshoots).
+    /// </summary>
+    private static readonly ImGuiWindowFlags MarkerWindowFlags =
+        ImGuiWindowFlags.NoBackground
+        | ImGuiWindowFlags.NoDecoration
+        | ImGuiWindowFlags.NoCollapse
+        | ImGuiWindowFlags.NoTitleBar
+        | ImGuiWindowFlags.NoNav
+        | ImGuiWindowFlags.NoNavFocus
+        | ImGuiWindowFlags.NoNavInputs
+        | ImGuiWindowFlags.NoResize
+        | ImGuiWindowFlags.NoScrollbar
+        | ImGuiWindowFlags.NoSavedSettings
+        | ImGuiWindowFlags.NoFocusOnAppearing
+        | ImGuiWindowFlags.AlwaysAutoResize
+        | ImGuiWindowFlags.NoDocking
+        | ImGuiWindowFlags.NoInputs
+        | ImGuiWindowFlags.NoMove;
 
     private readonly IAddonLifecycle addonLifecycle;
     private readonly IGameGui gameGui;
@@ -31,6 +55,14 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
 
     private ExpertDeliveryMatchIndex? expertMatchIndex;
     private int lastDrawnMarkerCount;
+
+    /// <summary>Markers stored relative to the supply addon root so they track window drags cleanly.</summary>
+    private readonly List<CachedMarker> markerCache = [];
+    private Vector2 lastAddonScreenPos;
+    private int lastScrollOffset = int.MinValue;
+    private int lastFirstVisible = int.MinValue;
+    private int lastListLength = -1;
+    private bool lastApplyGreenTint;
 
     public GcExpertDeliveryEnhancer(
         IAddonLifecycle addonLifecycle,
@@ -57,7 +89,11 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
 
     public void RecaptureIconTexturePath() => this.iconCache.TryRecaptureTexturePath();
 
-    public void ResetCaches() => this.expertMatchIndex = null;
+    public void ResetCaches()
+    {
+        this.expertMatchIndex = null;
+        ClearMarkerCache();
+    }
 
     public void Dispose()
     {
@@ -65,7 +101,19 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
         this.addonLifecycle.UnregisterListener(AddonEvent.PostRequestedUpdate, SupplyAddonName, OnGcSupplyUiChanged);
     }
 
-    private void OnGcSupplyUiChanged(AddonEvent type, AddonArgs args) => this.expertMatchIndex = null;
+    private void OnGcSupplyUiChanged(AddonEvent type, AddonArgs args)
+    {
+        this.expertMatchIndex = null;
+        ClearMarkerCache();
+    }
+
+    private void ClearMarkerCache()
+    {
+        this.markerCache.Clear();
+        this.lastScrollOffset = int.MinValue;
+        this.lastFirstVisible = int.MinValue;
+        this.lastListLength = -1;
+    }
 
     public void DrawOverlays()
     {
@@ -73,6 +121,7 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
         if (!config.Enabled || !config.ShowGcExpertDeliveryStatus)
         {
             this.lastDrawnMarkerCount = 0;
+            ClearMarkerCache();
             return;
         }
 
@@ -80,6 +129,7 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
         if (addonPtr.Address == nint.Zero)
         {
             this.lastDrawnMarkerCount = 0;
+            ClearMarkerCache();
             return;
         }
 
@@ -87,6 +137,7 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
         if (!GcMarkerOverlayGuard.ShouldDrawAnyMarkers(supplyUnit))
         {
             this.lastDrawnMarkerCount = 0;
+            ClearMarkerCache();
             return;
         }
 
@@ -97,6 +148,7 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
         catch
         {
             this.lastDrawnMarkerCount = 0;
+            ClearMarkerCache();
         }
     }
 
@@ -206,30 +258,166 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
     private unsafe int DrawExpertDeliveryMarkers(AddonGrandCompanySupplyList* addon, AtkUnitBase* supplyUnit)
     {
         if (addon->ExpertDeliveryList == null || !IsExpertTabActive(addon))
+        {
+            ClearMarkerCache();
             return 0;
+        }
 
         var matchIndex = GetExpertMatchIndex();
         if (matchIndex.Items.Count == 0)
+        {
+            ClearMarkerCache();
             return 0;
+        }
 
         if (!this.iconCache.IsReady)
             this.iconCache.TryEnsureConfigured();
 
+        if (!TryGetAddonScreenPos(supplyUnit, out var addonPos))
+        {
+            ClearMarkerCache();
+            return 0;
+        }
+
         var config = this.getConfiguration();
         var list = addon->ExpertDeliveryList;
-        var drawList = ImGui.GetBackgroundDrawList();
-        var clipActive = GcMarkerOverlayGuard.TryGetClipRect(supplyUnit, out var clipMin, out var clipMax);
-        if (clipActive)
-            drawList.PushClipRect(clipMin, clipMax, true);
-
-        var fontSize = ImGui.GetFontSize();
         var applyGreenTint = config.ShowGcExpertDeliveryColorCoding;
         var dresserSlice = this.iconCache.GetResolvedDresserSlice();
         var armoireSlice = this.iconCache.GetResolvedArmoireSlice();
+
+        var windowMoving = (addonPos - this.lastAddonScreenPos).LengthSquared() > 0.25f;
+        var listChanged = list->ScrollOffset != this.lastScrollOffset
+            || list->FirstVisibleItemIndex != this.lastFirstVisible
+            || list->ListLength != this.lastListLength
+            || applyGreenTint != this.lastApplyGreenTint;
+
+        // While dragging: keep relatives, only move with addon root (live list ScreenX overshoots).
+        if (!windowMoving || listChanged || this.markerCache.Count == 0)
+        {
+            RebuildMarkerCache(
+                list,
+                matchIndex,
+                supplyUnit,
+                addonPos,
+                applyGreenTint,
+                dresserSlice,
+                armoireSlice,
+                config.FlipDresserIconV,
+                config.FlipArmoireIconV);
+            this.lastScrollOffset = list->ScrollOffset;
+            this.lastFirstVisible = list->FirstVisibleItemIndex;
+            this.lastListLength = list->ListLength;
+            this.lastApplyGreenTint = applyGreenTint;
+        }
+
+        this.lastAddonScreenPos = addonPos;
+
+        var vp = ImGuiHelpers.MainViewport.Pos;
+        var clipActive = GcMarkerOverlayGuard.TryGetClipRect(supplyUnit, out var clipMin, out var clipMax);
+        if (clipActive)
+        {
+            clipMin += vp;
+            clipMax += vp;
+        }
+
+        var drawn = 0;
+        foreach (var marker in this.markerCache)
+        {
+            // ATK screen space for guards; ImGui space for SetWindowPos.
+            var atkPos = addonPos + marker.RelativePos;
+            if (!GcMarkerOverlayGuard.ShouldDrawMarkerAt(this.gameGui, supplyUnit, atkPos, marker.Slice.DisplaySize))
+                continue;
+
+            var texture = marker.IsArmoire
+                ? this.iconCache.GetArmoireTexture()
+                : this.iconCache.GetDresserTexture();
+            var imguiPos = vp + atkPos;
+            var idSuffix = marker.IsArmoire ? "a" : "d";
+            if (TryDrawMarkerWindow(
+                    $"{MarkerOverlayId}-{idSuffix}-{marker.ItemIndex}",
+                    imguiPos,
+                    texture,
+                    marker.Slice,
+                    marker.FlipV,
+                    marker.ApplyGreenTint,
+                    clipActive,
+                    clipMin,
+                    clipMax))
+                drawn++;
+        }
+
+        return drawn;
+    }
+
+    private static bool TryDrawMarkerWindow(
+        string id,
+        Vector2 imguiPos,
+        ISharedImmediateTexture? texture,
+        StorageUiIconSlice slice,
+        bool flipV,
+        bool applyGreenTint,
+        bool clipActive,
+        Vector2 clipMin,
+        Vector2 clipMax)
+    {
+        var size = slice.DisplaySize;
+        if (size.X <= 1f || size.Y <= 1f)
+            return false;
+
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowMinSize, Vector2.Zero);
+
+        ImGui.SetNextWindowPos(imguiPos, ImGuiCond.Appearing);
+        ImGui.SetNextWindowSize(size);
+        var began = ImGui.Begin(id, MarkerWindowFlags);
+        ImGui.PopStyleVar(3);
+
+        if (!began)
+        {
+            ImGui.End();
+            return false;
+        }
+
+        ImGui.SetWindowPos(imguiPos);
+
+        var drawList = ImGui.GetWindowDrawList();
+        if (clipActive)
+            drawList.PushClipRect(clipMin, clipMax, true);
+
+        var drawn = StorageMarkerDrawer.TryDrawTintedIcon(
+            drawList,
+            texture,
+            slice,
+            ImGui.GetWindowPos(),
+            flipV,
+            applyGreenTint);
+
+        if (clipActive)
+            drawList.PopClipRect();
+
+        ImGui.Dummy(size);
+        ImGui.End();
+        return drawn;
+    }
+
+    private unsafe void RebuildMarkerCache(
+        AtkComponentList* list,
+        ExpertDeliveryMatchIndex matchIndex,
+        AtkUnitBase* supplyUnit,
+        Vector2 addonPos,
+        bool applyGreenTint,
+        StorageUiIconSlice dresserSlice,
+        StorageUiIconSlice armoireSlice,
+        bool flipDresserV,
+        bool flipArmoireV)
+    {
+        this.markerCache.Clear();
+
+        var fontSize = ImGui.GetFontSize();
         var dresserSize = dresserSlice.DisplaySize;
         var armoireSize = armoireSlice.DisplaySize;
         var markerWidth = Math.Max(dresserSize.X, armoireSize.X);
-        var drawn = 0;
         var ownershipCache = new Dictionary<uint, (bool Dresser, bool Armoire)>();
 
         for (var itemIndex = 0; itemIndex < list->ListLength; itemIndex++)
@@ -265,50 +453,73 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
 
             var markerX = anchor.Value.X;
             var textTopY = anchor.Value.Y;
-            var rowDrawn = 0;
 
             if (inArmoire)
             {
                 var pos = new Vector2(markerX, CenterIconY(textTopY, fontSize, armoireSize.Y));
-                if (GcMarkerOverlayGuard.ShouldDrawMarkerAt(this.gameGui, supplyUnit, pos, armoireSize)
-                    && StorageMarkerDrawer.TryDrawTintedIcon(
-                        drawList,
-                        this.iconCache.GetArmoireTexture(),
-                        armoireSlice,
-                        pos,
-                        config.FlipArmoireIconV,
-                        applyGreenTint))
+                if (GcMarkerOverlayGuard.ShouldDrawMarkerAt(this.gameGui, supplyUnit, pos, armoireSize))
                 {
+                    this.markerCache.Add(new CachedMarker(
+                        itemIndex,
+                        pos - addonPos,
+                        armoireSlice,
+                        IsArmoire: true,
+                        flipArmoireV,
+                        applyGreenTint));
                     markerX -= armoireSize.X + MarkerIconSpacing;
-                    rowDrawn++;
                 }
             }
 
             if (inDresser)
             {
                 var pos = new Vector2(markerX, CenterIconY(textTopY, fontSize, dresserSize.Y));
-                if (GcMarkerOverlayGuard.ShouldDrawMarkerAt(this.gameGui, supplyUnit, pos, dresserSize)
-                    && StorageMarkerDrawer.TryDrawTintedIcon(
-                        drawList,
-                        this.iconCache.GetDresserTexture(),
+                if (GcMarkerOverlayGuard.ShouldDrawMarkerAt(this.gameGui, supplyUnit, pos, dresserSize))
+                {
+                    this.markerCache.Add(new CachedMarker(
+                        itemIndex,
+                        pos - addonPos,
                         dresserSlice,
-                        pos,
-                        config.FlipDresserIconV,
-                        applyGreenTint))
-                    rowDrawn++;
+                        IsArmoire: false,
+                        flipDresserV,
+                        applyGreenTint));
+                }
             }
+        }
+    }
 
-            drawn += rowDrawn;
+    private static unsafe bool TryGetAddonScreenPos(AtkUnitBase* supplyUnit, out Vector2 pos)
+    {
+        pos = default;
+        if (supplyUnit == null)
+            return false;
+
+        var root = supplyUnit->RootNode;
+        if (root != null && root->ScreenX > 1f && root->ScreenY > 1f)
+        {
+            pos = new Vector2(root->ScreenX, root->ScreenY);
+            return true;
         }
 
-        if (clipActive)
-            drawList.PopClipRect();
+        // Fallback: addon layout position (already in screen space for most clients).
+        if (supplyUnit->X > 1f || supplyUnit->Y > 1f)
+        {
+            pos = new Vector2(supplyUnit->X, supplyUnit->Y);
+            return true;
+        }
 
-        return drawn;
+        return false;
     }
 
     private static float CenterIconY(float textTopY, float fontSize, float iconHeight) =>
         textTopY + MathF.Max(0f, (fontSize - iconHeight) * 0.5f);
+
+    private readonly record struct CachedMarker(
+        int ItemIndex,
+        Vector2 RelativePos,
+        StorageUiIconSlice Slice,
+        bool IsArmoire,
+        bool FlipV,
+        bool ApplyGreenTint);
 
     private bool IsInDresserForItem(uint itemId)
     {

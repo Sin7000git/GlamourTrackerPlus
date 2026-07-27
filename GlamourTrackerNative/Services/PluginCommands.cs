@@ -17,11 +17,12 @@ internal sealed class PluginCommands : IDisposable
 
         this.commandManager.AddHandler(Plugin.CommandName, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Glamour Tracker+ Native ImGui UI. Use /glamnative for the native Fashion Report shell.",
+            HelpMessage =
+                "Glamour Tracker+ Native main UI. /glamnative = Fashion Report. /glamplusn imgui = ImGui fallback.",
         });
         this.commandManager.AddHandler(Plugin.NativeCommandName, new CommandInfo(OnNativeCommand)
         {
-            HelpMessage = "Open the native (KamiToolKit) Fashion Report shell.",
+            HelpMessage = "Open the native Fashion Report window.",
         });
     }
 
@@ -39,7 +40,8 @@ internal sealed class PluginCommands : IDisposable
 
     private void OnCommand(string command, string args)
     {
-        var verb = args.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.ToLowerInvariant() ?? string.Empty;
+        var verb = args.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.ToLowerInvariant()
+            ?? string.Empty;
 
         switch (verb)
         {
@@ -47,6 +49,11 @@ internal sealed class PluginCommands : IDisposable
             case "open":
             case "ui":
                 this.plugin.ToggleMainUi();
+                return;
+
+            case "imgui":
+            case "old":
+                this.plugin.ToggleImGuiMainUi();
                 return;
 
             case "native":
@@ -80,7 +87,6 @@ internal sealed class PluginCommands : IDisposable
             case "fr":
             case "report":
                 this.plugin.OpenFashionReportTab();
-                _ = this.plugin.FashionReport.RefreshAsync(force: false);
                 return;
 
             case "gcdebug":
@@ -90,7 +96,7 @@ internal sealed class PluginCommands : IDisposable
 
             case "help":
                 this.chatGui.Print(
-                    "Glamour Tracker+ Native: /glamplusn | /glamnative | /glamplusn fashion | /glamplusn help");
+                    "Glamour Tracker+ Native: /glamplusn | /glamnative | /glamplusn fashion | /glamplusn imgui | /glamplusn help");
                 return;
 
             default:

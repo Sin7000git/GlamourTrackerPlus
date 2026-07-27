@@ -61,3 +61,10 @@
 - Attempt: Dictionary-based theme exposing every ImGuiCol + ImGuiStyleVar; migrate legacy fields; Settings sections Colors / Sizes / Padding.
 - Outcome: built
 - Note: your existing colors migrate into the new dictionaries on load.
+
+[2026-07-27 13:40] Plate slot reroll — manual placement (0.1.25)
+- Attempt: Drop ATK auto-discovery; place 12 buttons from config fractions of plate size + gap/nudge; sliders in plate menu and Settings.
+- Files: PlateSlotNodeLocator.cs, PlateEditorOverlay.cs, Configuration.cs, TrackerWindow.cs, GlamourTrackerNative.csproj
+- Outcome: built (awaiting user tune)
+- Evidence: prior auto layouts failed (center pile-up, wrong pitch at non-100%/200% scales)
+- Next: user tunes First/Last row % and Left/Right column % while plate is open; Gap + Nudge for fine adjust; Place toward preview if wanted inward.

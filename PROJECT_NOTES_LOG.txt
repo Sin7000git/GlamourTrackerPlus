@@ -1,11 +1,12 @@
 # Glamour Tracker+ Native — project notes
 
 ## Current unresolved issues
-- (none active — verify 0.1.14.0 GC relative-cache drag + DragDrop plate anchors)
+- (none — GC scale vertical drift fixed in 0.1.54)
 
 ## Resolved issues
 - Native KamiToolKit window opens via /glamnative (user confirmed)
 - Native Fashion Report feature port (0.1.1.0) — user: looks really good
+- GC markers vertical drift vs window scale % — fixed 0.1.54 (user confirmed)
 
 ## Recent attempts
 
@@ -205,3 +206,72 @@
 - Files changed: PlateEditorOverlay.cs, csproj 0.1.42
 - Outcome: pending user check
 - Next: dial nudge if still off
+
+[2026-07-27 16:06] Overlay drag lock (0.1.43)
+- Attempt: Match Glamaholic Appearing+SetWindowPos on plate top bar and slot buttons; prefer addon.X/Y (not RootNode ScreenX) for plate origin and GC supply unit; GC markers Always+SetWindowPos.
+- Files: PlateEditorOverlay.cs, PlateSlotNodeLocator.cs, GcExpertDeliveryEnhancer.cs, csproj
+- Backup: /tmp/gtp-overlay-lock-*
+- Outcome: partial — plate menu locked; GC still lagged
+- Next: if click flicker returns, use Always+SetWindowPos on plate too
+
+[2026-07-27 16:12] GC marker drag lock (0.1.44)
+- Attempt: Rebuild relatives only on scroll/list change (not when !moving); draw on ForegroundDrawList (no ImGui windows); motion via unit X/Y + cached relative.
+- Files: GcExpertDeliveryEnhancer.cs, csproj
+- Outcome: failed — user: GC icons still not locked (cache cleared on every PostRefresh)
+- Note: plate SetWindowPos-every-frame is cheap (same as Glamaholic; ImGui already draws every frame)
+
+[2026-07-27 16:18] GC marker cache survive refresh (0.1.45)
+- Attempt: Stop ClearMarkerCache on PostRefresh/PostRequestedUpdate (rebaked lagging ScreenX every drag tick); clip rect prefers unit X/Y.
+- Files: GcExpertDeliveryEnhancer.cs, GcMarkerOverlayGuard.cs, csproj
+- Outcome: failed — user: still not locked, especially slow drag
+- Evidence: OnGcSupplyUiChanged cleared markerCache; those events fire while moving GC window
+
+[2026-07-27 16:22] GC native ATK markers + drop color-coding (0.1.46)
+- Attempt: Parent SimpleImageNode markers to GrandCompanySupplyList root (move with ATK); rebuild only on scroll/list change; remove ShowGcExpertDeliveryColorCoding from config + ImGui + native settings.
+- Files: GcExpertDeliveryEnhancer.cs, Configuration.cs, TrackerWindow.cs, TrackerNativeAddon.cs, csproj
+- Outcome: partial — lock worked; atlas UV wrong (FitTexture showed multi-icon + FlipV mirrored instead of remapping row)
+
+[2026-07-27 16:28] GC native marker atlas UV (0.1.47)
+- Attempt: Drop FitTexture/AutoFit; Stretch cropped part only; bake ImGui-style flip-V as opposite atlas row V (not ImageNodeFlags.FlipV).
+- Outcome: failed — user: UVs still wrong vs 0.1.45
+
+[2026-07-27 16:30] GC hybrid: native anchors + 0.1.45 ImGui UVs (0.1.48)
+- Attempt: What changed since 0.1.45 was ATK SimpleImageNode texture sampling. Keep lock via native ResNode anchors; draw icons with StorageMarkerDrawer (same UV path as 0.1.45).
+- Outcome: failed — user: lock broken again
+
+[2026-07-27 16:33] GC ATK markers + live atlas tuning (0.1.49)
+- Attempt: Back to SimpleImageNode (lock); no FitTexture; U/V/W/H from settings; FlipV = ATK mirror; rebuild when atlas signature changes; clearer GC atlas UI; FlipBrightRow default false.
+- Outcome: worked — user tuned UVs
+
+[2026-07-27 16:43] Bake ATK atlas defaults (0.1.50)
+- Defaults: Dresser U18 V0 W18 H18 Voff18 scale0.8 flip off; Armoire U36 V0 W18 H18 Voff18 scale0.8 flip off
+- Config Version 9 migrates ApplyUvDefaults; Reset atlas UV uses same
+- Outcome: baked from user tune
+
+[2026-07-27 16:48] GC scale 0.81 + row-parent scroll fix (0.1.51)
+- Scale default 0.81 (config v10 migrate)
+- Markers AttachNode to list row; no rebuild on ScrollOffset; removed 550px X hack; scale gaps with ItemHeight
+- Outcome: failed — icons disappeared (user); rolled back in 0.1.52
+
+[2026-07-27 16:52] Rollback row-parent markers (0.1.52)
+- Outcome: partial — icons/scale OK; vertical push still worse at higher GC scale %
+- Next: fix vertical-only (not horizontal / row parenting)
+
+[2026-07-27 16:59] Vertical center uses marker height (0.1.53)
+- Attempt: Stop centering with ImGui.GetFontSize() (fixed) against ATK itemHeight (scales). Pass markerHeight into TryGetListRowMarkerAnchor; drop CenterIconY fontSize path.
+- Files: AtkUiHelper.cs, GcExpertDeliveryEnhancer.cs
+- Backup: .cursor/backups/2026-07-27_165857
+- Outcome: failed — still pushed down above 100%, up below 100%; perfect at 100%
+- Evidence: user report — classic screen-delta written into ATK local Position
+
+[2026-07-27 17:05] Screen→local via addon Scale (0.1.54)
+- Attempt: Attach with (screen - addon.Position) / addon.Scale (KamiToolKit DropDown pattern). Multiply list local deltas (ScrollOffset, ItemHeight, Left, pads) by Scale when building screen anchors. Rebuild when Scale changes.
+- Files: AtkUiHelper.cs, GcExpertDeliveryEnhancer.cs
+- Backup: .cursor/backups/2026-07-27_170715
+- Outcome: worked (user confirmed)
+- Next: command rename + push
+
+[2026-07-27 17:20] Commands → /glamplus (0.1.55)
+- Attempt: /glamplus main, /glamplus report = Fashion Report, /glamplus imgui = ImGui; drop /glamplusn and /glamnative handlers
+- Files: Plugin.cs, PluginCommands.cs, README.md, GlamourTrackerNative.json
+- Outcome: implemented; pushing recover-pre-restore

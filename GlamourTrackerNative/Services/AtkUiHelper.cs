@@ -254,15 +254,31 @@ internal static unsafe class AtkUiHelper
     }
 
     /// <summary>
+    /// ATK node Position is local (unscaled). Convert a screen-space point using addon X/Y/Scale
+    /// (same pattern as KamiToolKit DropDownNode).
+    /// </summary>
+    public static unsafe Vector2 ScreenToAddonLocal(AtkUnitBase* addon, Vector2 screen)
+    {
+        if (addon == null)
+            return screen;
+
+        var scale = Math.Max(addon->Scale, 0.01f);
+        var origin = new Vector2(addon->X, addon->Y);
+        return (screen - origin) / scale;
+    }
+
+    /// <summary>
     /// GC expert delivery draws item icons via the list, not inside row nodes — use list + renderer layout.
+    /// <paramref name="uiScale"/> is the addon Scale; list ItemHeight/ScrollOffset/Left are local units.
     /// </summary>
     public static unsafe Vector2? TryGetListRowMarkerAnchor(
         AtkComponentList* list,
         AtkComponentListItemRenderer* renderer,
         int itemIndex,
         float gapBeforeIcon = 6f,
-        float fontSize = 14f,
-        float markerWidth = 20f)
+        float markerHeight = 20f,
+        float markerWidth = 20f,
+        float uiScale = 1f)
     {
         if (renderer == null || list == null)
             return null;
@@ -276,14 +292,17 @@ internal static unsafe class AtkUiHelper
         if (listX <= 1f || listY <= 1f)
             return null;
 
+        var scale = Math.Max(uiScale, 0.01f);
         var itemHeight = list->ItemHeight > 0 ? list->ItemHeight : (short)40;
         var slot = Math.Max(0, itemIndex - list->FirstVisibleItemIndex);
-        var rowTop = listY + list->ScrollOffset + (slot * itemHeight);
-        var rowLeft = listX + renderer->Left;
+        // ScreenY is scaled; ItemHeight/ScrollOffset/Left are local — multiply local deltas by scale.
+        var rowTop = listY + (list->ScrollOffset + (slot * itemHeight)) * scale;
+        var rowLeft = listX + (renderer->Left * scale);
 
-        var x = rowLeft + GcRowIconPadLeft - gapBeforeIcon - markerWidth + GcMarkerCalibrateX;
+        var x = rowLeft
+            + (GcRowIconPadLeft - gapBeforeIcon - markerWidth + GcMarkerCalibrateX) * scale;
 
-        var y = rowTop + MathF.Max(0f, (itemHeight - fontSize) * 0.5f);
+        var y = rowTop + MathF.Max(0f, (itemHeight - markerHeight) * 0.5f * scale);
 
         var rowNode = renderer->OwnerNode != null
             ? (AtkResNode*)renderer->OwnerNode
@@ -292,11 +311,11 @@ internal static unsafe class AtkUiHelper
         var textTopLeft = ResolveNodeScreenTopLeft(rowNode, textNode);
         if (textTopLeft != null && textNode != null)
         {
-            var textHeight = textNode->Height > 0 ? textNode->Height : 14f;
-            y = textTopLeft.Value.Y + MathF.Max(0f, (textHeight - fontSize) * 0.5f);
+            var textHeight = textNode->Height > 0 ? (float)textNode->Height : (float)itemHeight;
+            y = textTopLeft.Value.Y + MathF.Max(0f, (textHeight - markerHeight) * 0.5f * scale);
         }
 
-        y += GcMarkerCalibrateY;
+        y += GcMarkerCalibrateY * scale;
 
         return new Vector2(x, y);
     }

@@ -2,11 +2,13 @@
 
 Fork of [Glamour Tracker+](../GlamourTrackerPlus) exploring **KamiToolKit** native FFXIV UI (same approach as DailyDuty / VanillaPlus).
 
-## Status
+## Commands
 
-- ImGui UI from Glamour Tracker+ is still available (`/glamplus`).
-- `/glamnative` opens a **native** Fashion Report shell (week title + completion status) as a proof of concept.
-- Full Fashion Report columns will be ported incrementally.
+| Command | Opens |
+| --- | --- |
+| `/glamplus` | Native main menu |
+| `/glamplus report` | Native Fashion Report |
+| `/glamplus imgui` | Legacy ImGui UI |
 
 ## Build
 

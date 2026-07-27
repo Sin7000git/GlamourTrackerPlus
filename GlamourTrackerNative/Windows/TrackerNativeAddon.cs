@@ -439,7 +439,7 @@ internal sealed class TrackerNativeAddon : NativeAddon
             TabRandomize =>
                 $"rz|{c.RandomizeIncludeDresser}|{c.RandomizeIncludeArmoire}|{(int)c.RandomizeJobFilter}|{c.RandomizeSpecificJobId}|{c.RandomizeLimitRequiredLevel}|{c.RandomizeMinRequiredLevel}|{c.RandomizeMaxRequiredLevel}|{c.RandomizeLimitItemLevel}|{c.RandomizeMinItemLevel}|{c.RandomizeMaxItemLevel}|{LocksSignature()}",
             TabSettings =>
-                $"st|{c.Enabled}|{c.ShowTooltipIcons}|{c.ShowGcExpertDeliveryStatus}|{c.ShowGcExpertDeliveryColorCoding}|{c.ShowOnlyForGlamourItems}|{c.ShowPlateEditorOverlay}|{c.PlateEditorOverlayOnRight}|{c.ShowSlotRerollButtons}",
+                $"st|{c.Enabled}|{c.ShowTooltipIcons}|{c.ShowGcExpertDeliveryStatus}|{c.ShowOnlyForGlamourItems}|{c.ShowPlateEditorOverlay}|{c.PlateEditorOverlayOnRight}|{c.ShowSlotRerollButtons}",
             _ => selectedTab,
         };
     }
@@ -758,18 +758,6 @@ internal sealed class TrackerNativeAddon : NativeAddon
             config.Save();
             ScheduleRebuildForm();
         }));
-        if (config.ShowGcExpertDeliveryStatus)
-        {
-            list.AddNode(MakeIndentedCheckbox(
-                "Color-code icons",
-                config.ShowGcExpertDeliveryColorCoding,
-                v =>
-                {
-                    config.ShowGcExpertDeliveryColorCoding = v;
-                    config.Save();
-                },
-                width));
-        }
 
         list.AddNode(MakeSection("Plate editor"));
         list.AddNode(MakeCheckbox("Show controls above plate editor", config.ShowPlateEditorOverlay, v =>

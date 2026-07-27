@@ -142,8 +142,8 @@ internal sealed class PlateEditorOverlay
         ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowMinSize, Vector2.Zero);
 
-        // Always — Appearing + SetWindowPos after Begin flicker when the button takes focus.
-        ImGui.SetNextWindowPos(drawPos.Value, ImGuiCond.Always);
+        // Glamaholic lock: Appearing for first frame, SetWindowPos every frame after draw.
+        ImGui.SetNextWindowPos(drawPos.Value, ImGuiCond.Appearing);
         var began = ImGui.Begin($"##{OverlayId}", HelperWindowFlags);
         ImGui.PopStyleVar(3);
 
@@ -154,6 +154,7 @@ internal sealed class PlateEditorOverlay
         }
 
         DrawControls(config);
+        ImGui.SetWindowPos(drawPos.Value);
         ImGui.End();
     }
 
@@ -230,7 +231,8 @@ internal sealed class PlateEditorOverlay
             ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, Vector2.Zero);
             ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 0);
 
-            ImGui.SetNextWindowPos(pos, ImGuiCond.Always);
+            // Glamaholic lock: Appearing + SetWindowPos after draw (tracks plate while dragging).
+            ImGui.SetNextWindowPos(pos, ImGuiCond.Appearing);
             ImGui.SetNextWindowSize(buttonSize, ImGuiCond.Always);
             var began = ImGui.Begin($"##{SlotOverlayId}-{slot}", SlotHelperWindowFlags);
             ImGui.PopStyleVar(5);
@@ -281,6 +283,7 @@ internal sealed class PlateEditorOverlay
             if (hovered)
                 ImGui.SetTooltip($"Randomize {GlamourPlateSlotMap.Labels[slot]}");
 
+            ImGui.SetWindowPos(pos);
             ImGui.End();
         }
     }

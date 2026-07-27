@@ -177,7 +177,12 @@ internal static unsafe class GcMarkerOverlayGuard
             return false;
 
         var scale = unit->Scale > 0f ? unit->Scale : 1f;
-        min = new Vector2(root->ScreenX, root->ScreenY);
+        // Prefer unit X/Y so clip/occlusion track the visible window while dragging.
+        if (unit->X > 1f || unit->Y > 1f)
+            min = new Vector2(unit->X, unit->Y);
+        else
+            min = new Vector2(root->ScreenX, root->ScreenY);
+
         var size = new Vector2(root->Width * scale, root->Height * scale);
         if (size.X <= 0f || size.Y <= 0f)
             return false;

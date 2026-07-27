@@ -133,16 +133,17 @@ internal static unsafe class PlateSlotNodeLocator
     private static bool TryGetAddonOrigin(AtkUnitBase* unit, AtkUnitBasePtr addon, out Vector2 origin)
     {
         var vp = ImGuiHelpers.MainViewport.Pos;
+        // Prefer addon.X/Y (same as Glamaholic) — RootNode ScreenX can trail while dragging.
+        if (addon.X > 1f || addon.Y > 1f)
+        {
+            origin = vp + new Vector2(addon.X, addon.Y);
+            return true;
+        }
+
         var root = unit->RootNode;
         if (root != null && root->ScreenX > 1f && root->ScreenY > 1f)
         {
             origin = vp + new Vector2(root->ScreenX, root->ScreenY);
-            return true;
-        }
-
-        if (addon.X > 1f || addon.Y > 1f)
-        {
-            origin = vp + new Vector2(addon.X, addon.Y);
             return true;
         }
 

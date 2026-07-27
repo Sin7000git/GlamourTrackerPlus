@@ -14,9 +14,8 @@ namespace GlamourTracker;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    /// <summary>ImGui UI command (distinct from Glamour Tracker+ /glamplus).</summary>
-    public const string CommandName = "/glamplusn";
-    public const string NativeCommandName = "/glamnative";
+    /// <summary>Primary UI command: native main window. Subcommands: report, imgui, …</summary>
+    public const string CommandName = "/glamplus";
     private const double BackgroundRefreshSeconds = 30;
 
     [PluginService] internal static IDalamudPluginInterface PluginInterface { get; private set; } = null!;
@@ -167,7 +166,7 @@ public sealed class Plugin : IDalamudPlugin
 
         _ = fashionReport.RefreshAsync(force: false);
         Log.Information(
-            "Glamour Tracker+ Native loaded. /glamplusn = main UI, /glamnative = Fashion Report, /glamplusn imgui = ImGui fallback.");
+            "Glamour Tracker+ Native loaded. /glamplus = main UI, /glamplus report = Fashion Report, /glamplus imgui = ImGui fallback.");
     }
 
     public void Dispose()
@@ -382,6 +381,21 @@ public sealed class Plugin : IDalamudPlugin
         {
             PlateSlotNodeLocator.ResetSlotRerollDefaults(config);
             config.Version = 8;
+            dirty = true;
+        }
+
+        if (config.Version < 9)
+        {
+            StorageIconAtlasDefaults.ApplyUvDefaults(config);
+            config.Version = 9;
+            dirty = true;
+        }
+
+        if (config.Version < 10)
+        {
+            config.DresserIconDisplayScale = StorageIconAtlasDefaults.DisplayScale;
+            config.ArmoireIconDisplayScale = StorageIconAtlasDefaults.DisplayScale;
+            config.Version = 10;
             dirty = true;
         }
 

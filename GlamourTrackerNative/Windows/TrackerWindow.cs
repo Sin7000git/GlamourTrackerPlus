@@ -362,7 +362,6 @@ internal sealed class TrackerWindow : Window
         var enabled = config.Enabled;
         var showIcons = config.ShowTooltipIcons;
         var showGc = config.ShowGcExpertDeliveryStatus;
-        var showGcColor = config.ShowGcExpertDeliveryColorCoding;
         var glamourOnly = config.ShowOnlyForGlamourItems;
         var changed = false;
 
@@ -414,14 +413,6 @@ internal sealed class TrackerWindow : Window
         changed |= ImGui.Checkbox("Color-code dresser/armoire icons on tooltips", ref showIcons);
         ImGui.TextDisabled("Green = stored, red = missing (for items that can use that storage).");
         changed |= ImGui.Checkbox("Show dresser/armoire icons on GC expert delivery", ref showGc);
-        if (showGc)
-        {
-            ImGui.Indent();
-            changed |= ImGui.Checkbox("Color-code GC expert delivery icons", ref showGcColor);
-            ImGui.TextDisabled("Green tint when on; neutral game colors when off.");
-            ImGui.Unindent();
-        }
-
         ImGui.TextDisabled("Hover any item tooltip once to save the texture path; atlas UV stays fixed after that.");
         changed |= ImGui.Checkbox("Only annotate glamour gear", ref glamourOnly);
 
@@ -456,7 +447,6 @@ internal sealed class TrackerWindow : Window
             config.UseLocalUiStyle = useLocalStyle;
             config.ShowTooltipIcons = showIcons;
             config.ShowGcExpertDeliveryStatus = showGc;
-            config.ShowGcExpertDeliveryColorCoding = showGcColor;
             config.ShowOnlyForGlamourItems = glamourOnly;
             config.ShowPlateEditorOverlay = showPlateOverlay;
             config.PlateEditorOverlayOnRight = overlayOnRight;
@@ -486,7 +476,10 @@ internal sealed class TrackerWindow : Window
             changed = true;
         }
 
-        ImGui.TextDisabled("Hover any item once to save the game texture path. Atlas U/V stays fixed after that.");
+        ImGui.TextDisabled(
+            "These pixel atlas values feed GC delivery ATK icons (and tooltips). "
+            + "Keep the delivery window open while tuning — icons refresh when you change a value.");
+        ImGui.TextDisabled("Start with Flip off, then nudge Atlas V if you need the other row of the sheet.");
 
         changed |= DrawStorageIconTuning(config, "Dresser", isDresser: true);
         changed |= DrawStorageIconTuning(config, "Armoire", isDresser: false);
@@ -500,16 +493,16 @@ internal sealed class TrackerWindow : Window
         ImGui.Separator();
         ImGui.TextUnformatted(label);
 
-        if (ImGui.TreeNode($"Fine-tune {label}##atlas"))
+        if (ImGui.TreeNodeEx($"Atlas crop (pixels)##{label}", ImGuiTreeNodeFlags.DefaultOpen))
         {
             var u = (int)(isDresser ? config.DresserUiIconU : config.ArmoireUiIconU);
             var v = (int)(isDresser ? config.DresserUiIconV : config.ArmoireUiIconV);
             var w = (int)(isDresser ? config.DresserUiIconW : config.ArmoireUiIconW);
             var h = (int)(isDresser ? config.DresserUiIconH : config.ArmoireUiIconH);
-            changed |= ImGui.InputInt($"Atlas U##{label}", ref u, 1, 4);
-            changed |= ImGui.InputInt($"Atlas V##{label}", ref v, 1, 4);
-            changed |= ImGui.InputInt($"Atlas width##{label}", ref w, 1, 4);
-            changed |= ImGui.InputInt($"Atlas height##{label}", ref h, 1, 4);
+            changed |= ImGui.InputInt($"U (left)##{label}", ref u, 1, 36);
+            changed |= ImGui.InputInt($"V (top)##{label}", ref v, 1, 36);
+            changed |= ImGui.InputInt($"Width##{label}", ref w, 1, 4);
+            changed |= ImGui.InputInt($"Height##{label}", ref h, 1, 4);
             u = Math.Clamp(u, 0, ushort.MaxValue);
             v = Math.Clamp(v, 0, ushort.MaxValue);
             w = Math.Clamp(w, 1, ushort.MaxValue);
@@ -552,6 +545,12 @@ internal sealed class TrackerWindow : Window
                 config.ArmoireIconHOffset = hOff;
             }
 
+            var effU = Math.Clamp(u + uOff, 0, ushort.MaxValue);
+            var effV = Math.Clamp(v + vOff, 0, ushort.MaxValue);
+            var effW = Math.Clamp(w + wOff, 1, ushort.MaxValue);
+            var effH = Math.Clamp(h + hOff, 1, ushort.MaxValue);
+            ImGui.TextDisabled($"Effective crop: U={effU} V={effV} W={effW} H={effH}");
+
             ImGui.TreePop();
         }
 
@@ -565,7 +564,9 @@ internal sealed class TrackerWindow : Window
             changed = true;
         }
 
-        changed |= ImGui.Checkbox($"Bright icon##{label}", ref flipV);
+        changed |= ImGui.Checkbox($"Flip vertically##{label}", ref flipV);
+        if (ImGui.IsItemHovered())
+            ImGui.SetTooltip("ATK mirror flip. Prefer adjusting V to pick the bright/dark atlas row.");
 
         if (isDresser)
         {

@@ -18,24 +18,13 @@ internal sealed class PluginCommands : IDisposable
         this.commandManager.AddHandler(Plugin.CommandName, new CommandInfo(OnCommand)
         {
             HelpMessage =
-                "Glamour Tracker+ Native main UI. /glamnative = Fashion Report. /glamplusn imgui = ImGui fallback.",
-        });
-        this.commandManager.AddHandler(Plugin.NativeCommandName, new CommandInfo(OnNativeCommand)
-        {
-            HelpMessage = "Open the native Fashion Report window.",
+                "Glamour Tracker+ Native. /glamplus = main UI · /glamplus report = Fashion Report · /glamplus imgui = ImGui fallback.",
         });
     }
 
     public void Dispose()
     {
         this.commandManager.RemoveHandler(Plugin.CommandName);
-        this.commandManager.RemoveHandler(Plugin.NativeCommandName);
-    }
-
-    private void OnNativeCommand(string command, string args)
-    {
-        this.plugin.ToggleNativeFashionReport();
-        _ = this.plugin.FashionReport.RefreshAsync(force: false);
     }
 
     private void OnCommand(string command, string args)
@@ -58,8 +47,10 @@ internal sealed class PluginCommands : IDisposable
 
             case "native":
             case "nui":
-                this.plugin.ToggleNativeFashionReport();
-                _ = this.plugin.FashionReport.RefreshAsync(force: false);
+            case "fashion":
+            case "fr":
+            case "report":
+                this.plugin.OpenFashionReportTab();
                 return;
 
             case "refresh":
@@ -83,12 +74,6 @@ internal sealed class PluginCommands : IDisposable
                 });
                 return;
 
-            case "fashion":
-            case "fr":
-            case "report":
-                this.plugin.OpenFashionReportTab();
-                return;
-
             case "gcdebug":
             case "gcicons":
                 this.plugin.DebugGcExpertDelivery();
@@ -96,11 +81,11 @@ internal sealed class PluginCommands : IDisposable
 
             case "help":
                 this.chatGui.Print(
-                    "Glamour Tracker+ Native: /glamplusn | /glamnative | /glamplusn fashion | /glamplusn imgui | /glamplusn help");
+                    "Glamour Tracker+ Native: /glamplus | /glamplus report | /glamplus imgui | /glamplus help");
                 return;
 
             default:
-                this.chatGui.Print($"Unknown option \"{verb}\". Use /glamplusn help.");
+                this.chatGui.Print($"Unknown option \"{verb}\". Use /glamplus help.");
                 return;
         }
     }

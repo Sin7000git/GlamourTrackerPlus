@@ -2,48 +2,28 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
-using Dalamud.Interface.Textures;
-using Dalamud.Interface.Utility;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
+using KamiToolKit.Enums;
+using KamiToolKit.Nodes.Simplified;
 using AgentModule = FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentModule;
 
 namespace GlamourTracker.Services;
 
 /// <summary>
-/// Expert delivery: green dresser/armoire icons immediately left of each item icon when stored there.
+/// Expert delivery: dresser/armoire icons immediately left of each item icon when stored there.
+/// Markers are native ATK image nodes parented to the supply window so they move with it.
+/// Atlas U/V/W/H come from Settings → GC icon atlas (same values as tooltips).
 /// </summary>
 internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
 {
     private const string SupplyAddonName = "GrandCompanySupplyList";
-    private const string MarkerOverlayId = "glamour-tracker-gc-marker";
     private const int ExpertDeliveryTab = 2;
     private const int ExpertDeliveryStartPosition = 11;
     private const float MarkerGapBeforeIcon = 4f;
     private const float MarkerIconSpacing = 2f;
-
-    /// <summary>
-    /// Relative cache (skip ATK list ScreenX while dragging) + ImGui SetWindowPos
-    /// (BackgroundDrawList lags; live ScreenX + SetWindowPos overshoots).
-    /// </summary>
-    private static readonly ImGuiWindowFlags MarkerWindowFlags =
-        ImGuiWindowFlags.NoBackground
-        | ImGuiWindowFlags.NoDecoration
-        | ImGuiWindowFlags.NoCollapse
-        | ImGuiWindowFlags.NoTitleBar
-        | ImGuiWindowFlags.NoNav
-        | ImGuiWindowFlags.NoNavFocus
-        | ImGuiWindowFlags.NoNavInputs
-        | ImGuiWindowFlags.NoResize
-        | ImGuiWindowFlags.NoScrollbar
-        | ImGuiWindowFlags.NoSavedSettings
-        | ImGuiWindowFlags.NoFocusOnAppearing
-        | ImGuiWindowFlags.AlwaysAutoResize
-        | ImGuiWindowFlags.NoDocking
-        | ImGuiWindowFlags.NoInputs
-        | ImGuiWindowFlags.NoMove;
 
     private readonly IAddonLifecycle addonLifecycle;
     private readonly IGameGui gameGui;
@@ -56,13 +36,13 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
     private ExpertDeliveryMatchIndex? expertMatchIndex;
     private int lastDrawnMarkerCount;
 
-    /// <summary>Markers stored relative to the supply addon root so they track window drags cleanly.</summary>
-    private readonly List<CachedMarker> markerCache = [];
-    private Vector2 lastAddonScreenPos;
+    private readonly List<SimpleImageNode> markerNodes = [];
     private int lastScrollOffset = int.MinValue;
     private int lastFirstVisible = int.MinValue;
     private int lastListLength = -1;
-    private bool lastApplyGreenTint;
+    private float lastAddonScale = float.NaN;
+    private nint lastSupplyAddonAddress;
+    private string lastAtlasSignature = string.Empty;
 
     public GcExpertDeliveryEnhancer(
         IAddonLifecycle addonLifecycle,
@@ -83,6 +63,7 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
 
         this.addonLifecycle.RegisterListener(AddonEvent.PostRefresh, SupplyAddonName, OnGcSupplyUiChanged);
         this.addonLifecycle.RegisterListener(AddonEvent.PostRequestedUpdate, SupplyAddonName, OnGcSupplyUiChanged);
+        this.addonLifecycle.RegisterListener(AddonEvent.PreFinalize, SupplyAddonName, OnGcSupplyFinalize);
     }
 
     public void OnFirstTooltipForIconAtlas() => this.iconCache.TryEnsureConfigured();
@@ -92,27 +73,46 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
     public void ResetCaches()
     {
         this.expertMatchIndex = null;
-        ClearMarkerCache();
+        DisposeNativeMarkers();
     }
 
     public void Dispose()
     {
         this.addonLifecycle.UnregisterListener(AddonEvent.PostRefresh, SupplyAddonName, OnGcSupplyUiChanged);
         this.addonLifecycle.UnregisterListener(AddonEvent.PostRequestedUpdate, SupplyAddonName, OnGcSupplyUiChanged);
+        this.addonLifecycle.UnregisterListener(AddonEvent.PreFinalize, SupplyAddonName, OnGcSupplyFinalize);
+        DisposeNativeMarkers();
     }
 
     private void OnGcSupplyUiChanged(AddonEvent type, AddonArgs args)
     {
+        // Invalidate item matching only — do not dispose markers (refresh fires while dragging).
         this.expertMatchIndex = null;
-        ClearMarkerCache();
     }
 
-    private void ClearMarkerCache()
+    private void OnGcSupplyFinalize(AddonEvent type, AddonArgs args) => DisposeNativeMarkers();
+
+    private void DisposeNativeMarkers()
     {
-        this.markerCache.Clear();
+        foreach (var node in this.markerNodes)
+        {
+            try
+            {
+                node.Dispose();
+            }
+            catch
+            {
+                // Addon may already be torn down.
+            }
+        }
+
+        this.markerNodes.Clear();
         this.lastScrollOffset = int.MinValue;
         this.lastFirstVisible = int.MinValue;
         this.lastListLength = -1;
+        this.lastAddonScale = float.NaN;
+        this.lastSupplyAddonAddress = 0;
+        this.lastAtlasSignature = string.Empty;
     }
 
     public void DrawOverlays()
@@ -121,7 +121,7 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
         if (!config.Enabled || !config.ShowGcExpertDeliveryStatus)
         {
             this.lastDrawnMarkerCount = 0;
-            ClearMarkerCache();
+            DisposeNativeMarkers();
             return;
         }
 
@@ -129,7 +129,7 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
         if (addonPtr.Address == nint.Zero)
         {
             this.lastDrawnMarkerCount = 0;
-            ClearMarkerCache();
+            DisposeNativeMarkers();
             return;
         }
 
@@ -137,18 +137,18 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
         if (!GcMarkerOverlayGuard.ShouldDrawAnyMarkers(supplyUnit))
         {
             this.lastDrawnMarkerCount = 0;
-            ClearMarkerCache();
+            DisposeNativeMarkers();
             return;
         }
 
         try
         {
-            this.lastDrawnMarkerCount = DrawExpertDeliveryMarkers((AddonGrandCompanySupplyList*)addonPtr.Address, supplyUnit);
+            this.lastDrawnMarkerCount = SyncNativeMarkers((AddonGrandCompanySupplyList*)addonPtr.Address, supplyUnit);
         }
         catch
         {
             this.lastDrawnMarkerCount = 0;
-            ClearMarkerCache();
+            DisposeNativeMarkers();
         }
     }
 
@@ -178,7 +178,7 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
         {
             var ptr = (AddonGrandCompanySupplyList*)addonPtr.Address;
             var supplyUnit = (AtkUnitBase*)addonPtr.Address;
-            var drawn = DrawExpertDeliveryMarkers(ptr, supplyUnit);
+            var drawn = SyncNativeMarkers(ptr, supplyUnit);
 
             var expertItems = GetExpertMatchIndex().Items;
             var list = ptr->ExpertDeliveryList;
@@ -255,169 +255,56 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
         }
     }
 
-    private unsafe int DrawExpertDeliveryMarkers(AddonGrandCompanySupplyList* addon, AtkUnitBase* supplyUnit)
+    private unsafe int SyncNativeMarkers(AddonGrandCompanySupplyList* addon, AtkUnitBase* supplyUnit)
     {
         if (addon->ExpertDeliveryList == null || !IsExpertTabActive(addon))
         {
-            ClearMarkerCache();
+            DisposeNativeMarkers();
             return 0;
         }
 
         var matchIndex = GetExpertMatchIndex();
         if (matchIndex.Items.Count == 0)
         {
-            ClearMarkerCache();
+            DisposeNativeMarkers();
             return 0;
         }
 
         if (!this.iconCache.IsReady)
             this.iconCache.TryEnsureConfigured();
 
-        if (!TryGetAddonScreenPos(supplyUnit, out var addonPos))
-        {
-            ClearMarkerCache();
-            return 0;
-        }
-
         var config = this.getConfiguration();
         var list = addon->ExpertDeliveryList;
-        var applyGreenTint = config.ShowGcExpertDeliveryColorCoding;
         var dresserSlice = this.iconCache.GetResolvedDresserSlice();
         var armoireSlice = this.iconCache.GetResolvedArmoireSlice();
+        var supplyAddress = (nint)supplyUnit;
+        var atlasSig = AtlasSignature(config, dresserSlice, armoireSlice);
+        var uiScale = Math.Max(supplyUnit->Scale, 0.01f);
 
-        var windowMoving = (addonPos - this.lastAddonScreenPos).LengthSquared() > 0.25f;
-        var listChanged = list->ScrollOffset != this.lastScrollOffset
+        var needsRebuild = list->ScrollOffset != this.lastScrollOffset
             || list->FirstVisibleItemIndex != this.lastFirstVisible
             || list->ListLength != this.lastListLength
-            || applyGreenTint != this.lastApplyGreenTint;
+            || supplyAddress != this.lastSupplyAddonAddress
+            || atlasSig != this.lastAtlasSignature
+            || Math.Abs(uiScale - this.lastAddonScale) > 0.001f
+            || this.markerNodes.Count == 0;
 
-        // While dragging: keep relatives, only move with addon root (live list ScreenX overshoots).
-        if (!windowMoving || listChanged || this.markerCache.Count == 0)
-        {
-            RebuildMarkerCache(
-                list,
-                matchIndex,
-                supplyUnit,
-                addonPos,
-                applyGreenTint,
-                dresserSlice,
-                armoireSlice,
-                config.FlipDresserIconV,
-                config.FlipArmoireIconV);
-            this.lastScrollOffset = list->ScrollOffset;
-            this.lastFirstVisible = list->FirstVisibleItemIndex;
-            this.lastListLength = list->ListLength;
-            this.lastApplyGreenTint = applyGreenTint;
-        }
+        if (!needsRebuild)
+            return this.markerNodes.Count;
 
-        this.lastAddonScreenPos = addonPos;
+        // Rebuild on scroll / list / atlas / scale change — not while dragging with unchanged list.
+        DisposeNativeMarkers();
+        this.lastScrollOffset = list->ScrollOffset;
+        this.lastFirstVisible = list->FirstVisibleItemIndex;
+        this.lastListLength = list->ListLength;
+        this.lastSupplyAddonAddress = supplyAddress;
+        this.lastAtlasSignature = atlasSig;
+        this.lastAddonScale = uiScale;
 
-        var vp = ImGuiHelpers.MainViewport.Pos;
-        var clipActive = GcMarkerOverlayGuard.TryGetClipRect(supplyUnit, out var clipMin, out var clipMax);
-        if (clipActive)
-        {
-            clipMin += vp;
-            clipMax += vp;
-        }
-
-        var drawn = 0;
-        foreach (var marker in this.markerCache)
-        {
-            // ATK screen space for guards; ImGui space for SetWindowPos.
-            var atkPos = addonPos + marker.RelativePos;
-            if (!GcMarkerOverlayGuard.ShouldDrawMarkerAt(this.gameGui, supplyUnit, atkPos, marker.Slice.DisplaySize))
-                continue;
-
-            var texture = marker.IsArmoire
-                ? this.iconCache.GetArmoireTexture()
-                : this.iconCache.GetDresserTexture();
-            var imguiPos = vp + atkPos;
-            var idSuffix = marker.IsArmoire ? "a" : "d";
-            if (TryDrawMarkerWindow(
-                    $"{MarkerOverlayId}-{idSuffix}-{marker.ItemIndex}",
-                    imguiPos,
-                    texture,
-                    marker.Slice,
-                    marker.FlipV,
-                    marker.ApplyGreenTint,
-                    clipActive,
-                    clipMin,
-                    clipMax))
-                drawn++;
-        }
-
-        return drawn;
-    }
-
-    private static bool TryDrawMarkerWindow(
-        string id,
-        Vector2 imguiPos,
-        ISharedImmediateTexture? texture,
-        StorageUiIconSlice slice,
-        bool flipV,
-        bool applyGreenTint,
-        bool clipActive,
-        Vector2 clipMin,
-        Vector2 clipMax)
-    {
-        var size = slice.DisplaySize;
-        if (size.X <= 1f || size.Y <= 1f)
-            return false;
-
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0);
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowMinSize, Vector2.Zero);
-
-        ImGui.SetNextWindowPos(imguiPos, ImGuiCond.Appearing);
-        ImGui.SetNextWindowSize(size);
-        var began = ImGui.Begin(id, MarkerWindowFlags);
-        ImGui.PopStyleVar(3);
-
-        if (!began)
-        {
-            ImGui.End();
-            return false;
-        }
-
-        ImGui.SetWindowPos(imguiPos);
-
-        var drawList = ImGui.GetWindowDrawList();
-        if (clipActive)
-            drawList.PushClipRect(clipMin, clipMax, true);
-
-        var drawn = StorageMarkerDrawer.TryDrawTintedIcon(
-            drawList,
-            texture,
-            slice,
-            ImGui.GetWindowPos(),
-            flipV,
-            applyGreenTint);
-
-        if (clipActive)
-            drawList.PopClipRect();
-
-        ImGui.Dummy(size);
-        ImGui.End();
-        return drawn;
-    }
-
-    private unsafe void RebuildMarkerCache(
-        AtkComponentList* list,
-        ExpertDeliveryMatchIndex matchIndex,
-        AtkUnitBase* supplyUnit,
-        Vector2 addonPos,
-        bool applyGreenTint,
-        StorageUiIconSlice dresserSlice,
-        StorageUiIconSlice armoireSlice,
-        bool flipDresserV,
-        bool flipArmoireV)
-    {
-        this.markerCache.Clear();
-
-        var fontSize = ImGui.GetFontSize();
         var dresserSize = dresserSlice.DisplaySize;
         var armoireSize = armoireSlice.DisplaySize;
         var markerWidth = Math.Max(dresserSize.X, armoireSize.X);
+        var markerHeight = Math.Max(dresserSize.Y, armoireSize.Y);
         var ownershipCache = new Dictionary<uint, (bool Dresser, bool Armoire)>();
 
         for (var itemIndex = 0; itemIndex < list->ListLength; itemIndex++)
@@ -447,79 +334,81 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
                 continue;
 
             var anchor = AtkUiHelper.TryGetListRowMarkerAnchor(
-                list, renderer, itemIndex, MarkerGapBeforeIcon, fontSize, markerWidth);
+                list, renderer, itemIndex, MarkerGapBeforeIcon, markerHeight, markerWidth, uiScale);
             if (anchor == null)
                 continue;
 
             var markerX = anchor.Value.X;
-            var textTopY = anchor.Value.Y;
+            var rowCenterY = anchor.Value.Y;
 
             if (inArmoire)
             {
-                var pos = new Vector2(markerX, CenterIconY(textTopY, fontSize, armoireSize.Y));
-                if (GcMarkerOverlayGuard.ShouldDrawMarkerAt(this.gameGui, supplyUnit, pos, armoireSize))
+                var screenPos = new Vector2(
+                    markerX,
+                    rowCenterY + MathF.Max(0f, (markerHeight - armoireSize.Y) * 0.5f * uiScale));
+                if (GcMarkerOverlayGuard.ShouldDrawMarkerAt(this.gameGui, supplyUnit, screenPos, armoireSize * uiScale))
                 {
-                    this.markerCache.Add(new CachedMarker(
-                        itemIndex,
-                        pos - addonPos,
+                    AttachAtkMarker(
+                        supplyUnit,
+                        AtkUiHelper.ScreenToAddonLocal(supplyUnit, screenPos),
                         armoireSlice,
-                        IsArmoire: true,
-                        flipArmoireV,
-                        applyGreenTint));
-                    markerX -= armoireSize.X + MarkerIconSpacing;
+                        config.FlipArmoireIconV);
+                    markerX -= (armoireSize.X + MarkerIconSpacing) * uiScale;
                 }
             }
 
             if (inDresser)
             {
-                var pos = new Vector2(markerX, CenterIconY(textTopY, fontSize, dresserSize.Y));
-                if (GcMarkerOverlayGuard.ShouldDrawMarkerAt(this.gameGui, supplyUnit, pos, dresserSize))
+                var screenPos = new Vector2(
+                    markerX,
+                    rowCenterY + MathF.Max(0f, (markerHeight - dresserSize.Y) * 0.5f * uiScale));
+                if (GcMarkerOverlayGuard.ShouldDrawMarkerAt(this.gameGui, supplyUnit, screenPos, dresserSize * uiScale))
                 {
-                    this.markerCache.Add(new CachedMarker(
-                        itemIndex,
-                        pos - addonPos,
+                    AttachAtkMarker(
+                        supplyUnit,
+                        AtkUiHelper.ScreenToAddonLocal(supplyUnit, screenPos),
                         dresserSlice,
-                        IsArmoire: false,
-                        flipDresserV,
-                        applyGreenTint));
+                        config.FlipDresserIconV);
                 }
             }
         }
+
+        return this.markerNodes.Count;
     }
 
-    private static unsafe bool TryGetAddonScreenPos(AtkUnitBase* supplyUnit, out Vector2 pos)
+    private void AttachAtkMarker(
+        AtkUnitBase* supplyUnit,
+        Vector2 rootRelativePos,
+        StorageUiIconSlice slice,
+        bool flipV)
     {
-        pos = default;
-        if (supplyUnit == null)
-            return false;
+        if (!slice.IsValid || string.IsNullOrWhiteSpace(slice.Path))
+            return;
 
-        var root = supplyUnit->RootNode;
-        if (root != null && root->ScreenX > 1f && root->ScreenY > 1f)
+        var node = new SimpleImageNode
         {
-            pos = new Vector2(root->ScreenX, root->ScreenY);
-            return true;
-        }
+            Size = slice.DisplaySize,
+            Position = rootRelativePos,
+            IsVisible = true,
+            PartId = 0,
+        };
 
-        // Fallback: addon layout position (already in screen space for most clients).
-        if (supplyUnit->X > 1f || supplyUnit->Y > 1f)
-        {
-            pos = new Vector2(supplyUnit->X, supplyUnit->Y);
-            return true;
-        }
+        node.LoadTexture(slice.Path);
+        node.TextureCoordinates = new Vector2(slice.U, slice.V);
+        node.TextureSize = new Vector2(slice.Width, slice.Height);
+        node.WrapMode = WrapMode.Stretch;
 
-        return false;
+        if (flipV)
+            node.ImageNodeFlags = ImageNodeFlags.FlipV;
+
+        node.AddNodeFlags(NodeFlags.Visible, NodeFlags.Enabled);
+        node.AttachNode(supplyUnit);
+        this.markerNodes.Add(node);
     }
 
-    private static float CenterIconY(float textTopY, float fontSize, float iconHeight) =>
-        textTopY + MathF.Max(0f, (fontSize - iconHeight) * 0.5f);
-
-    private readonly record struct CachedMarker(
-        int ItemIndex,
-        Vector2 RelativePos,
-        StorageUiIconSlice Slice,
-        bool IsArmoire,
-        bool FlipV,
-        bool ApplyGreenTint);
+    private static string AtlasSignature(Configuration config, StorageUiIconSlice dresser, StorageUiIconSlice armoire) =>
+        $"{dresser.Path}|{dresser.U},{dresser.V},{dresser.Width},{dresser.Height},{dresser.DisplayWidth:F1}x{dresser.DisplayHeight:F1}|{config.FlipDresserIconV}"
+        + $"||{armoire.Path}|{armoire.U},{armoire.V},{armoire.Width},{armoire.Height},{armoire.DisplayWidth:F1}x{armoire.DisplayHeight:F1}|{config.FlipArmoireIconV}";
 
     private bool IsInDresserForItem(uint itemId)
     {
@@ -739,8 +628,13 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
             var dresserSize = this.iconCache.GetDresserSize();
             var armoireSize = this.iconCache.GetArmoireSize();
             var markerWidth = Math.Max(dresserSize.X, armoireSize.X);
+            var markerHeight = Math.Max(dresserSize.Y, armoireSize.Y);
+            var uiScale = 1f;
+            var supplyPtr = this.gameGui.GetAddonByName("GrandCompanySupplyList", 1);
+            if (supplyPtr.Address != nint.Zero)
+                uiScale = Math.Max(((AtkUnitBase*)supplyPtr.Address)->Scale, 0.01f);
             var anchor = AtkUiHelper.TryGetListRowMarkerAnchor(
-                list, renderer, itemIndex, MarkerGapBeforeIcon, ImGui.GetFontSize(), markerWidth);
+                list, renderer, itemIndex, MarkerGapBeforeIcon, markerHeight, markerWidth, uiScale);
 
             float rowScreenX = 0;
             float rowScreenY = 0;

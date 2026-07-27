@@ -3,7 +3,7 @@
   "Name": "Glamour Tracker+ Native",
   "InternalName": "GlamourTrackerNative",
   "Punchline": "Native-UI experiment: Glamour Tracker+ Fashion Report via KamiToolKit.",
-  "Description": "Fork of Glamour Tracker+ exploring FFXIV native windows (KamiToolKit). ImGui UI: /glamplusn. Native Fashion Report: /glamnative.",
+  "Description": "Fork of Glamour Tracker+ exploring FFXIV native windows (KamiToolKit). /glamplus = main UI, /glamplus report = Fashion Report, /glamplus imgui = ImGui fallback.",
   "ApplicableVersion": "any",
   "Tags": [
     "glamour",

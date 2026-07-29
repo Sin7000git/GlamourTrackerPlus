@@ -5,32 +5,11 @@ using Dalamud.Interface.Textures;
 namespace GlamourTracker.Services;
 
 /// <summary>
-/// Draws persisted dresser/armoire UI textures with the same green tint as owned tooltip icons.
+/// UV helpers for dresser/armoire atlas debugging (Dev builds).
 /// </summary>
 internal static class StorageMarkerDrawer
 {
     public static readonly Vector4 StoredGreen = new(0.31f, 0.86f, 0.35f, 1f);
-    private static readonly uint StoredGreenU32 = ImGui.ColorConvertFloat4ToU32(StoredGreen);
-
-    public static bool TryDrawTintedIcon(
-        ImDrawListPtr drawList,
-        ISharedImmediateTexture? texture,
-        StorageUiIconSlice slice,
-        Vector2 topLeft,
-        bool flipV,
-        bool applyGreenTint = true)
-    {
-        if (!TryComputeUv(texture, slice, flipV, out var uv0, out var uv1))
-            return false;
-
-        if (texture is null || !texture.TryGetWrap(out var wrap, out _))
-            return false;
-
-        var bottomRight = topLeft + slice.DisplaySize;
-        var tint = applyGreenTint ? StoredGreenU32 : uint.MaxValue;
-        drawList.AddImage(wrap.Handle, topLeft, bottomRight, uv0, uv1, tint);
-        return true;
-    }
 
     public static bool TryComputeUv(
         ISharedImmediateTexture? texture,

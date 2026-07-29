@@ -1,7 +1,9 @@
 using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
 using Dalamud.IoC;
+#if GLAMOUR_DEV
 using Dalamud.Interface.Windowing;
+#endif
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
@@ -14,9 +16,10 @@ namespace GlamourTracker;
 
 public sealed class Plugin : IDalamudPlugin
 {
-    /// <summary>Primary UI command: native main window. Subcommands: report, imgui, …</summary>
+    /// <summary>Primary UI command: native main window. Subcommands: report, …</summary>
     public const string CommandName = "/glamplus";
     private const double BackgroundRefreshSeconds = 30;
+    private const double UiEventRefreshDebounceSeconds = 1.5;
 
     [PluginService] internal static IDalamudPluginInterface PluginInterface { get; private set; } = null!;
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
@@ -34,8 +37,10 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IAetheryteList AetheryteList { get; private set; } = null!;
     public Configuration Configuration { get; }
 
+#if GLAMOUR_DEV
     public readonly WindowSystem WindowSystem = new("GlamourTrackerNative");
-    private TrackerWindow TrackerWindow { get; }
+    private TrackerWindow? TrackerWindow { get; set; }
+#endif
     private FashionReportNativeAddon? fashionNativeAddon;
     private TrackerNativeAddon? trackerNativeAddon;
 
@@ -56,11 +61,12 @@ public sealed class Plugin : IDalamudPlugin
     private readonly PluginCommands pluginCommands;
 
     private DateTime lastBackgroundRefresh = DateTime.MinValue;
+    private DateTime lastUiEventRefresh = DateTime.MinValue;
     private bool wasEnabled = true;
 
     public Plugin()
     {
-        KamiToolKitLibrary.Initialize(PluginInterface, "Glamour Tracker+ Native");
+        KamiToolKitLibrary.Initialize(PluginInterface, "Glamour Tracker+");
 
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         Configuration.AssignSave(() => PluginInterface.SavePluginConfig(Configuration));
@@ -100,8 +106,7 @@ public sealed class Plugin : IDalamudPlugin
             DataManager,
             cabinetCatalog,
             () => Configuration,
-            ownershipIndex,
-            gcExpertDeliveryEnhancer.OnFirstTooltipForIconAtlas);
+            ownershipIndex);
         fashionReport = new FashionReportService(
             DataManager,
             ownershipIndex,
@@ -135,8 +140,10 @@ public sealed class Plugin : IDalamudPlugin
             Log);
         pluginCommands = new PluginCommands(CommandManager, ChatGui, this);
 
+#if GLAMOUR_DEV
         TrackerWindow = new TrackerWindow(this);
         WindowSystem.AddWindow(TrackerWindow);
+#endif
         trackerNativeAddon = new TrackerNativeAddon(this)
         {
             InternalName = "GlamNativeMain",
@@ -166,7 +173,11 @@ public sealed class Plugin : IDalamudPlugin
 
         _ = fashionReport.RefreshAsync(force: false);
         Log.Information(
-            "Glamour Tracker+ Native loaded. /glamplus = main UI, /glamplus report = Fashion Report, /glamplus imgui = ImGui fallback.");
+#if GLAMOUR_DEV
+            "Glamour Tracker+ loaded (Dev). /glamplus · /glamplus report · /glamplus imgui.");
+#else
+            "Glamour Tracker+ loaded. /glamplus = main UI, /glamplus report = Fashion Report.");
+#endif
     }
 
     public void Dispose()
@@ -198,7 +209,10 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.UiBuilder.OpenConfigUi -= OpenSettingsUi;
         PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
 
+#if GLAMOUR_DEV
         WindowSystem.RemoveAllWindows();
+        TrackerWindow = null;
+#endif
     }
 
     internal GlamourOwnershipIndex OwnershipIndex => ownershipIndex;
@@ -243,7 +257,9 @@ public sealed class Plugin : IDalamudPlugin
         _ = Framework.RunOnFrameworkThread(() => trackerNativeAddon?.Toggle());
     }
 
-    public void ToggleImGuiMainUi() => TrackerWindow.Toggle();
+#if GLAMOUR_DEV
+    public void ToggleImGuiMainUi() => TrackerWindow?.Toggle();
+#endif
 
     public void OpenFashionReportTab()
     {
@@ -259,9 +275,11 @@ public sealed class Plugin : IDalamudPlugin
 
     public void RestoreTooltipEnhancements() => itemDetailEnhancer.RestoreVisibleTooltip();
 
+#if GLAMOUR_DEV
     internal void DebugGcExpertDelivery() => gcExpertDeliveryEnhancer.DebugToChat(ChatGui);
 
     internal void RefreshGcIconPath() => gcExpertDeliveryEnhancer.RecaptureIconTexturePath();
+#endif
 
     private void OpenSettingsUi() => trackerNativeAddon?.OpenSettingsTab();
 
@@ -269,7 +287,9 @@ public sealed class Plugin : IDalamudPlugin
     {
         plateEditorOverlay.Draw();
         gcExpertDeliveryEnhancer.DrawOverlays();
+#if GLAMOUR_DEV
         WindowSystem.Draw();
+#endif
     }
 
     private void OnFrameworkUpdate(IFramework framework)
@@ -317,15 +337,25 @@ public sealed class Plugin : IDalamudPlugin
     private void OnDresserUiRefresh(AddonEvent type, AddonArgs args)
     {
         PlateSlotNodeLocator.InvalidateLock();
-        RefreshAll(true);
-        this.lastBackgroundRefresh = DateTime.UtcNow;
+        TryRefreshAllFromUiEvent();
     }
 
     private void OnPlateUiRefresh(AddonEvent type, AddonArgs args)
     {
         PlateSlotNodeLocator.InvalidateLock();
+        TryRefreshAllFromUiEvent();
+    }
+
+    /// <summary>Debounce dresser/plate ATK churn so ownership sync + config Save are not per-tick.</summary>
+    private void TryRefreshAllFromUiEvent()
+    {
+        var now = DateTime.UtcNow;
+        if ((now - this.lastUiEventRefresh).TotalSeconds < UiEventRefreshDebounceSeconds)
+            return;
+
+        this.lastUiEventRefresh = now;
         RefreshAll(true);
-        this.lastBackgroundRefresh = DateTime.UtcNow;
+        this.lastBackgroundRefresh = now;
     }
 
     private static unsafe ulong GetLocalContentIdStatic()
@@ -396,6 +426,21 @@ public sealed class Plugin : IDalamudPlugin
             config.DresserIconDisplayScale = StorageIconAtlasDefaults.DisplayScale;
             config.ArmoireIconDisplayScale = StorageIconAtlasDefaults.DisplayScale;
             config.Version = 10;
+            dirty = true;
+        }
+
+        // Bake ItemDetailPutIn — Extra-sheet hunting / areamap mis-applies are not the real atlas.
+        if (config.Version < 11
+            || !StorageIconAtlasDefaults.IsItemDetailPutInPath(config.DresserUiIconPath)
+            || !StorageIconAtlasDefaults.IsItemDetailPutInPath(config.ArmoireUiIconPath))
+        {
+            // Path resolved at runtime via IDataManager once services exist; stem is enough for migration.
+            var baked = StorageIconAtlasDefaults.TextureStem + "_hr1.tex";
+            config.DresserUiIconPath = baked;
+            config.ArmoireUiIconPath = baked;
+            config.StorageIconAtlasConfigured = true;
+            if (config.Version < 11)
+                config.Version = 11;
             dirty = true;
         }
 

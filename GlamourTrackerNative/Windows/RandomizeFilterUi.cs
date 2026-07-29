@@ -113,29 +113,22 @@ internal static class RandomizeFilterUi
     private static bool DrawJobPicker(Configuration config, IDataManager dataManager, string idSuffix)
     {
         var sheet = dataManager.GetExcelSheet<ClassJob>();
-        var jobs = sheet
-            .Where(j => j.RowId != 0)
-            .Select(j =>
-            {
-                var abbr = j.Abbreviation.ExtractText();
-                var name = j.Name.ExtractText();
-                return (j.RowId, j.UIPriority, Label: string.IsNullOrWhiteSpace(abbr)
-                    ? $"#{j.RowId}"
-                    : $"{abbr} — {name}");
-            })
-            .Where(j => !j.Label.StartsWith('#'))
-            .OrderBy(j => j.UIPriority)
-            .ThenBy(j => j.Label)
-            .ToList();
-
+        var jobs = ClassJobFilterList.Build(sheet);
         if (jobs.Count == 0)
         {
             ImGui.TextDisabled("No jobs found in game data.");
             return false;
         }
 
-        var selectedIndex = jobs.FindIndex(j => j.RowId == config.RandomizeSpecificJobId);
         var changed = false;
+        var resolved = ClassJobFilterList.ResolveStoredJobId(config.RandomizeSpecificJobId, sheet);
+        if (resolved != config.RandomizeSpecificJobId)
+        {
+            config.RandomizeSpecificJobId = resolved;
+            changed = true;
+        }
+
+        var selectedIndex = jobs.FindIndex(j => j.RowId == config.RandomizeSpecificJobId);
         if (selectedIndex < 0)
         {
             selectedIndex = 0;

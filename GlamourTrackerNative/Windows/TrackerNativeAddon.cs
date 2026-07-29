@@ -8,14 +8,15 @@ using GlamourTracker.Windows.Native;
 using KamiToolKit.BaseTypes;
 using KamiToolKit.Enums;
 using KamiToolKit.Nodes;
+using KamiToolKit.Timelines;
 using Lumina.Excel.Sheets;
 using Lumina.Text.ReadOnly;
 
 namespace GlamourTracker.Windows;
 
 /// <summary>
-/// Native main window: Overview, Outfit sets, Randomize, Settings.
-/// Fashion Report stays in <see cref="FashionReportNativeAddon"/>.
+/// Main window: Overview, Outfit sets, Randomize, Settings.
+/// Fashion Report opens via Overview button or <see cref="FashionReportNativeAddon"/>.
 /// </summary>
 internal sealed class TrackerNativeAddon : NativeAddon
 {
@@ -23,6 +24,10 @@ internal sealed class TrackerNativeAddon : NativeAddon
     private const float Gap = 6f;
     private const float RowH = 28f;
     private const float ToolbarH = 64f;
+
+    private const float OverviewLabelWidth = 175f;
+    private const float OverviewStatRowH = 22f;
+    private const float OverviewColumnGap = 20f;
 
     internal const string TabOverview = "Overview";
     internal const string TabOutfitSets = "Outfit sets";
@@ -48,6 +53,7 @@ internal sealed class TrackerNativeAddon : NativeAddon
     private CheckboxNode? ownedOnlyCheckbox;
     private StringDropDownNode? sortDropDown;
     private StringDropDownNode? categoryDropDown;
+    private StringDropDownNode? storageDropDown;
     private ListNode<TrackerNativeListRow, TrackerNativeListItemNode>? browserList;
     private ScrollingNode<VerticalListNode>? browserDetail;
 
@@ -58,10 +64,13 @@ internal sealed class TrackerNativeAddon : NativeAddon
     private bool showOwnedOnly;
     private OutfitSortMode sortMode = OutfitSortMode.Name;
     private OutfitCategoryFilter categoryFilter = OutfitCategoryFilter.All;
+    private OutfitStorageFilter storageFilter = OutfitStorageFilter.All;
     private string selectedBrowserKey = string.Empty;
     private string lastFormSignature = string.Empty;
     private string lastBrowserListSignature = string.Empty;
     private string lastBrowserDetailKey = string.Empty;
+    private readonly ImGuiIconButtonNode?[] slotLockButtons = new ImGuiIconButtonNode?[GlamourPlateSlotMap.SlotCount];
+    private string? emptySlotTexturePath;
 
     private Vector2 bodyOrigin;
     private Vector2 bodySize;
@@ -137,10 +146,13 @@ internal sealed class TrackerNativeAddon : NativeAddon
             Size = new Vector2(listW, browserBodyH),
             OptionsList = [],
             AutoResetScroll = false,
+            ScrollBarWidth = 8f,
             NoResultsString = "No outfit sets match.",
             OnItemSelected = OnBrowserRowSelected,
             IsVisible = false,
         };
+        // Grabber length (vertical), not bar thickness — keeps long set lists clickable.
+        browserList.ScrollBarNode.MinThumbHeight = 48;
         browserList.AttachNode(this);
 
         browserDetail = new ScrollingNode<VerticalListNode>
@@ -149,8 +161,10 @@ internal sealed class TrackerNativeAddon : NativeAddon
             Size = new Vector2(detailW, browserBodyH),
             AutoHideScrollBar = true,
             ScrollSpeed = 28,
+            ScrollBarWidth = 8f,
             IsVisible = false,
         };
+        browserDetail.ScrollBarNode.MinThumbHeight = 48;
         browserDetail.ContentNode.FitContents = true;
         browserDetail.ContentNode.FitWidth = true;
         browserDetail.ContentNode.ItemSpacing = 3f;
@@ -220,6 +234,24 @@ internal sealed class TrackerNativeAddon : NativeAddon
             RefreshBrowserList(force: true);
         };
         categoryDropDown.AttachNode(browserToolbar);
+
+        storageDropDown = new StringDropDownNode
+        {
+            Position = new Vector2(530f, 2f),
+            Size = new Vector2(140f, RowH),
+            Options = TrackerNativeHelpers.StorageFilterLabels.ToList(),
+            SelectedOption = TrackerNativeHelpers.StorageFilterLabels[(int)storageFilter],
+            MaxListOptions = 3,
+        };
+        storageDropDown.OnOptionSelected = label =>
+        {
+            var idx = Array.IndexOf(TrackerNativeHelpers.StorageFilterLabels, label);
+            if (idx < 0)
+                return;
+            storageFilter = (OutfitStorageFilter)idx;
+            RefreshBrowserList(force: true, rebuildDetail: true);
+        };
+        storageDropDown.AttachNode(browserToolbar);
 
         missingOnlyCheckbox = MakeCheckbox("Missing pieces", showMissingOnly, v =>
         {
@@ -312,6 +344,7 @@ internal sealed class TrackerNativeAddon : NativeAddon
         ownedOnlyCheckbox = null;
         sortDropDown = null;
         categoryDropDown = null;
+        storageDropDown = null;
         browserList = null;
         browserDetail = null;
         lastFormSignature = string.Empty;
@@ -362,23 +395,36 @@ internal sealed class TrackerNativeAddon : NativeAddon
         {
             browserList.IsVisible = browser;
             browserList.Position = new Vector2(bodyOrigin.X, bodyOrigin.Y + toolbarH);
-            browserList.Size = new Vector2(listW, bodySize.Y - toolbarH);
+            var listSize = new Vector2(listW, bodySize.Y - toolbarH);
+            // Avoid Size churn — OnSizeChanged rebuilds scrollbar params and can hitch while dragging.
+            if (browserList.Size != listSize)
+                browserList.Size = listSize;
         }
 
         if (browserDetail != null)
         {
             browserDetail.IsVisible = browser;
             browserDetail.Position = new Vector2(bodyOrigin.X + listW + Gap, bodyOrigin.Y + toolbarH);
-            browserDetail.Size = new Vector2(detailW, bodySize.Y - toolbarH);
+            var detailSize = new Vector2(detailW, bodySize.Y - toolbarH);
+            if (browserDetail.Size != detailSize)
+                browserDetail.Size = detailSize;
         }
     }
 
     private void RefreshActiveTab(bool force)
     {
         if (IsBrowserTab)
+        {
             RefreshBrowserList(force);
-        else
-            RebuildForm(force);
+            return;
+        }
+
+        // Overview/Settings: only rebuild on explicit force (tab enter, Refresh, layout toggles).
+        // Rebuilding every OnUpdate when stats change tears down nodes → flicker + scroll jumps.
+        if (!force && selectedTab is TabOverview or TabSettings)
+            return;
+
+        RebuildForm(force);
     }
 
     // ── Form tabs ─────────────────────────────────────────────────────────
@@ -428,6 +474,10 @@ internal sealed class TrackerNativeAddon : NativeAddon
         formScroll.RecalculateSizes();
     }
 
+    /// <summary>
+    /// Layout-only signature for form tabs. Do not include every checkbox/slider value —
+    /// otherwise OnUpdate rebuilds the whole tab on each click (visible flicker).
+    /// </summary>
     private string BuildFormSignature()
     {
         var index = plugin.OwnershipIndex;
@@ -435,45 +485,123 @@ internal sealed class TrackerNativeAddon : NativeAddon
         return selectedTab switch
         {
             TabOverview =>
-                $"ov|{index.DresserSlotsUsed}|{index.DresserUniqueCount}|{index.OutfitSetsInDresser}|{index.ArmoireCount}|{index.LastRefresh.Ticks}|{plugin.OutfitSets.CountSetsInArmoire()}",
+                BuildOverviewSignature(index),
+            // Only flags that add/remove child controls.
             TabRandomize =>
-                $"rz|{c.RandomizeIncludeDresser}|{c.RandomizeIncludeArmoire}|{(int)c.RandomizeJobFilter}|{c.RandomizeSpecificJobId}|{c.RandomizeLimitRequiredLevel}|{c.RandomizeMinRequiredLevel}|{c.RandomizeMaxRequiredLevel}|{c.RandomizeLimitItemLevel}|{c.RandomizeMinItemLevel}|{c.RandomizeMaxItemLevel}|{LocksSignature()}",
+                $"rz|{(int)c.RandomizeJobFilter}|{c.RandomizeLimitRequiredLevel}|{c.RandomizeLimitItemLevel}",
             TabSettings =>
-                $"st|{c.Enabled}|{c.ShowTooltipIcons}|{c.ShowGcExpertDeliveryStatus}|{c.ShowOnlyForGlamourItems}|{c.ShowPlateEditorOverlay}|{c.PlateEditorOverlayOnRight}|{c.ShowSlotRerollButtons}",
+                $"st|{c.ShowPlateEditorOverlay}",
             _ => selectedTab,
         };
     }
 
-    private string LocksSignature()
+    private string BuildOverviewSignature(GlamourOwnershipIndex index)
     {
-        GlamourPlateRandomizer.EnsureLockArray(plugin.Configuration);
-        return string.Concat(plugin.Configuration.RandomizeLockedSlots.Select(l => l ? '1' : '0'));
+        var sets = plugin.OutfitSets.GetOverviewStats();
+        var progress = plugin.FashionProgress.GetProgress();
+        var week = plugin.FashionReport.Snapshot?.Week ?? string.Empty;
+
+        return $"ov|{index.DresserSlotsUsed}|{index.DresserUniqueCount}|{index.ArmoireCount}|{index.HasPersistedData}|{index.LastRefresh.Ticks}|{sets.DresserEligible}|{sets.ArmoireEligible}|{sets.SetsInDresser}|{sets.SetsInArmoire}|{sets.CompletedInDresser}|{sets.CompletedInArmoire}|{week}|{(int)progress.Kind}|{progress.HighestScore}";
     }
 
     private void BuildOverview(VerticalListNode list, float width)
     {
         var index = plugin.OwnershipIndex;
+        var setStats = plugin.OutfitSets.GetOverviewStats();
+        var progress = plugin.FashionProgress.GetProgress();
+        var snap = plugin.FashionReport.Snapshot;
 
-        list.AddNode(MakeSection("Storage"));
-        list.AddNode(MakeStatLine(
-            "Dresser",
-            index.DresserSlotsUsed > 0 ? $"{index.DresserSlotsUsed} / 800" : "—",
-            width));
-        list.AddNode(MakeStatLine("Unique appearances", $"{index.DresserUniqueCount}", width));
-        list.AddNode(MakeStatLine("Armoire pieces", $"{index.ArmoireCount}", width));
-        list.AddNode(MakeStatLine("Data", index.HasPersistedData ? "Saved" : "Not saved yet", width));
+        // —— Top: Fashion Report (full width) ——
+        list.AddNode(MakeSection("Fashion Report"));
+        var weekLine = snap != null ? $"Week {snap.Week}" : "Not loaded yet";
+        list.AddNode(MakeOverviewStatRow("This week", weekLine, width));
+        var (progressColor, progressText) = FormatOverviewFashionProgress(progress);
+        list.AddNode(MakeOverviewStatRow("Judging", progressText, width, progressColor));
 
-        list.AddNode(MakeSection("Outfit sets"));
-        list.AddNode(MakeStatLine("In dresser", $"{index.OutfitSetsInDresser}", width));
-        list.AddNode(MakeStatLine("In armoire", $"{plugin.OutfitSets.CountSetsInArmoire()}", width));
-        list.AddNode(MakeStatLine("Last refresh", index.LastRefresh.ToLocalTime().ToString("T"), width));
+        var frActions = new HorizontalListNode
+        {
+            Size = new Vector2(width, RowH),
+            ItemSpacing = 8f,
+            X = TrackerNativeHelpers.Indent,
+        };
+        frActions.AddNode(new TextButtonNode
+        {
+            Size = new Vector2(180f, RowH),
+            String = "Open Fashion Report",
+            TextTooltip = "Same as /glamplus report.",
+            OnClick = () => plugin.OpenFashionReportTab(),
+        });
+        list.AddNode(frActions);
 
         list.AddNode(new HorizontalLineNode { Size = new Vector2(width, 2f) });
 
+        // —— Two columns: storage | outfit sets ——
+        var colW = MathF.Floor((width - OverviewColumnGap) * 0.5f);
+        var leftCol = new VerticalListNode
+        {
+            Size = new Vector2(colW, 1f),
+            FitContents = true,
+            FitWidth = true,
+            ItemSpacing = 3f,
+        };
+        var rightCol = new VerticalListNode
+        {
+            Size = new Vector2(colW, 1f),
+            FitContents = true,
+            FitWidth = true,
+            ItemSpacing = 3f,
+        };
+
+        leftCol.AddNode(MakeSection("Stored"));
+        var dresserSlots = index.DresserSlotsUsed > 0
+            ? $"{index.DresserSlotsUsed} / 800"
+            : "—";
+        leftCol.AddNode(MakeOverviewStatRow("Dresser", dresserSlots, colW));
+        leftCol.AddNode(MakeOverviewStatRow("Unique items in dresser", $"{index.DresserUniqueCount}", colW));
+        leftCol.AddNode(MakeOverviewStatRow("Unique items in armoire", $"{index.ArmoireCount}", colW));
+        var dataNote = index.HasPersistedData
+            ? $"Last refresh {index.LastRefresh.ToLocalTime():t} · Saved"
+            : "Not saved yet — open dresser or armoire, then Refresh";
+        leftCol.AddNode(MakeMutedIndented(dataNote, colW));
+        leftCol.RecalculateLayout();
+
+        rightCol.AddNode(MakeSection("Outfit sets"));
+        rightCol.AddNode(MakeOverviewStatRow(
+            "Completed in dresser",
+            FormatRatio(setStats.CompletedInDresser, setStats.SetsInDresser),
+            colW,
+            setStats.CompletedInDresser > 0 ? TrackerNativeHelpers.ColorOk : TrackerNativeHelpers.ColorMuted));
+        rightCol.AddNode(MakeOverviewStatRow(
+            "Completed in armoire",
+            FormatRatio(setStats.CompletedInArmoire, setStats.SetsInArmoire),
+            colW,
+            setStats.CompletedInArmoire > 0 ? TrackerNativeHelpers.ColorOk : TrackerNativeHelpers.ColorMuted));
+        rightCol.AddNode(MakeOverviewStatRow(
+            "Total sets in dresser",
+            FormatRatio(setStats.SetsInDresser, setStats.DresserEligible),
+            colW));
+        rightCol.AddNode(MakeOverviewStatRow(
+            "Total sets in armoire",
+            FormatRatio(setStats.SetsInArmoire, setStats.ArmoireEligible),
+            colW));
+        rightCol.RecalculateLayout();
+
+        var columnsH = MathF.Max(leftCol.Height, rightCol.Height);
+        var columns = new ResNode { Size = new Vector2(width, columnsH) };
+        leftCol.Position = Vector2.Zero;
+        rightCol.Position = new Vector2(colW + OverviewColumnGap, 0f);
+        leftCol.AttachNode(columns);
+        rightCol.AttachNode(columns);
+        list.AddNode(columns);
+
+        list.AddNode(new HorizontalLineNode { Size = new Vector2(width, 2f) });
+
+        // —— Actions ——
         var buttons = new HorizontalListNode
         {
             Size = new Vector2(width, RowH),
             ItemSpacing = 8f,
+            X = TrackerNativeHelpers.Indent,
         };
         buttons.AddNode(new TextButtonNode
         {
@@ -504,23 +632,109 @@ internal sealed class TrackerNativeAddon : NativeAddon
         list.AddNode(buttons);
     }
 
+    private static string FormatRatio(int have, int total) =>
+        total > 0 ? $"{have} / {total}" : "—";
+
+    private static (Vector4 Color, string Text) FormatOverviewFashionProgress(FashionReportProgressView progress) =>
+        progress.Kind switch
+        {
+            FashionReportProgressKind.Complete =>
+                (TrackerNativeHelpers.ColorOk, $"Complete · Score {progress.HighestScore}"),
+            FashionReportProgressKind.Incomplete =>
+                (TrackerNativeHelpers.ColorWarn, $"Score {progress.HighestScore} · Keep going"),
+            FashionReportProgressKind.Unknown =>
+                (TrackerNativeHelpers.ColorMuted, "Talk to the Masked Rose to sync"),
+            _ =>
+                (TrackerNativeHelpers.ColorMuted, "Judging closed"),
+        };
+
+    private static ResNode MakeOverviewStatRow(
+        string label,
+        string value,
+        float width,
+        Vector4? valueColor = null)
+    {
+        var row = new ResNode { Size = new Vector2(width, OverviewStatRowH) };
+        var labelX = TrackerNativeHelpers.Indent;
+        var labelNode = MakeText(label, 13, TrackerNativeHelpers.ColorMuted, OverviewLabelWidth, 18f);
+        labelNode.Position = new Vector2(labelX, 2f);
+        labelNode.AttachNode(row);
+
+        var valueX = labelX + OverviewLabelWidth + 6f;
+        var valueW = MathF.Max(48f, width - valueX - 4f);
+        var valueNode = MakeText(value, 13, valueColor ?? TrackerNativeHelpers.ColorTitle, valueW, 18f);
+        valueNode.Position = new Vector2(valueX, 2f);
+        valueNode.AttachNode(row);
+
+        return row;
+    }
+
+    private static TextNode MakeMutedIndented(string text, float width) =>
+        new()
+        {
+            Size = new Vector2(width - TrackerNativeHelpers.Indent, 16f),
+            X = TrackerNativeHelpers.Indent,
+            FontSize = 11,
+            TextColor = TrackerNativeHelpers.ColorMuted,
+            String = (ReadOnlySeString)text,
+            TextFlags = TextFlags.Ellipsis,
+        };
+
     private void BuildRandomize(VerticalListNode list, float width)
     {
         var config = plugin.Configuration;
         GlamourPlateRandomizer.EnsureLockArray(config);
 
+        var colGap = OverviewColumnGap;
+        var leftW = MathF.Floor((width - colGap) * 0.55f);
+        var rightW = width - colGap - leftW;
+
+        var leftCol = new VerticalListNode
+        {
+            Size = new Vector2(leftW, 1f),
+            FitContents = true,
+            FitWidth = true,
+            ItemSpacing = 4f,
+        };
+        var rightCol = new VerticalListNode
+        {
+            Size = new Vector2(rightW, 1f),
+            FitContents = true,
+            FitWidth = true,
+            ItemSpacing = 4f,
+        };
+
+        BuildRandomizeFilters(leftCol, config, leftW);
+        BuildRandomizeSlotLocks(rightCol, config, rightW);
+
+        leftCol.RecalculateLayout();
+        rightCol.RecalculateLayout();
+
+        var columnsH = MathF.Max(leftCol.Height, rightCol.Height);
+        var columns = new ResNode { Size = new Vector2(width, columnsH) };
+        leftCol.Position = Vector2.Zero;
+        rightCol.Position = new Vector2(leftW + colGap, 0f);
+        leftCol.AttachNode(columns);
+        rightCol.AttachNode(columns);
+        list.AddNode(columns);
+
+        list.AddNode(MakeMuted(
+            "Randomize and slot reroll run from the controls above the plate editor.",
+            width));
+    }
+
+    private void BuildRandomizeFilters(VerticalListNode list, Configuration config, float width)
+    {
         list.AddNode(MakeSection("Sources"));
         list.AddNode(MakeCheckbox("Use dresser items", config.RandomizeIncludeDresser, v =>
         {
             config.RandomizeIncludeDresser = v;
             config.Save();
-            ScheduleRebuildForm();
         }));
         list.AddNode(MakeCheckbox("Use armoire items", config.RandomizeIncludeArmoire, v =>
         {
             config.RandomizeIncludeArmoire = v;
             config.Save();
-            ScheduleRebuildForm();
         }));
 
         list.AddNode(MakeSection("Filters"));
@@ -528,7 +742,7 @@ internal sealed class TrackerNativeAddon : NativeAddon
         var modeIndex = Math.Clamp((int)config.RandomizeJobFilter, 0, jobModes.Count - 1);
         var jobModeDrop = new StringDropDownNode
         {
-            Size = new Vector2(200f, RowH),
+            Size = new Vector2(MathF.Min(200f, width), RowH),
             Options = jobModes,
             SelectedOption = jobModes[modeIndex],
             MaxListOptions = 3,
@@ -600,15 +814,28 @@ internal sealed class TrackerNativeAddon : NativeAddon
                 config.Save();
             }, width, indented: true));
         }
+    }
 
+    private void BuildRandomizeSlotLocks(VerticalListNode list, Configuration config, float width)
+    {
         list.AddNode(MakeSection("Slot locks"));
-        list.AddNode(MakeMuted("Click a slot to lock or unlock it. Dimmed = locked.", width));
+        list.AddNode(MakeMuted("Click a slot to lock or unlock it. Light grey = unlocked, black = locked.", width));
+        GlamourPlateRandomizer.EnsureLockArray(config);
         var locks = config.RandomizeLockedSlots;
+
+        emptySlotTexturePath = EmptyGearSlotAtlas.ResolveTexturePath(
+            Plugin.DataManager,
+            Plugin.TextureProvider);
+        Array.Clear(slotLockButtons);
+
+        const float cellSize = 48f;
+
+        // 2×6 grid matching plate order (weapons → armor → accessories).
         for (var row = 0; row < 2; row++)
         {
             var rowNode = new HorizontalListNode
             {
-                Size = new Vector2(width, 52f),
+                Size = new Vector2(width, cellSize + 4f),
                 ItemSpacing = 8f,
             };
             for (var col = 0; col < 6; col++)
@@ -618,11 +845,15 @@ internal sealed class TrackerNativeAddon : NativeAddon
                     break;
                 var slot = i;
                 var locked = locks[i];
-                var iconBtn = new IconButtonNode(iconPadding: 1.5f)
+
+                // ImGuiIconButtonNode = BgParts chrome + atlas image (same as stock KamiToolKit icon buttons).
+                var iconBtn = new ImGuiIconButtonNode
                 {
-                    Size = new Vector2(48f, 48f),
-                    IconId = GlamourPlateSlotMap.EmptySlotIcon(i),
+                    Size = new Vector2(cellSize, cellSize),
+                    ShowBackground = true,
                 };
+                ApplyEmptySlotTexture(iconBtn, slot);
+                slotLockButtons[slot] = iconBtn;
                 ApplySlotLockVisual(iconBtn, slot, locked);
                 // Do not RebuildForm here — disposing this button mid-click crashes the client.
                 iconBtn.OnClick = () =>
@@ -632,8 +863,6 @@ internal sealed class TrackerNativeAddon : NativeAddon
                     plugin.Configuration.RandomizeLockedSlots[slot] = nowLocked;
                     plugin.Configuration.Save();
                     ApplySlotLockVisual(iconBtn, slot, nowLocked);
-                    // Signature includes locks; keep form signature in sync without a rebuild.
-                    lastFormSignature = BuildFormSignature();
                 };
                 rowNode.AddNode(iconBtn);
             }
@@ -671,34 +900,91 @@ internal sealed class TrackerNativeAddon : NativeAddon
             },
         });
         list.AddNode(lockButtons);
+    }
 
-        list.AddNode(MakeMuted(
-            "Randomize and slot reroll run from the controls above the plate editor.",
-            width));
+    private void ApplyEmptySlotTexture(ImGuiIconButtonNode button, int slot)
+    {
+        var path = emptySlotTexturePath
+            ?? EmptyGearSlotAtlas.ResolveTexturePath(
+                Plugin.DataManager,
+                Plugin.TextureProvider);
+        var slice = EmptyGearSlotAtlas.GetSlice(slot);
+        if (!string.IsNullOrWhiteSpace(path))
+            button.TexturePath = path;
+
+        // ImGuiIconButtonNode defaults to AutoFit (whole sheet). Need explicit UV parts.
+        button.ImageNode.ImageNodeFlags = 0;
+        button.ImageNode.WrapMode = WrapMode.Stretch;
+        button.ImageNode.TextureCoordinates = new Vector2(slice.U, slice.V);
+        button.ImageNode.TextureSize = new Vector2(slice.Width, slice.Height);
+    }
+
+    /// <summary>
+    /// Unlocked silhouette brightness (0–1). ColorImageNode-style tint:
+    /// texture RGB is zeroed; AddColor paints the alpha shape (reads as light grey in ATK).
+    /// Restored from 0.1.87 — pixel-recolor white path abandoned.
+    /// </summary>
+    private const float UnlockedSlotBrightness = 1.0f;
+
+    private static void ApplySlotLockVisual(ImGuiIconButtonNode button, int slot, bool locked)
+    {
+        button.AddColor = Vector3.Zero;
+        button.Alpha = 1f;
+        ApplySlotLockImageTimeline(button);
+        button.ImageNode.MultiplyColor = Vector3.One;
+
+        if (locked)
+        {
+            // True black silhouette from the sheet.
+            button.ImageNode.Color = Vector4.One;
+            button.ImageNode.AddColor = Vector3.Zero;
+        }
+        else
+        {
+            // Zero texture RGB; AddColor fills the glyph (keeps alpha). Light grey unlocked.
+            button.ImageNode.Color = new Vector4(0f, 0f, 0f, 1f);
+            button.ImageNode.AddColor = new Vector3(UnlockedSlotBrightness);
+        }
+
+        button.TextTooltip = locked
+            ? $"{GlamourPlateSlotMap.Labels[slot]} — locked (click to unlock)"
+            : $"{GlamourPlateSlotMap.Labels[slot]} — unlocked (click to lock)";
+    }
+
+    /// <summary>
+    /// Keeps icon padding/hover motion without overwriting AddColor (stock timeline forces add 0).
+    /// </summary>
+    private static void ApplySlotLockImageTimeline(ImGuiIconButtonNode button)
+    {
+        var pad = new Vector2(8f, 8f);
+
+        button.ImageNode.AddTimeline(new TimelineBuilder()
+            .AddFrameSetWithFrame(1, 10, 1, pad, 255)
+            .AddFrameSetWithFrame(11, 17, 11, pad, 255)
+            .AddFrameSetWithFrame(18, 26, 18, pad + new Vector2(0f, 1f), 255)
+            .AddFrameSetWithFrame(27, 36, 27, pad, 255)
+            .AddFrameSetWithFrame(37, 46, 37, pad, 255)
+            .AddFrameSetWithFrame(47, 53, 47, pad, 255)
+            .AddFrameSetWithFrame(130, 139, 130, pad, 255)
+            .AddFrameSetWithFrame(140, 149, 140, pad, 255)
+            .AddFrameSetWithFrame(150, 159, 150, pad, 255)
+            .Build());
     }
 
     private void BuildJobPicker(VerticalListNode list, Configuration config, float width)
     {
         var sheet = Plugin.DataManager.GetExcelSheet<ClassJob>();
-        var jobs = sheet
-            .Where(j => j.RowId != 0)
-            .Select(j =>
-            {
-                var abbr = j.Abbreviation.ExtractText();
-                var name = j.Name.ExtractText();
-                return (j.RowId, j.UIPriority, Label: string.IsNullOrWhiteSpace(abbr)
-                    ? $"#{j.RowId}"
-                    : $"{abbr} — {name}");
-            })
-            .Where(j => !j.Label.StartsWith('#'))
-            .OrderBy(j => j.UIPriority)
-            .ThenBy(j => j.Label)
-            .ToList();
-
+        var jobs = ClassJobFilterList.Build(sheet);
         if (jobs.Count == 0)
             return;
 
-        var labels = jobs.Select(j => j.Label).ToList();
+        var resolved = ClassJobFilterList.ResolveStoredJobId(config.RandomizeSpecificJobId, sheet);
+        if (resolved != config.RandomizeSpecificJobId)
+        {
+            config.RandomizeSpecificJobId = resolved;
+            config.Save();
+        }
+
         var selected = jobs.FirstOrDefault(j => j.RowId == config.RandomizeSpecificJobId);
         if (selected.RowId == 0)
         {
@@ -710,7 +996,7 @@ internal sealed class TrackerNativeAddon : NativeAddon
         var drop = new StringDropDownNode
         {
             Size = new Vector2(MathF.Min(280f, width - TrackerNativeHelpers.Indent), RowH),
-            Options = labels,
+            Options = jobs.Select(j => j.Label).ToList(),
             SelectedOption = selected.Label,
             MaxListOptions = 10,
         };
@@ -736,7 +1022,6 @@ internal sealed class TrackerNativeAddon : NativeAddon
             config.Save();
             if (!v)
                 plugin.RestoreTooltipEnhancements();
-            ScheduleRebuildForm();
         }));
 
         list.AddNode(MakeSection("Item tooltips"));
@@ -745,18 +1030,12 @@ internal sealed class TrackerNativeAddon : NativeAddon
             config.ShowTooltipIcons = v;
             config.Save();
         }));
-        list.AddNode(MakeCheckbox("Only annotate glamour gear", config.ShowOnlyForGlamourItems, v =>
-        {
-            config.ShowOnlyForGlamourItems = v;
-            config.Save();
-        }));
 
         list.AddNode(MakeSection("Grand Company delivery"));
         list.AddNode(MakeCheckbox("Show dresser/armoire icons", config.ShowGcExpertDeliveryStatus, v =>
         {
             config.ShowGcExpertDeliveryStatus = v;
             config.Save();
-            ScheduleRebuildForm();
         }));
 
         list.AddNode(MakeSection("Plate editor"));
@@ -764,6 +1043,7 @@ internal sealed class TrackerNativeAddon : NativeAddon
         {
             config.ShowPlateEditorOverlay = v;
             config.Save();
+            // Nested "Place on the right" appears/disappears — rebuild next tick only.
             ScheduleRebuildForm();
         }));
         if (config.ShowPlateEditorOverlay)
@@ -784,9 +1064,15 @@ internal sealed class TrackerNativeAddon : NativeAddon
             config.ShowSlotRerollButtons = v;
             config.Save();
         }));
+#if GLAMOUR_DEV
         list.AddNode(MakeMuted(
-            "Adjust positions from the plate menu or ImGui Settings → Slot button positions.",
+            "Fine-tune positions via /glamplus imgui → Settings → Slot button positions.",
             width));
+#else
+        list.AddNode(MakeMuted(
+            "Slot button positions use built-in defaults.",
+            width));
+#endif
     }
 
     // ── Outfit sets browser ───────────────────────────────────────────────
@@ -803,7 +1089,7 @@ internal sealed class TrackerNativeAddon : NativeAddon
         var rows = BuildOutfitRows();
         // Do not include growing category-cache counts — that forced rebuilds every frame during scans.
         var signature =
-            $"{outfitFilter}|{showMissingOnly}|{showOwnedOnly}|{(int)sortMode}|{(int)categoryFilter}|"
+            $"{outfitFilter}|{showMissingOnly}|{showOwnedOnly}|{(int)sortMode}|{(int)categoryFilter}|{(int)storageFilter}|"
             + string.Join('|', rows.Select(r => $"{r.Key}:{r.Badge}:{r.Subtitle}"));
         if (!force && signature == lastBrowserListSignature)
             return;
@@ -850,6 +1136,9 @@ internal sealed class TrackerNativeAddon : NativeAddon
                 setCategoryCache.TryGetValue(s.SetId, out var cat) && cat == categoryFilter);
         }
 
+        if (storageFilter != OutfitStorageFilter.All)
+            sets = sets.Where(s => TrackerNativeHelpers.SetMatchesStorage(s, storageFilter));
+
         sets = sortMode switch
         {
             OutfitSortMode.Progress => sets
@@ -864,24 +1153,43 @@ internal sealed class TrackerNativeAddon : NativeAddon
         var rows = new List<TrackerNativeListRow>();
         foreach (var set in sets)
         {
-            var iconPiece = set.Pieces.FirstOrDefault(p => p.Storage == GlamourStorageLocation.None);
+            var (stored, missing, _) = TrackerNativeHelpers.SplitPiecesForFilter(
+                set,
+                storageFilter,
+                IsGlamourPiece,
+                plugin.CabinetCatalog.IsArmoireEligible);
+
+            var iconPiece = missing.FirstOrDefault();
+            if (iconPiece.ItemId == 0)
+                iconPiece = stored.FirstOrDefault();
             if (iconPiece.ItemId == 0)
                 iconPiece = set.Pieces.FirstOrDefault();
 
-            var status = TrackerNativeHelpers.FormatSetCollectionStatus(set);
+            var status = TrackerNativeHelpers.FormatSetCollectionStatus(
+                set,
+                storageFilter,
+                IsGlamourPiece,
+                plugin.CabinetCatalog.IsArmoireEligible);
             rows.Add(new TrackerNativeListRow
             {
                 Key = $"set|{set.SetId}",
                 Title = set.Name,
                 Subtitle = status,
                 IconId = TrackerNativeHelpers.ResolveItemIcon(iconPiece.ItemId),
-                Badge = set.MissingPieces == 0 ? "Complete" : $"{set.MissingPieces} missing",
-                BadgeColor = TrackerNativeHelpers.GetSetStatusColor(set),
+                Badge = missing.Count == 0 ? "Complete" : $"{missing.Count} missing",
+                BadgeColor = TrackerNativeHelpers.GetSetStatusColor(stored.Count, missing.Count),
                 OutfitSet = set,
             });
         }
 
         return rows;
+    }
+
+    private bool IsGlamourPiece(uint itemId)
+    {
+        if (!Plugin.DataManager.GetExcelSheet<Item>().TryGetRow(itemId, out var item))
+            return false;
+        return GlamourOwnershipIndex.IsGlamourGear(item);
     }
 
     private void OnBrowserRowSelected(TrackerNativeListRow? row)
@@ -904,7 +1212,7 @@ internal sealed class TrackerNativeAddon : NativeAddon
         var set = row.OutfitSet;
         var loaded = setAcquireLoaded.ContainsKey(set.SetId);
         // Only rebuild when the selected set / load state / ownership changes — not on global cache growth.
-        var detailKey = $"{row.Key}|{set.OwnedPieceCount}|{set.MissingPieces}|{loaded}|{detailRebuildEpoch}";
+        var detailKey = $"{row.Key}|{set.OwnedPieceCount}|{set.MissingPieces}|{loaded}|{(int)storageFilter}|{detailRebuildEpoch}";
         if (!force && detailKey == lastBrowserDetailKey)
             return;
         lastBrowserDetailKey = detailKey;
@@ -927,123 +1235,151 @@ internal sealed class TrackerNativeAddon : NativeAddon
 
     private void BuildOutfitDetail(VerticalListNode list, OutfitSetInfo set, float width)
     {
-        list.AddNode(MakeText(set.Name, 16, TrackerNativeHelpers.ColorTitle, width, 22f));
-        list.AddNode(MakeText(
-            TrackerNativeHelpers.FormatSetCollectionStatus(set),
-            13,
-            TrackerNativeHelpers.GetSetStatusColor(set),
-            width,
-            18f));
+        var (storedPieces, missingPieces, total) = TrackerNativeHelpers.SplitPiecesForFilter(
+            set,
+            storageFilter,
+            IsGlamourPiece,
+            plugin.CabinetCatalog.IsArmoireEligible);
 
-        var progress = set.TotalPieces == 0 ? 0f : set.OwnedPieceCount / (float)set.TotalPieces;
-        list.AddNode(new ProgressBarNode
+        list.AddNode(MakeText(set.Name, 16, TrackerNativeHelpers.ColorTitle, width, 22f));
+
+        if (total == 0)
         {
-            Size = new Vector2(width, 12f),
-            Progress = progress,
-        });
+            list.AddNode(MakeMuted(
+                storageFilter == OutfitStorageFilter.Dresser
+                    ? "No dresser pieces in this set."
+                    : storageFilter == OutfitStorageFilter.Armoire
+                        ? "No armoire pieces in this set."
+                        : "No pieces in this set.",
+                width));
+            return;
+        }
 
         list.AddNode(MakeMuted("Expand a piece for sources. Try on previews it.", width));
 
-        foreach (var piece in set.Pieces)
+        list.AddNode(MakeText(
+            $"{storedPieces.Count}/{total} stored",
+            13,
+            TrackerNativeHelpers.GetSetStatusColor(storedPieces.Count, missingPieces.Count),
+            width,
+            18f));
+
+        foreach (var piece in storedPieces)
+            AddOutfitPieceRow(list, set, piece, width);
+
+        if (missingPieces.Count > 0)
         {
-            var name = TrackerNativeHelpers.ResolveItemName(piece.ItemId);
-            var status = TrackerNativeHelpers.FormatStorage(piece.Storage);
-            var pieceKey = PieceKey(set.SetId, piece);
-            var expanded = expandedPieceKeys.Contains(pieceKey);
-            var iconId = TrackerNativeHelpers.ResolveItemIcon(piece.ItemId);
+            list.AddNode(MakeText(
+                $"{missingPieces.Count}/{total} missing",
+                13,
+                TrackerNativeHelpers.ColorMissing,
+                width,
+                18f));
 
-            const float iconSize = 28f;
-            const float iconGap = 4f;
-            var headerWidth = iconId != 0
-                ? MathF.Max(120f, width - iconSize - iconGap)
-                : width;
-            var contentWidth = MathF.Max(80f, headerWidth - 8f);
-
-            var row = new HorizontalListNode
-            {
-                Size = new Vector2(width, iconSize),
-                ItemSpacing = iconGap,
-                FitToContentHeight = true,
-            };
-
-            if (iconId != 0)
-            {
-                var pieceIcon = new IconImageNode
-                {
-                    Size = new Vector2(iconSize, iconSize),
-                    TextureSize = new Vector2(iconSize, iconSize),
-                    IconId = iconId,
-                    ImageNodeFlags = ImageNodeFlags.AutoFit,
-                };
-                // Native item detail tooltip (same as inventory hover).
-                if (piece.ItemId != 0)
-                    pieceIcon.ItemTooltip = piece.ItemId;
-                row.AddNode(pieceIcon);
-            }
-
-            var header = new CollapsingHeaderNode
-            {
-                Size = new Vector2(headerWidth, 28f),
-                String = $"{piece.SlotLabel}: {name} — {status}",
-                FitWidth = true,
-                IsCollapsed = !expanded,
-                ItemSpacing = 3f,
-            };
-
-            var tryOn = new TextButtonNode
-            {
-                Size = new Vector2(MathF.Min(120f, contentWidth), RowH),
-                String = "Try on",
-                OnClick = () => TryOnItem(piece.ItemId, name),
-            };
-            header.AddNode(tryOn);
-
-            if (itemAcquireCache.TryGetValue(piece.ItemId, out var acquired))
-            {
-                if (!string.IsNullOrWhiteSpace(acquired.Summary))
-                    header.AddNode(MakeMuted(acquired.Summary, contentWidth));
-
-                foreach (var costLine in EnumerateAcquireCosts(acquired))
-                {
-                    header.AddNode(MakeText(
-                        costLine,
-                        12,
-                        TrackerNativeHelpers.ColorInfo,
-                        contentWidth,
-                        16f));
-                }
-
-                foreach (var section in acquired.Sections)
-                    AddAcquireSection(header, section, acquired, contentWidth);
-                if (acquired.Sections.Count == 0 && string.IsNullOrWhiteSpace(acquired.Summary))
-                    header.AddNode(MakeMuted("No source data for this piece.", contentWidth));
-            }
-            else if (!setAcquireLoaded.ContainsKey(set.SetId))
-            {
-                header.AddNode(MakeMuted("Loading sources…", contentWidth));
-            }
-            else
-            {
-                header.AddNode(MakeMuted("No source data for this piece.", contentWidth));
-            }
-
-            // Track expand state only — never rebuild the tree from OnToggle (that flickers the headers).
-            header.OnToggle = visible =>
-            {
-                if (visible)
-                    expandedPieceKeys.Add(pieceKey);
-                else
-                    expandedPieceKeys.Remove(pieceKey);
-
-                RelayoutBrowserDetail();
-
-                if (visible && !setAcquireLoaded.ContainsKey(set.SetId))
-                    _ = LoadSetAcquireAsync(set, refreshUi: true);
-            };
-
-            row.AddNode(header);
-            list.AddNode(row);
+            foreach (var piece in missingPieces)
+                AddOutfitPieceRow(list, set, piece, width);
         }
+    }
+
+    private void AddOutfitPieceRow(VerticalListNode list, OutfitSetInfo set, OutfitPieceInfo piece, float width)
+    {
+        var name = TrackerNativeHelpers.ResolveItemName(piece.ItemId);
+        var status = TrackerNativeHelpers.FormatStorage(piece.Storage);
+        var pieceKey = PieceKey(set.SetId, piece);
+        var expanded = expandedPieceKeys.Contains(pieceKey);
+        var iconId = TrackerNativeHelpers.ResolveItemIcon(piece.ItemId);
+
+        const float iconSize = 28f;
+        const float iconGap = 4f;
+        var headerWidth = iconId != 0
+            ? MathF.Max(120f, width - iconSize - iconGap)
+            : width;
+        var contentWidth = MathF.Max(80f, headerWidth - 8f);
+
+        var row = new HorizontalListNode
+        {
+            Size = new Vector2(width, iconSize),
+            ItemSpacing = iconGap,
+            FitToContentHeight = true,
+        };
+
+        if (iconId != 0)
+        {
+            var pieceIcon = new IconImageNode
+            {
+                Size = new Vector2(iconSize, iconSize),
+                TextureSize = new Vector2(iconSize, iconSize),
+                IconId = iconId,
+                ImageNodeFlags = ImageNodeFlags.AutoFit,
+            };
+            // Native item detail tooltip (same as inventory hover).
+            if (piece.ItemId != 0)
+                pieceIcon.ItemTooltip = piece.ItemId;
+            row.AddNode(pieceIcon);
+        }
+
+        var header = new CollapsingHeaderNode
+        {
+            Size = new Vector2(headerWidth, 28f),
+            String = $"{piece.SlotLabel}: {name} — {status}",
+            FitWidth = true,
+            IsCollapsed = !expanded,
+            ItemSpacing = 3f,
+        };
+
+        var tryOn = new TextButtonNode
+        {
+            Size = new Vector2(MathF.Min(120f, contentWidth), RowH),
+            String = "Try on",
+            OnClick = () => TryOnItem(piece.ItemId, name),
+        };
+        header.AddNode(tryOn);
+
+        if (itemAcquireCache.TryGetValue(piece.ItemId, out var acquired))
+        {
+            if (!string.IsNullOrWhiteSpace(acquired.Summary))
+                header.AddNode(MakeMuted(acquired.Summary, contentWidth));
+
+            foreach (var costLine in EnumerateAcquireCosts(acquired))
+            {
+                header.AddNode(MakeText(
+                    costLine,
+                    12,
+                    TrackerNativeHelpers.ColorInfo,
+                    contentWidth,
+                    16f));
+            }
+
+            foreach (var section in acquired.Sections)
+                AddAcquireSection(header, section, acquired, contentWidth);
+            if (acquired.Sections.Count == 0 && string.IsNullOrWhiteSpace(acquired.Summary))
+                header.AddNode(MakeMuted("No source data for this piece.", contentWidth));
+        }
+        else if (!setAcquireLoaded.ContainsKey(set.SetId))
+        {
+            header.AddNode(MakeMuted("Loading sources…", contentWidth));
+        }
+        else
+        {
+            header.AddNode(MakeMuted("No source data for this piece.", contentWidth));
+        }
+
+        // Track expand state only — never rebuild the tree from OnToggle (that flickers the headers).
+        header.OnToggle = visible =>
+        {
+            if (visible)
+                expandedPieceKeys.Add(pieceKey);
+            else
+                expandedPieceKeys.Remove(pieceKey);
+
+            RelayoutBrowserDetail();
+
+            if (visible && !setAcquireLoaded.ContainsKey(set.SetId))
+                _ = LoadSetAcquireAsync(set, refreshUi: true);
+        };
+
+        row.AddNode(header);
+        list.AddNode(row);
     }
 
     /// <summary>Distinct buy/exchange cost lines (gil, tomestones, seals, etc.).</summary>
@@ -1088,16 +1424,6 @@ internal sealed class TrackerNativeAddon : NativeAddon
             return;
         browserDetail.ContentNode.RecalculateLayout();
         browserDetail.RecalculateSizes();
-    }
-
-    private static void ApplySlotLockVisual(IconButtonNode button, int slot, bool locked)
-    {
-        button.MultiplyColor = locked
-            ? new Vector3(0.45f, 0.45f, 0.45f)
-            : new Vector3(1f, 1f, 1f);
-        button.TextTooltip = locked
-            ? $"{GlamourPlateSlotMap.Labels[slot]} — locked (click to unlock)"
-            : $"{GlamourPlateSlotMap.Labels[slot]} — unlocked (click to lock)";
     }
 
     private static string PieceKey(uint setId, OutfitPieceInfo piece) =>

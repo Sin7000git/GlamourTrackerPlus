@@ -93,7 +93,7 @@ internal sealed class ItemDetailEnhancer : IDisposable
             if (!this.dataManager.GetExcelSheet<Item>().TryGetRow(itemId, out var item))
                 return;
 
-            if (config.ShowOnlyForGlamourItems && !IsRelevantItem(item, itemId))
+            if (!IsRelevantItem(item, itemId))
             {
                 RestoreTooltip(addon);
                 return;

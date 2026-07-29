@@ -1,28 +1,43 @@
 using System.Numerics;
 using Dalamud.Interface.Textures;
 using Dalamud.Plugin.Services;
+#if GLAMOUR_DEV
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
+#endif
 
 namespace GlamourTracker.Services;
 
 /// <summary>
-/// Persists ItemDetail storage icon texture path (first tooltip) and fixed atlas UV defaults for GC overlays.
+/// Dresser/armoire marker textures from baked <c>ui/uld/ItemDetailPutIn</c> plus fixed atlas UV.
 /// </summary>
 internal sealed unsafe class StorageUiIconCache
 {
-    private readonly IGameGui gameGui;
     private readonly ITextureProvider textureProvider;
+    private readonly IDataManager dataManager;
     private readonly Func<Configuration> getConfiguration;
+#if GLAMOUR_DEV
+    private readonly IGameGui gameGui;
+#endif
 
     private ISharedImmediateTexture? dresserTexture;
     private ISharedImmediateTexture? armoireTexture;
 
-    public StorageUiIconCache(IGameGui gameGui, ITextureProvider textureProvider, Func<Configuration> getConfiguration)
+    public StorageUiIconCache(
+        IGameGui gameGui,
+        ITextureProvider textureProvider,
+        IDataManager dataManager,
+        Func<Configuration> getConfiguration)
     {
+#if GLAMOUR_DEV
         this.gameGui = gameGui;
+#else
+        _ = gameGui;
+#endif
         this.textureProvider = textureProvider;
+        this.dataManager = dataManager;
         this.getConfiguration = getConfiguration;
+        EnsureBakedTexturePath();
         ReloadTextures();
     }
 
@@ -48,16 +63,15 @@ internal sealed unsafe class StorageUiIconCache
 
     public StorageUiIconSlice GetResolvedArmoireSlice() => BuildResolvedSlice(isDresser: false);
 
+#if GLAMOUR_DEV
     public void PrintSliceDebug(IChatGui chat)
     {
         chat.Print($"[GlamourTracker] Dresser: {StorageMarkerDrawer.DescribeUv(this.dresserTexture, GetResolvedDresserSlice(), GetFlipV(true))}");
         chat.Print($"[GlamourTracker] Armoire: {StorageMarkerDrawer.DescribeUv(this.armoireTexture, GetResolvedArmoireSlice(), GetFlipV(false))}");
-        chat.Print("[GlamourTracker] Atlas UV is fixed after first tooltip; use Settings → GC icon atlas to tune size/flip/offsets.");
+        chat.Print("[GlamourTracker] Atlas path is baked (ItemDetailPutIn); use Settings → GC icon atlas to tune UV.");
     }
 
-    /// <summary>
-    /// First item tooltip: capture texture path(s) and persist atlas defaults. Later hovers do not rescan UV.
-    /// </summary>
+    /// <summary>Legacy: capture texture path(s) from ItemDetail tooltip. Prefer baked ItemDetailPutIn.</summary>
     public void TryEnsureConfigured(bool force = false)
     {
         var config = this.getConfiguration();
@@ -153,6 +167,58 @@ internal sealed unsafe class StorageUiIconCache
         }
     }
 
+    /// <summary>
+    /// Bake dresser/armoire marker textures from a QoL Extra sheet id (10_000_000+).
+    /// Keeps existing atlas UV / display settings; only the texture path changes.
+    /// </summary>
+    public bool TryApplyExtraSheet(uint extraIconId, out string? resolvedPath)
+    {
+        resolvedPath = EmptyGearSlotAtlas.ResolveTexturePath(this.dataManager, this.textureProvider, extraIconId);
+        if (string.IsNullOrWhiteSpace(resolvedPath))
+            return false;
+
+        ApplyTexturePath(resolvedPath);
+        return true;
+    }
+#endif
+
+    /// <summary>Bake <c>ui/uld/ItemDetailPutIn</c>; keeps atlas UV.</summary>
+    public string ApplyItemDetailPutInSheet()
+    {
+        var path = StorageIconAtlasDefaults.ResolveTexturePath(this.dataManager);
+        ApplyTexturePath(path);
+        return path;
+    }
+
+    /// <summary>Ensure config points at ItemDetailPutIn (no tooltip hover required).</summary>
+    public void EnsureBakedTexturePath()
+    {
+        var config = this.getConfiguration();
+        if (StorageIconAtlasDefaults.IsItemDetailPutInPath(config.DresserUiIconPath)
+            && StorageIconAtlasDefaults.IsItemDetailPutInPath(config.ArmoireUiIconPath)
+            && config.StorageIconAtlasConfigured)
+            return;
+
+        ApplyItemDetailPutInSheet();
+    }
+
+    private void ApplyTexturePath(string path)
+    {
+        var config = this.getConfiguration();
+        var dirty = !string.Equals(config.DresserUiIconPath, path, StringComparison.Ordinal)
+            || !string.Equals(config.ArmoireUiIconPath, path, StringComparison.Ordinal)
+            || !config.StorageIconAtlasConfigured;
+
+        config.DresserUiIconPath = path;
+        config.ArmoireUiIconPath = path;
+        config.StorageIconAtlasConfigured = true;
+
+        if (dirty)
+            config.Save();
+
+        ReloadTextures();
+    }
+
     private StorageUiIconSlice BuildResolvedSlice(bool isDresser)
     {
         var config = this.getConfiguration();
@@ -188,11 +254,13 @@ internal sealed unsafe class StorageUiIconCache
         };
     }
 
+#if GLAMOUR_DEV
     private bool GetFlipV(bool isDresser)
     {
         var config = this.getConfiguration();
         return isDresser ? config.FlipDresserIconV : config.FlipArmoireIconV;
     }
+#endif
 
     private static ushort ApplyOffset(ushort value, int offset)
     {
@@ -215,6 +283,7 @@ internal sealed unsafe class StorageUiIconCache
             : this.textureProvider.GetFromGame(armoirePath);
     }
 
+#if GLAMOUR_DEV
     private static unsafe bool TryCaptureGroupTexturePath(AtkResNode* group, out string path)
     {
         path = string.Empty;
@@ -289,4 +358,5 @@ internal sealed unsafe class StorageUiIconCache
         var path = resource->TexFileResourceHandle->FileName.ToString();
         return string.IsNullOrWhiteSpace(path) ? null : path;
     }
+#endif
 }

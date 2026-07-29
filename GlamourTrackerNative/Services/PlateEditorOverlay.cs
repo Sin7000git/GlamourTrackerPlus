@@ -330,12 +330,14 @@ internal sealed class PlateEditorOverlay
             config.Save();
         }
 
+#if GLAMOUR_DEV
         if (ImGui.BeginMenu("Adjust slot button positions"))
         {
             if (DrawSlotRerollPlacementControls(config, "overlay"))
                 config.Save();
             ImGui.EndMenu();
         }
+#endif
 
         ImGui.Separator();
         if (RandomizeFilterUi.Draw(config, Plugin.DataManager, Plugin.ObjectTable, "overlay"))

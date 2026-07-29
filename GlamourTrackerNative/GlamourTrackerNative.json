@@ -1,9 +1,9 @@
 {
   "Author": "Sin7000",
-  "Name": "Glamour Tracker+ Native",
+  "Name": "Glamour Tracker+",
   "InternalName": "GlamourTrackerNative",
-  "Punchline": "Native-UI experiment: Glamour Tracker+ Fashion Report via KamiToolKit.",
-  "Description": "Fork of Glamour Tracker+ exploring FFXIV native windows (KamiToolKit). /glamplus = main UI, /glamplus report = Fashion Report, /glamplus imgui = ImGui fallback.",
+  "Punchline": "Track your glams, Fashion Reports, and more with a cool native UI.",
+  "Description": "Track glamour dresser and armoire items, Fashion Report, and randomize glamour plates.",
   "ApplicableVersion": "any",
   "Tags": [
     "glamour",
@@ -11,6 +11,7 @@
     "dresser",
     "utility",
     "fashion report",
-    "native ui"
+    "native ui",
+    "vanilla plus"
   ]
 }

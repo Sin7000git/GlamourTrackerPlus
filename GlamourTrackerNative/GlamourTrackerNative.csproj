@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.1.55.0</Version>
+    <Version>0.1.102.0</Version>
     <Authors>Sin7000</Authors>
-    <Description>Glamour Tracker+ Native — KamiToolKit experiment for in-game style UI (fork of Glamour Tracker+).</Description>
+    <Description>Glamour Tracker+ — dresser/armoire tracking, Fashion Report, and plate tools. /glamplus · /glamplus report.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <IsPackable>false</IsPackable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -12,6 +12,17 @@
     <!-- Keep DLL at bin/Release/... (not bin/x64/Release) for the existing Dalamud path. -->
     <AppendPlatformToOutputPath>false</AppendPlatformToOutputPath>
   </PropertyGroup>
+
+  <!-- Legacy ImGui TrackerWindow + debug commands (atlas/slot/theme tuning). -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DefineConstants>$(DefineConstants);GLAMOUR_DEV</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(Configuration)' != 'Debug'">
+    <Compile Remove="Windows\TrackerWindow.cs" />
+    <Compile Remove="Windows\FashionReportPanel.cs" />
+    <Compile Remove="Services\StorageMarkerDrawer.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\KamiToolKit\KamiToolKit.csproj" />

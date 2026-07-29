@@ -40,27 +40,27 @@ internal static class GlamourPlateSlotMap
     ];
 
     /// <summary>
-    /// Slot lock icons from The Emperor's New Attire (invisible glamour pieces).
-    /// Icon IDs from Item sheet (xivapi): Fists, Shield, Hat, Robe, Gloves, Breeches, Boots, Earrings, Necklace, Bracelet, Ring.
+    /// Empty equipment-slot silhouettes from ItemUICategory (inventory filter icons),
+    /// not Emperor's New Attire item icons.
     /// </summary>
     public static readonly uint[] EmptySlotIconIds =
     [
-        31104, // Main hand — The Emperor's New Fists
-        30150, // Off hand — The Emperor's New Shield
-        41227, // Head — The Emperor's New Hat
-        42422, // Body — The Emperor's New Robe
-        44305, // Hands — The Emperor's New Gloves
-        45539, // Legs — The Emperor's New Breeches
-        46446, // Feet — The Emperor's New Boots
-        55316, // Ears — The Emperor's New Earrings
-        54909, // Neck — The Emperor's New Necklace
-        55714, // Wrists — The Emperor's New Bracelet
-        54561, // Right ring — The Emperor's New Ring
-        54561, // Left ring — The Emperor's New Ring
+        60102, // Main hand — Gladiator's Arm
+        60110, // Off hand — Shield
+        60124, // Head
+        60126, // Body
+        60129, // Hands
+        60128, // Legs
+        60130, // Feet
+        60133, // Ears — Earrings
+        60132, // Neck — Necklace
+        60134, // Wrists — Bracelets
+        60135, // Right ring
+        60135, // Left ring
     ];
 
     public static uint EmptySlotIcon(int slot) =>
-        IsValidIndex(slot) ? EmptySlotIconIds[slot] : 42422;
+        IsValidIndex(slot) ? EmptySlotIconIds[slot] : 60126;
 
     public static bool IsValidIndex(int slot) => slot is >= 0 and < SlotCount;
 

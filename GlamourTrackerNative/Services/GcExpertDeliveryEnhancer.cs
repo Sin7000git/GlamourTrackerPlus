@@ -1,5 +1,4 @@
 using System.Numerics;
-using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
 using Dalamud.Plugin.Services;
@@ -8,6 +7,11 @@ using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using KamiToolKit.Enums;
 using KamiToolKit.Nodes.Simplified;
+#if GLAMOUR_DEV
+using Dalamud.Bindings.ImGui;
+using Dalamud.Game.NativeWrapper;
+using Dalamud.Interface.Utility;
+#endif
 using AgentModule = FFXIVClientStructs.FFXIV.Client.UI.Agent.AgentModule;
 
 namespace GlamourTracker.Services;
@@ -15,7 +19,7 @@ namespace GlamourTracker.Services;
 /// <summary>
 /// Expert delivery: dresser/armoire icons immediately left of each item icon when stored there.
 /// Markers are native ATK image nodes parented to the supply window so they move with it.
-/// Atlas U/V/W/H come from Settings → GC icon atlas (same values as tooltips).
+/// Texture is baked <c>ui/uld/ItemDetailPutIn</c>; atlas U/V/W/H match tooltip icons.
 /// </summary>
 internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
 {
@@ -34,7 +38,6 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
     private readonly StorageUiIconCache iconCache;
 
     private ExpertDeliveryMatchIndex? expertMatchIndex;
-    private int lastDrawnMarkerCount;
 
     private readonly List<SimpleImageNode> markerNodes = [];
     private int lastScrollOffset = int.MinValue;
@@ -43,6 +46,12 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
     private float lastAddonScale = float.NaN;
     private nint lastSupplyAddonAddress;
     private string lastAtlasSignature = string.Empty;
+
+#if GLAMOUR_DEV
+    private const string SheetPickerOverlayId = "glamour-tracker-gc-sheet-picker";
+    private int pickerExtraId = (int)EmptyGearSlotAtlas.QolExtraSheetBase;
+    private string? pickerStatus;
+#endif
 
     public GcExpertDeliveryEnhancer(
         IAddonLifecycle addonLifecycle,
@@ -59,16 +68,16 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
         this.cabinetCatalog = cabinetCatalog;
         this.getConfiguration = getConfiguration;
         this.ownershipIndex = ownershipIndex;
-        this.iconCache = new StorageUiIconCache(gameGui, textureProvider, getConfiguration);
+        this.iconCache = new StorageUiIconCache(gameGui, textureProvider, dataManager, getConfiguration);
 
         this.addonLifecycle.RegisterListener(AddonEvent.PostRefresh, SupplyAddonName, OnGcSupplyUiChanged);
         this.addonLifecycle.RegisterListener(AddonEvent.PostRequestedUpdate, SupplyAddonName, OnGcSupplyUiChanged);
         this.addonLifecycle.RegisterListener(AddonEvent.PreFinalize, SupplyAddonName, OnGcSupplyFinalize);
     }
 
-    public void OnFirstTooltipForIconAtlas() => this.iconCache.TryEnsureConfigured();
-
+#if GLAMOUR_DEV
     public void RecaptureIconTexturePath() => this.iconCache.TryRecaptureTexturePath();
+#endif
 
     public void ResetCaches()
     {
@@ -94,6 +103,17 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
 
     private void DisposeNativeMarkers()
     {
+        if (this.markerNodes.Count == 0)
+        {
+            this.lastScrollOffset = int.MinValue;
+            this.lastFirstVisible = int.MinValue;
+            this.lastListLength = -1;
+            this.lastAddonScale = float.NaN;
+            this.lastSupplyAddonAddress = 0;
+            this.lastAtlasSignature = string.Empty;
+            return;
+        }
+
         foreach (var node in this.markerNodes)
         {
             try
@@ -120,38 +140,169 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
         var config = this.getConfiguration();
         if (!config.Enabled || !config.ShowGcExpertDeliveryStatus)
         {
-            this.lastDrawnMarkerCount = 0;
-            DisposeNativeMarkers();
+            if (this.markerNodes.Count > 0)
+                DisposeNativeMarkers();
             return;
         }
 
         var addonPtr = this.gameGui.GetAddonByName(SupplyAddonName, 1);
         if (addonPtr.Address == nint.Zero)
         {
-            this.lastDrawnMarkerCount = 0;
-            DisposeNativeMarkers();
+            if (this.markerNodes.Count > 0)
+                DisposeNativeMarkers();
             return;
         }
 
         var supplyUnit = (AtkUnitBase*)addonPtr.Address;
         if (!GcMarkerOverlayGuard.ShouldDrawAnyMarkers(supplyUnit))
         {
-            this.lastDrawnMarkerCount = 0;
-            DisposeNativeMarkers();
+            if (this.markerNodes.Count > 0)
+                DisposeNativeMarkers();
             return;
         }
 
+#if GLAMOUR_DEV
+        DrawSheetPicker(addonPtr);
+#endif
+
         try
         {
-            this.lastDrawnMarkerCount = SyncNativeMarkers((AddonGrandCompanySupplyList*)addonPtr.Address, supplyUnit);
+            _ = SyncNativeMarkers((AddonGrandCompanySupplyList*)addonPtr.Address, supplyUnit);
         }
         catch
         {
-            this.lastDrawnMarkerCount = 0;
             DisposeNativeMarkers();
         }
     }
 
+#if GLAMOUR_DEV
+    private void DrawSheetPicker(AtkUnitBasePtr addon)
+    {
+        var drawPos = ComputeSheetPickerPos(addon);
+        if (drawPos == null)
+            return;
+
+        ImGui.SetNextWindowPos(drawPos.Value, ImGuiCond.Appearing);
+        ImGui.SetNextWindowBgAlpha(0.92f);
+        if (!ImGui.Begin(
+                $"GC icon sheet##{SheetPickerOverlayId}",
+                ImGuiWindowFlags.AlwaysAutoResize
+                | ImGuiWindowFlags.NoCollapse
+                | ImGuiWindowFlags.NoDocking
+                | ImGuiWindowFlags.NoSavedSettings
+                | ImGuiWindowFlags.NoFocusOnAppearing))
+        {
+            ImGui.End();
+            return;
+        }
+
+        ImGui.TextWrapped(
+            "Real sheet is ui/uld/ItemDetailPutIn (not a QoL Extra id). "
+            + "Extra picker is only for experiments.");
+
+        if (ImGui.Button("Bake ItemDetailPutIn"))
+        {
+            var path = this.iconCache.ApplyItemDetailPutInSheet();
+            this.lastAtlasSignature = string.Empty;
+            this.pickerStatus = $"Baked → {path}";
+        }
+
+        ImGui.Separator();
+        ImGui.TextUnformatted("QoL Extra sheet id (keeps UV)");
+        ImGui.SetNextItemWidth(140f * ImGuiHelpers.GlobalScale);
+        var idChanged = ImGui.InputInt("##gcExtraSheetId", ref this.pickerExtraId, 1, 10);
+        this.pickerExtraId = Math.Clamp(this.pickerExtraId, (int)EmptyGearSlotAtlas.QolExtraSheetBase, 10_099_999);
+
+        ImGui.SameLine();
+        if (ImGui.Button("< Prev"))
+        {
+            StepKnownExtraSheet(-1);
+            idChanged = true;
+        }
+
+        ImGui.SameLine();
+        if (ImGui.Button("Next >"))
+        {
+            StepKnownExtraSheet(+1);
+            idChanged = true;
+        }
+
+        var extraId = (uint)this.pickerExtraId;
+        var mapped = EmptyGearSlotAtlas.TryGetExtraSheetStem(extraId, out var stem);
+        if (mapped)
+            ImGui.TextDisabled($"{stem}  (index {extraId - EmptyGearSlotAtlas.QolExtraSheetBase})");
+        else
+            ImGui.TextColored(new Vector4(1f, 0.55f, 0.35f, 1f), "Not in Extra sheet map");
+
+        if (idChanged && mapped)
+            ApplyPickerSheet(extraId);
+
+        if (ImGui.Button("Apply Extra id"))
+            ApplyPickerSheet(extraId);
+
+        var config = this.getConfiguration();
+        ImGui.TextWrapped($"Active: {config.DresserUiIconPath ?? "(none)"}");
+        if (!string.IsNullOrWhiteSpace(this.pickerStatus))
+            ImGui.TextDisabled(this.pickerStatus);
+
+        ImGui.SetWindowPos(drawPos.Value);
+        ImGui.End();
+    }
+
+    private void StepKnownExtraSheet(int direction)
+    {
+        var known = EmptyGearSlotAtlas.KnownExtraSheetIds;
+        if (known.Count == 0)
+            return;
+
+        var current = (uint)this.pickerExtraId;
+        var idx = 0;
+        for (var i = 0; i < known.Count; i++)
+        {
+            if (known[i] >= current)
+            {
+                idx = i;
+                break;
+            }
+
+            idx = i;
+        }
+
+        if (known[idx] == current)
+            idx += direction;
+        else if (direction < 0 && known[idx] > current)
+            idx--;
+
+        idx = Math.Clamp(idx, 0, known.Count - 1);
+        this.pickerExtraId = (int)known[idx];
+    }
+
+    private void ApplyPickerSheet(uint extraId)
+    {
+        if (!this.iconCache.TryApplyExtraSheet(extraId, out var path))
+        {
+            this.pickerStatus = $"Could not resolve Extra {extraId}";
+            return;
+        }
+
+        this.lastAtlasSignature = string.Empty; // force marker rebuild with new path
+        this.pickerStatus = $"Applied Extra {extraId} → {path}";
+    }
+
+    private static Vector2? ComputeSheetPickerPos(AtkUnitBasePtr addon)
+    {
+        if (addon == null || !addon.IsReady)
+            return null;
+
+        var style = ImGui.GetStyle();
+        var yOffset = ImGui.CalcTextSize("A").Y + style.FramePadding.Y * 2f + style.WindowPadding.Y * 2f + 8f;
+        return ImGuiHelpers.MainViewport.Pos
+               + new Vector2(addon.X, addon.Y)
+               - new Vector2(0f, yOffset * ImGuiHelpers.GlobalScale);
+    }
+#endif
+
+#if GLAMOUR_DEV
     public void DebugToChat(IChatGui chat)
     {
         var config = this.getConfiguration();
@@ -254,6 +405,7 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
             printed++;
         }
     }
+#endif
 
     private unsafe int SyncNativeMarkers(AddonGrandCompanySupplyList* addon, AtkUnitBase* supplyUnit)
     {
@@ -270,8 +422,7 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
             return 0;
         }
 
-        if (!this.iconCache.IsReady)
-            this.iconCache.TryEnsureConfigured();
+        this.iconCache.EnsureBakedTexturePath();
 
         var config = this.getConfiguration();
         var list = addon->ExpertDeliveryList;
@@ -586,6 +737,7 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
         return list->ItemRendererList[itemIndex].IconId;
     }
 
+#if GLAMOUR_DEV
     private static unsafe int FindListIndexForLabel(AtkComponentList* list, string sheetName)
     {
         if (string.IsNullOrWhiteSpace(sheetName))
@@ -648,6 +800,7 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
             return;
         }
     }
+#endif
 
     private static unsafe AtkResNode* GetRowRoot(AtkComponentListItemRenderer* renderer)
     {

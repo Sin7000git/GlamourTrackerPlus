@@ -18,7 +18,10 @@ internal sealed class PluginCommands : IDisposable
         this.commandManager.AddHandler(Plugin.CommandName, new CommandInfo(OnCommand)
         {
             HelpMessage =
-                "Glamour Tracker+ Native. /glamplus = main UI · /glamplus report = Fashion Report · /glamplus imgui = ImGui fallback.",
+                "main UI\n"
+                + "/glamplus fashion → Fashion Report\n"
+                + "/glamplus refresh → Force refresh\n"
+                + "/glamplus help → Command aliases",
         });
     }
 
@@ -40,13 +43,13 @@ internal sealed class PluginCommands : IDisposable
                 this.plugin.ToggleMainUi();
                 return;
 
+#if GLAMOUR_DEV
             case "imgui":
             case "old":
                 this.plugin.ToggleImGuiMainUi();
                 return;
+#endif
 
-            case "native":
-            case "nui":
             case "fashion":
             case "fr":
             case "report":
@@ -55,38 +58,37 @@ internal sealed class PluginCommands : IDisposable
 
             case "refresh":
                 this.plugin.RefreshAll(true);
-                this.chatGui.Print("Glamour Tracker+ Native refreshed dresser and armoire data.");
+                this.chatGui.Print("Glamour Tracker+ refreshed dresser and armoire data.");
                 return;
 
-            case "randomize":
-            case "rand":
-            case "roll":
-                _ = Plugin.Framework.RunOnFrameworkThread(() =>
-                {
-                    var result = this.plugin.BeginRandomizeOpenPlate(r =>
-                    {
-                        if (!r.InProgress)
-                            this.chatGui.Print($"[Glamour Tracker+ Native] {r.Message}");
-                        if (r is { Success: true, InProgress: false })
-                            this.plugin.RefreshAll(true);
-                    });
-                    this.chatGui.Print($"[Glamour Tracker+ Native] {result.Message}");
-                });
-                return;
-
+#if GLAMOUR_DEV
             case "gcdebug":
             case "gcicons":
                 this.plugin.DebugGcExpertDelivery();
                 return;
+#endif
 
             case "help":
-                this.chatGui.Print(
-                    "Glamour Tracker+ Native: /glamplus | /glamplus report | /glamplus imgui | /glamplus help");
+            case "?":
+                PrintAliasHelp();
                 return;
 
             default:
                 this.chatGui.Print($"Unknown option \"{verb}\". Use /glamplus help.");
                 return;
         }
+    }
+
+    private void PrintAliasHelp()
+    {
+        this.chatGui.Print("[Glamour Tracker+] Command aliases:");
+        this.chatGui.Print("  /glamplus  (also: open, ui) → main UI");
+        this.chatGui.Print("  /glamplus fashion  (also: fr, report) → Fashion Report");
+        this.chatGui.Print("  /glamplus refresh → Force refresh dresser/armoire data");
+#if GLAMOUR_DEV
+        this.chatGui.Print("  /glamplus imgui  (also: old) → legacy ImGui UI (Dev)");
+        this.chatGui.Print("  /glamplus gcdebug  (also: gcicons) → GC marker diagnostics (Dev)");
+#endif
+        this.chatGui.Print("  /glamplus help  (also: ?) → this list");
     }
 }

@@ -23,6 +23,14 @@ internal enum OutfitCategoryFilter
     Other = 6,
 }
 
+/// <summary>Where outfit pieces are stored (Outfit sets browser).</summary>
+internal enum OutfitStorageFilter
+{
+    All = 0,
+    Dresser = 1,
+    Armoire = 2,
+}
+
 internal static class TrackerNativeHelpers
 {
     public const float Indent = 20f;
@@ -59,6 +67,69 @@ internal static class TrackerNativeHelpers
         "Other",
     ];
 
+    public static readonly string[] StorageFilterLabels =
+    [
+        "All storage",
+        "In dresser",
+        "In armoire",
+    ];
+
+    public static bool PieceMatchesStorage(GlamourStorageLocation storage, OutfitStorageFilter filter) =>
+        filter switch
+        {
+            OutfitStorageFilter.Dresser => storage.HasFlag(GlamourStorageLocation.Dresser),
+            OutfitStorageFilter.Armoire => storage.HasFlag(GlamourStorageLocation.Armoire),
+            _ => true,
+        };
+
+    public static bool IsPieceStoredForFilter(GlamourStorageLocation storage, OutfitStorageFilter filter) =>
+        filter switch
+        {
+            OutfitStorageFilter.Dresser => storage.HasFlag(GlamourStorageLocation.Dresser),
+            OutfitStorageFilter.Armoire => storage.HasFlag(GlamourStorageLocation.Armoire),
+            _ => storage != GlamourStorageLocation.None,
+        };
+
+    public static bool SetMatchesStorage(OutfitSetInfo set, OutfitStorageFilter filter)
+    {
+        if (filter == OutfitStorageFilter.All)
+            return true;
+
+        return set.Pieces.Any(p => PieceMatchesStorage(p.Storage, filter));
+    }
+
+    /// <summary>
+    /// Pieces relevant to the active storage filter, split into stored vs still missing.
+    /// Dresser/armoire scopes to pieces that belong there (or are already stored there).
+    /// </summary>
+    public static (List<OutfitPieceInfo> Stored, List<OutfitPieceInfo> Missing, int Total) SplitPiecesForFilter(
+        OutfitSetInfo set,
+        OutfitStorageFilter filter,
+        Func<uint, bool> isGlamourPiece,
+        Func<uint, bool> isArmoireEligible)
+    {
+        IEnumerable<OutfitPieceInfo> scoped = filter switch
+        {
+            OutfitStorageFilter.Dresser => set.Pieces.Where(p =>
+                p.Storage.HasFlag(GlamourStorageLocation.Dresser) || isGlamourPiece(p.ItemId)),
+            OutfitStorageFilter.Armoire => set.Pieces.Where(p =>
+                p.Storage.HasFlag(GlamourStorageLocation.Armoire) || isArmoireEligible(p.ItemId)),
+            _ => set.Pieces,
+        };
+
+        var stored = new List<OutfitPieceInfo>();
+        var missing = new List<OutfitPieceInfo>();
+        foreach (var piece in scoped)
+        {
+            if (IsPieceStoredForFilter(piece.Storage, filter))
+                stored.Add(piece);
+            else
+                missing.Add(piece);
+        }
+
+        return (stored, missing, stored.Count + missing.Count);
+    }
+
     public static string FormatStorage(GlamourStorageLocation storage) => storage switch
     {
         GlamourStorageLocation.Dresser => "Dresser",
@@ -76,10 +147,28 @@ internal static class TrackerNativeHelpers
     };
 
     /// <summary>Ownership-based status — ignores dresser unlock bits (often stale/uncached).</summary>
-    public static string FormatSetCollectionStatus(OutfitSetInfo set)
+    public static string FormatSetCollectionStatus(OutfitSetInfo set) =>
+        FormatSetCollectionStatus(set, OutfitStorageFilter.All, _ => true, _ => true);
+
+    public static string FormatSetCollectionStatus(
+        OutfitSetInfo set,
+        OutfitStorageFilter filter,
+        Func<uint, bool> isGlamourPiece,
+        Func<uint, bool> isArmoireEligible)
     {
-        if (set.MissingPieces == 0)
+        var (stored, missing, total) = SplitPiecesForFilter(set, filter, isGlamourPiece, isArmoireEligible);
+        if (total == 0)
+            return "No pieces for this filter";
+
+        if (missing.Count == 0)
         {
+            if (filter != OutfitStorageFilter.All)
+            {
+                return filter == OutfitStorageFilter.Dresser
+                    ? "Complete · Dresser"
+                    : "Complete · Armoire";
+            }
+
             return set.SetStorage switch
             {
                 OutfitSetStorageLocation.Dresser => "Complete · Dresser",
@@ -89,15 +178,20 @@ internal static class TrackerNativeHelpers
             };
         }
 
-        if (set.OwnedPieceCount == 0)
+        if (stored.Count == 0)
             return "Not collected";
 
-        return $"{set.OwnedPieceCount}/{set.TotalPieces} stored";
+        return $"{stored.Count}/{total} stored";
     }
 
     public static Vector4 GetSetStatusColor(OutfitSetInfo set) =>
         set.MissingPieces == 0 ? ColorOk
         : set.OwnedPieceCount == 0 ? ColorMuted
+        : ColorWarn;
+
+    public static Vector4 GetSetStatusColor(int storedCount, int missingCount) =>
+        missingCount == 0 ? ColorOk
+        : storedCount == 0 ? ColorMuted
         : ColorWarn;
 
     public static Vector4 GetSetStorageLabelColor(OutfitSetInfo set)

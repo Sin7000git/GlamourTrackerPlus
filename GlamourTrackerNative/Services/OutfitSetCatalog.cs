@@ -48,6 +48,61 @@ internal sealed class OutfitSetCatalog
     public int CountSetsInArmoire() =>
         GetSets().Count(set => set.SetStorage is OutfitSetStorageLocation.Armoire or OutfitSetStorageLocation.Both);
 
+    /// <summary>One-pass outfit-set totals for the Overview tab.</summary>
+    public OutfitSetOverviewStats GetOverviewStats()
+    {
+        var sets = GetSets();
+        var dresserEligible = 0;
+        var armoireEligible = 0;
+        var setsInDresser = 0;
+        var setsInArmoire = 0;
+        var completedInDresser = 0;
+        var completedInArmoire = 0;
+
+        foreach (var set in sets)
+        {
+            var glamourPieces = set.Pieces.Where(p => this.IsGlamourPiece(p.ItemId)).ToList();
+            var armoirePieces = set.Pieces.Where(p => this.cabinetCatalog.IsArmoireEligible(p.ItemId)).ToList();
+
+            var canDresser = glamourPieces.Count > 0;
+            var canArmoire = armoirePieces.Count > 0;
+            if (canDresser)
+                dresserEligible++;
+            if (canArmoire)
+                armoireEligible++;
+
+            // "In dresser" = registered/unlocked in the glamour dresser set list (not necessarily fully owned).
+            var inDresser = set.IsUnlocked || this.ownershipIndex.IsOutfitSetInDresser(set.SetId);
+            var allGlamourInDresser = canDresser
+                && glamourPieces.All(p => p.Storage.HasFlag(GlamourStorageLocation.Dresser));
+            if (inDresser || allGlamourInDresser)
+            {
+                setsInDresser++;
+                if (allGlamourInDresser)
+                    completedInDresser++;
+            }
+
+            // "In armoire" = at least one armoire-eligible piece stored there; complete = all of them.
+            var armoireStoredCount = armoirePieces.Count(p => p.Storage.HasFlag(GlamourStorageLocation.Armoire));
+            var allArmoireInArmoire = canArmoire && armoireStoredCount == armoirePieces.Count;
+            if (canArmoire && armoireStoredCount > 0)
+            {
+                setsInArmoire++;
+                if (allArmoireInArmoire)
+                    completedInArmoire++;
+            }
+        }
+
+        // Incomplete counts are derived when needed: owned − completed.
+        return new OutfitSetOverviewStats(
+            DresserEligible: dresserEligible,
+            ArmoireEligible: armoireEligible,
+            SetsInDresser: setsInDresser,
+            SetsInArmoire: setsInArmoire,
+            CompletedInDresser: completedInDresser,
+            CompletedInArmoire: completedInArmoire);
+    }
+
     private List<OutfitSetInfo> BuildSets()
     {
         var itemSheet = this.dataManager.GetExcelSheet<Item>();
@@ -179,6 +234,14 @@ internal sealed class OutfitSetCatalog
         return $"Outfit set #{row.RowId}";
     }
 }
+
+internal readonly record struct OutfitSetOverviewStats(
+    int DresserEligible,
+    int ArmoireEligible,
+    int SetsInDresser,
+    int SetsInArmoire,
+    int CompletedInDresser,
+    int CompletedInArmoire);
 
 internal sealed class OutfitSetInfo
 {

@@ -13,13 +13,11 @@ internal sealed class TrackerWindow : Window
     private readonly FashionReportPanel fashionReportPanel;
     private string outfitFilter = string.Empty;
     private bool showMissingOnly;
-    private bool openSettingsTab;
-    private bool openFashionReportTab;
     private int localStyleVarsPushed;
     private int localStyleColorsPushed;
 
     public TrackerWindow(Plugin plugin)
-        : base("Glamour Tracker+ Native###GlamourTrackerNativeMain", ImGuiWindowFlags.NoScrollbar)
+        : base("Glamour Tracker+###GlamourTrackerNativeMain", ImGuiWindowFlags.NoScrollbar)
     {
         this.plugin = plugin;
         this.fashionReportPanel = new FashionReportPanel(plugin);
@@ -46,26 +44,8 @@ internal sealed class TrackerWindow : Window
         this.localStyleColorsPushed = 0;
     }
 
-    public void OpenSettingsTab()
-    {
-        this.openSettingsTab = true;
-        IsOpen = true;
-    }
-
-    public void OpenFashionReportTab()
-    {
-        this.openFashionReportTab = true;
-        this.fashionReportPanel.RequestOpen();
-        IsOpen = true;
-    }
-
     public override void Draw()
     {
-        var settingsTabFlags = this.openSettingsTab ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None;
-        var fashionTabFlags = this.openFashionReportTab ? ImGuiTabItemFlags.SetSelected : ImGuiTabItemFlags.None;
-        this.openSettingsTab = false;
-        this.openFashionReportTab = false;
-
         // New ID clears any persisted ImGui tab order from earlier layouts.
         if (ImGui.BeginTabBar("GlamourTrackerTabs_v2"))
         {
@@ -87,7 +67,7 @@ internal sealed class TrackerWindow : Window
                 ImGui.EndTabItem();
             }
 
-            if (ImGui.BeginTabItem("Fashion Report", fashionTabFlags))
+            if (ImGui.BeginTabItem("Fashion Report"))
             {
                 this.fashionReportPanel.Draw();
                 ImGui.EndTabItem();
@@ -99,7 +79,7 @@ internal sealed class TrackerWindow : Window
                 ImGui.EndTabItem();
             }
 
-            if (ImGui.BeginTabItem("Settings", settingsTabFlags))
+            if (ImGui.BeginTabItem("Settings"))
             {
                 DrawSettings();
                 ImGui.EndTabItem();
@@ -318,7 +298,7 @@ internal sealed class TrackerWindow : Window
         ImGui.EndDisabled();
         if (busy)
             ImGui.TextDisabled("Applying slots…");
-        ImGui.TextDisabled("Command: /glamplus randomize · Slot reload icons reroll one piece");
+        ImGui.TextDisabled("Use Randomize above, or the plate editor overlay. Slot reload icons reroll one piece.");
     }
 
     private void DrawGlamourPlates()
@@ -362,7 +342,6 @@ internal sealed class TrackerWindow : Window
         var enabled = config.Enabled;
         var showIcons = config.ShowTooltipIcons;
         var showGc = config.ShowGcExpertDeliveryStatus;
-        var glamourOnly = config.ShowOnlyForGlamourItems;
         var changed = false;
 
         changed |= ImGui.Checkbox("Enable plugin", ref enabled);
@@ -375,18 +354,15 @@ internal sealed class TrackerWindow : Window
             useLocalStyle
                 ? "This window uses the plugin theme below. Other Dalamud windows keep your global style."
                 : "This window follows your Dalamud global ImGui style.");
-        var themeChanged = false;
         if (useLocalStyle)
         {
             config.LocalUiTheme ??= PluginLocalUiTheme.CreateDefault();
             if (ImGui.CollapsingHeader("Edit theme colors"))
             {
-                themeChanged |= config.LocalUiTheme.DrawEditor();
-                changed |= themeChanged;
+                changed |= config.LocalUiTheme.DrawEditor();
                 if (ImGui.Button("Reset theme to defaults"))
                 {
                     config.LocalUiTheme = PluginLocalUiTheme.CreateDefault();
-                    themeChanged = true;
                     changed = true;
                 }
 
@@ -413,8 +389,7 @@ internal sealed class TrackerWindow : Window
         changed |= ImGui.Checkbox("Color-code dresser/armoire icons on tooltips", ref showIcons);
         ImGui.TextDisabled("Green = stored, red = missing (for items that can use that storage).");
         changed |= ImGui.Checkbox("Show dresser/armoire icons on GC expert delivery", ref showGc);
-        ImGui.TextDisabled("Hover any item tooltip once to save the texture path; atlas UV stays fixed after that.");
-        changed |= ImGui.Checkbox("Only annotate glamour gear", ref glamourOnly);
+        ImGui.TextDisabled("Uses ui/uld/ItemDetailPutIn (baked). Atlas UV can still be tuned below.");
 
         ImGui.Separator();
         var showPlateOverlay = config.ShowPlateEditorOverlay;
@@ -431,12 +406,14 @@ internal sealed class TrackerWindow : Window
 
         changed |= ImGui.Checkbox("Show reroll next to each slot", ref showSlotReroll);
 
+#if GLAMOUR_DEV
         if (showSlotReroll && ImGui.CollapsingHeader("Slot button positions"))
         {
             ImGui.Indent();
             changed |= PlateEditorOverlay.DrawSlotRerollPlacementControls(config, "settings");
             ImGui.Unindent();
         }
+#endif
 
         if (showGc && ImGui.CollapsingHeader("GC icon atlas (tuning)"))
             changed |= DrawGcIconTuning(config);
@@ -447,15 +424,10 @@ internal sealed class TrackerWindow : Window
             config.UseLocalUiStyle = useLocalStyle;
             config.ShowTooltipIcons = showIcons;
             config.ShowGcExpertDeliveryStatus = showGc;
-            config.ShowOnlyForGlamourItems = glamourOnly;
             config.ShowPlateEditorOverlay = showPlateOverlay;
             config.PlateEditorOverlayOnRight = overlayOnRight;
             config.ShowSlotRerollButtons = showSlotReroll;
             config.Save();
-
-            // Keep a snapshot whenever theme knobs change (defaults are not updated automatically).
-            if (themeChanged && config.LocalUiTheme != null)
-                config.LocalUiTheme.WriteSnapshot();
 
             if (!enabled)
                 this.plugin.RestoreTooltipEnhancements();

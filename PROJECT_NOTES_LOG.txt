@@ -275,3 +275,149 @@
 - Attempt: /glamplus main, /glamplus report = Fashion Report, /glamplus imgui = ImGui; drop /glamplusn and /glamnative handlers
 - Files: Plugin.cs, PluginCommands.cs, README.md, GlamourTrackerNative.json
 - Outcome: implemented; pushing recover-pre-restore
+
+[2026-07-29 15:35] Rename + Fashion Report button (0.1.57)
+- Attempt: Display name "Glamour Tracker+" (keep InternalName GlamourTrackerNative). Overview adds Fashion Report button → OpenFashionReportTab.
+- Backup: .cursor/backups/2026-07-29_153447
+- Outcome: worked — Release build 0.1.57; display name Glamour Tracker+; Overview Fashion Report button
+
+[2026-07-29 16:08] Overview two-column layout (0.1.59)
+- Attempt: Fashion Report full-width on top; storage | outfit sets side-by-side; remove icons; compact label/value rows.
+- Backup: .cursor/backups/2026-07-29_160758
+- Outcome: worked (user iterated on stats)
+
+[2026-07-29 16:27] Overview storage/set stats wording (0.1.60)
+- Stored section; unique dresser/armoire items; Completed in dresser/armoire as X/sets-in-storage; Total sets as owned/eligible; drop plates, not started, % bar.
+- Backup: .cursor/backups/2026-07-29_162636
+- Outcome: Release build OK
+
+[2026-07-29 16:36] Outfit sets storage filter (0.1.61)
+- Attempt: Add All storage / In dresser / In armoire dropdown on Outfit sets toolbar; filter set list + piece detail. Clarify In progress = OwnedPieceCount>0 && MissingPieces>0.
+- Files changed: TrackerNativeHelpers.cs, TrackerNativeAddon.cs, csproj
+- Outcome: pending build
+- Next: Release build + smoke in game
+
+[2026-07-29 16:38] Outfit sets storage filter (0.1.61)
+- Attempt: Storage dropdown All/In dresser/In armoire; filters set list + detail pieces.
+- Files changed: TrackerNativeHelpers.cs, TrackerNativeAddon.cs, csproj 0.1.61
+- Outcome: Release build succeeded
+- Evidence: GlamourTrackerNative/bin/Release/GlamourTrackerNative.dll
+- Backup: .cursor/backups/2026-07-29_163601
+
+[2026-07-29 16:50] Incomplete dresser/armoire + missing piece list (0.1.62)
+- Attempt: Overview Incomplete in dresser/armoire as incomplete/owned; Outfit detail n/n stored + n/n missing list for All/Dresser/Armoire filters.
+- Files: OutfitSetCatalog.cs, TrackerNativeHelpers.cs, TrackerNativeAddon.cs, csproj
+- Outcome: Release build
+- Backup: .cursor/backups/2026-07-29_164749
+
+[2026-07-29 16:56] Drop incomplete stats; split stored/missing sections (0.1.63)
+- Attempt: Remove Overview incomplete rows; Outfit detail = stored header+rows then missing header+rows (no name list).
+- Outcome: pending
+- Backup: .cursor/backups/2026-07-29_165505
+
+[2026-07-29 16:56] Drop incomplete stats; split stored/missing sections (0.1.63)
+- Attempt: Remove Overview incomplete rows; Outfit detail = stored header+rows then missing header+rows (no name list).
+- Outcome: pending
+- Backup: .cursor/backups/2026-07-29_165505
+
+[2026-07-29 16:57] Drop incomplete; split stored/missing sections (0.1.63)
+- Attempt: Removed Overview incomplete rows; Outfit detail stored section then missing section with expanders only.
+- Outcome: Release build ok
+- Backup: .cursor/backups/2026-07-29_165505
+
+[2026-07-29 17:02] Remove outfit detail progress bar (0.1.64)
+- Attempt: Drop ProgressBarNode between stored header and piece rows.
+- Outcome: Release build
+- Backup: .cursor/backups/2026-07-29_170214
+
+[2026-07-29 17:06] Wider Outfit sets scrollbars + min thumb (0.1.65)
+- Attempt: ScrollBarWidth 16 + MinThumbHeight 48 on set list and detail; KamiToolKit supports width/min thumb.
+- Outcome: pending
+- Backup: .cursor/backups/2026-07-29_170511
+
+[2026-07-29 17:07] Wider Outfit sets scrollbars + min thumb (0.1.65)
+- Outcome: Release build ok
+
+[2026-07-29 17:14] Default scrollbar + settings flicker fix (0.1.66)
+- Attempt: ScrollBarWidth 8; form signatures layout-only so OnUpdate does not rebuild on every tick; drop needless ScheduleRebuildForm on settings/randomize toggles.
+- Backup: .cursor/backups/2026-07-29_171352
+- Outcome: pending
+
+[2026-07-29 20:04] Empty gear slot dump via Fitting Room (0.1.71)
+- Attempt: /glamplus slots dumps ImageNode path+UV from Tryon/Character/ArmouryBoard while Fitting Room open (main hand can be empty there).
+- Files: EmptyGearSlotIconDumper.cs, PluginCommands.cs, Plugin.cs
+- Outcome: Release build ok
+- Backup: .cursor/backups/2026-07-29_200315
+- Next: reload plugin, keep Fitting Room open with empty slots, run /glamplus slots, map atlas into Randomize locks
+
+[2026-07-29 20:08] Fix /glamplus slots missing in Release (0.1.72)
+- Attempt: slots/emptyicons was #if GLAMOUR_DEV (Debug-only); Release strip left "Unknown option". Enabled dump in Release.
+- Outcome: Release build; DLL contains emptyicons
+- Next: reload plugin, Fitting Room open, /glamplus slots
+
+[2026-07-29 20:14] Empty-slot dump recurse into components (0.1.73)
+- Attempt: First dump found addons but 0 images — WalkNodes skipped Component UldManager. Deep walk + DragDrop/Icon IconId dump; mirror to .cursor/logs.
+- Evidence: wineprefix empty-slot-icons_20260729_170928.txt images=0
+- Outcome: pending reload
+
+[2026-07-29 20:24] ArmouryBoard.uld empty-slot atlas (0.1.74)
+- Attempt: ATK dump still 0 (icons buried / inaccessible). Switched to Lumina ULD: ui/uld/ArmouryBoard.uld + ArmouryBoard_hr1.tex parts. Randomize locks use TextureButtonNode atlas slices. /glamplus slots dumps ULD parts (no Fitting Room needed).
+- Backup: .cursor/backups/2026-07-29_202323
+- Outcome: Release build ok
+- Next: user reload; check Randomize icons; tweak OH/part map if needed
+
+[2026-07-29 20:30] Fix ArmouryBoard Path char[] + IconId 10000302 (0.1.75)
+- Attempt: ULD asset.Path is char[44]; ToString() was "System.Char[]" so atlas never bound. Fix new string(Path). Dump asset.IconId (QoL sprite set 10000302). Prefer ArmouryBoard.tex / IconId 10000302 / most 48px parts.
+- Outcome: pending reload
+
+[2026-07-29 20:44] Sheet 10000302 + live UV editor (0.1.76)
+- Attempt: Randomize locks use EmptySlotSheetIconId (default 10000302) via GetIconPath; per-slot U/V/W/H in config; Randomize tab UV editor updates icons live without full rebuild.
+- Backup: .cursor/backups/2026-07-29_204115
+- Outcome: Release build ok
+
+[2026-07-29 20:53] Map QoL Extra 10000302 → character.tex (0.1.77)
+- Attempt: 10000302 is QoL FrameIconID+302 = ui/uld/character(_hr1).tex, not GetIconPath. Resolve Extra sheets via QoL map; show resolved path in UV editor.
+- Backup: .cursor/backups/2026-07-29_205158
+- Outcome: pending
+
+[2026-07-29 21:05] Save UV + bake character defaults (0.1.78)
+- Attempt: Save UV layout button; baked tuned UVs from config as DefaultUvBySlot (MH–Feet 32px row, accessories 40px); Reset to defaults uses that layout.
+- Evidence: GlamourTrackerNative.json EmptySlotIcon* arrays
+- Backup: .cursor/backups/2026-07-29_210407
+- Outcome: partial — accessory UVs were still placeholders; user re-saved full layout
+
+[2026-07-29 21:12] Bake saved UVs + QoL hotbar rim (0.1.79)
+- Attempt: Rebake DefaultUvBySlot from saved config (all 32×32; MH–Hands V=72; Legs 192,72; Feet–LR V=104). Wrap each Randomize lock in ResNode with SimpleImageNode rim from ui/uld/icona_frame(_hr1).tex (QoL AddIconFrame UV), icon inset ~4px.
+- Files: EmptyGearSlotAtlas.cs, TrackerNativeAddon.cs, csproj 0.1.79
+- Backup: .cursor/backups/2026-07-29_211047
+- Outcome: failed — user: rim not visible, only black silhouettes; slots don't read as clickable
+
+[2026-07-29 21:25] Hotbar rim overlay + unlocked lift (0.1.80)
+- Attempt: Drop ResNode wrapper; attach rim as component sibling (AsLastChild) over TextureButtonNode so hollow icona_frame draws on top. Always use icona_frame.tex + HD UV (2,282,92×92). Unlocked: AddColor ~0.42 lift (black silhouettes can't lighten via Multiply alone); locked: dimmer + lower alpha.
+- Backup: .cursor/backups/2026-07-29_212135
+- Outcome: failed — AddColor OK but still dim; frame still missing (ATK LoadTexture path)
+
+[2026-07-29 21:35] Rim via TexFile CreateFromRaw + brighter AddColor (0.1.81)
+- Attempt: Load icona_frame like QoL (GetFile TexFile → GetRgbaImageData → CreateFromRaw), bind via Part.LoadTexture(wrap) without stripping _hr1. Rim on ResNode over inset icon (AddColor only on button). Unlocked AddColor 0.72. Log empty.slot.rim on success/fail.
+- Backup: .cursor/backups/2026-07-29_212805
+- Outcome: failed — frame still missing
+
+[2026-07-29 21:40] BgParts button chrome + lock tint fix (0.1.82)
+- Attempt: Drop icona_frame; use IconButtonNode BgParts SimpleNineGridNode as AsFirstChild of TextureButtonNode. Locked: AddColor 0 (true black on plate). Unlocked: AddColor 0.88 light grey.
+- Backup: .cursor/backups/2026-07-29_213328
+- Outcome: failed — buttons completely invisible (post-hoc attach broke TextureButtonNode)
+
+[2026-07-29 21:42] ImGuiIconButtonNode slot locks (0.1.83)
+- Attempt: Use stock ImGuiIconButtonNode (BgParts + ImGuiImageNode built in ctor). Locked: ImageNode AddColor 0. Unlocked: ImageNode AddColor 0.88, re-applied each OnUpdate (timelines wipe idle AddColor).
+- Backup: .cursor/backups/2026-07-29_213528
+- Outcome: partial — buttons look right, but AutoFit shows whole sheet; unlock tint flickers on hover/rebuild
+
+[2026-07-29 21:45] Slot UV + stable unlock tint (0.1.84)
+- Attempt: Clear AutoFit, Stretch + per-slot UV. Replace ImageNode timeline so unlock AddColor (raw ~225) is baked into all hover/idle frames; remove per-frame OnUpdate tint.
+- Backup: .cursor/backups/2026-07-29_214205
+- Outcome: Release build ok
+- Next: reload; confirm correct silhouettes + no hover flicker
+
+[2026-07-29T19:09:27Z] Unlock icons: root cause was SD UV (ATK) vs HR crop 1x — now full-sheet recolor + UV*atkScale (0.1.92).
+
+[2026-07-29T19:13:37Z] Unlock brightness: alpha pow0.55 + AddColor timeline/ResNode (0.1.93).

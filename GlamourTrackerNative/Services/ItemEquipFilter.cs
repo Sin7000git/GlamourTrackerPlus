@@ -15,8 +15,20 @@ internal static class ItemEquipFilter
             return false;
 
         var category = item.ClassJobCategory.Value;
-        var abbr = job.Abbreviation.ExtractText();
-        return abbr switch
+        if (MatchesAbbreviation(category, job.Abbreviation.ExtractText()))
+            return true;
+
+        // Job rows (NIN, DRG, …): also accept gear flagged for the starter class.
+        if (ClassJobFilterList.TryGetDistinctParentId(job, out var parentId)
+            && classJobs.TryGetRow(parentId, out var parent)
+            && MatchesAbbreviation(category, parent.Abbreviation.ExtractText()))
+            return true;
+
+        return false;
+    }
+
+    private static bool MatchesAbbreviation(ClassJobCategory category, string abbr) =>
+        abbr switch
         {
             "GLA" => category.GLA,
             "PGL" => category.PGL,
@@ -62,7 +74,6 @@ internal static class ItemEquipFilter
             "PCT" => category.PCT,
             _ => false,
         };
-    }
 
     /// <summary>
     /// True when the item can be equipped by the given race and sex (EquipRaceCategory).

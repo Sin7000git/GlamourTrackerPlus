@@ -7,7 +7,7 @@ namespace GlamourTracker;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 10;
+    public int Version { get; set; } = 11;
 
     public bool Enabled { get; set; } = true;
 
@@ -17,9 +17,6 @@ public sealed class Configuration : IPluginConfiguration
     /// <summary>Editable FFXIV-inspired theme used when <see cref="UseLocalUiStyle"/> is on.</summary>
     public PluginLocalUiTheme LocalUiTheme { get; set; } = PluginLocalUiTheme.CreateDefault();
     public bool ShowTooltipIcons { get; set; } = true;
-    public bool ShowTooltipText { get; set; } = false;
-    public bool MarkSafeToSell { get; set; } = false;
-    public bool ShowOnlyForGlamourItems { get; set; } = false;
     public bool ShowGcExpertDeliveryStatus { get; set; } = true;
 
     /// <summary>Include glamour dresser (Prism Box) items when randomizing plates.</summary>
@@ -92,7 +89,7 @@ public sealed class Configuration : IPluginConfiguration
     public int RandomizeMinItemLevel { get; set; } = 1;
     public int RandomizeMaxItemLevel { get; set; } = 800;
 
-    /// <summary>Game texture path for the glamour dresser symbol (captured from ItemDetail).</summary>
+    /// <summary>Game texture path for the glamour dresser symbol (baked ItemDetailPutIn).</summary>
     public string? DresserUiIconPath { get; set; }
 
     public ushort DresserUiIconU { get; set; } = StorageIconAtlasDefaults.DresserU;
@@ -102,7 +99,7 @@ public sealed class Configuration : IPluginConfiguration
     public float DresserUiDisplayW { get; set; } = StorageIconAtlasDefaults.DisplaySize;
     public float DresserUiDisplayH { get; set; } = StorageIconAtlasDefaults.DisplaySize;
 
-    /// <summary>Game texture path for the armoire symbol (captured from ItemDetail).</summary>
+    /// <summary>Game texture path for the armoire symbol (baked ItemDetailPutIn).</summary>
     public string? ArmoireUiIconPath { get; set; }
 
     public ushort ArmoireUiIconU { get; set; } = StorageIconAtlasDefaults.ArmoireU;
@@ -127,7 +124,7 @@ public sealed class Configuration : IPluginConfiguration
     public float ArmoireIconDisplayScale { get; set; } = StorageIconAtlasDefaults.DisplayScale;
     public bool FlipArmoireIconV { get; set; } = StorageIconAtlasDefaults.FlipVertically;
 
-    /// <summary>Texture path + UV saved after first item tooltip; later hovers do not overwrite atlas coordinates.</summary>
+    /// <summary>True once dresser/armoire atlas path + UV defaults are set (baked ItemDetailPutIn).</summary>
     public bool StorageIconAtlasConfigured { get; set; }
 
     /// <summary>Persisted glamour ownership per character (ContentId).</summary>

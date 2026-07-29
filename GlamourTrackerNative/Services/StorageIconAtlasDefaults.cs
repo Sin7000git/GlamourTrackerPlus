@@ -1,11 +1,17 @@
+using Dalamud.Plugin.Services;
+
 namespace GlamourTracker.Services;
 
 /// <summary>
 /// ItemDetail storage icon sheet layout (shared UI atlas) for GC markers / tooltips.
+/// Texture is <c>ui/uld/ItemDetailPutIn</c> (not a QoL Extra sheet id).
 /// Tuned 2026-07-27 for ATK SimpleImageNode sampling (no ImGui flip remap).
 /// </summary>
 internal static class StorageIconAtlasDefaults
 {
+    /// <summary>ULD stem for dresser/armoire eligibility icons (no .tex / _hr1).</summary>
+    public const string TextureStem = "ui/uld/ItemDetailPutIn";
+
     public const ushort IconV = 0;
     public const ushort IconW = 18;
     public const ushort IconH = 18;
@@ -58,5 +64,27 @@ internal static class StorageIconAtlasDefaults
         config.FlipArmoireIconV = FlipVertically;
         config.ArmoireUiDisplayW = DisplaySize;
         config.ArmoireUiDisplayH = DisplaySize;
+    }
+
+    /// <summary>Resolves <see cref="TextureStem"/> preferring HR when present.</summary>
+    public static string ResolveTexturePath(IDataManager data)
+    {
+        var hr = TextureStem + "_hr1.tex";
+        if (data.FileExists(hr))
+            return hr;
+
+        var sd = TextureStem + ".tex";
+        if (data.FileExists(sd))
+            return sd;
+
+        return hr;
+    }
+
+    public static bool IsItemDetailPutInPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return false;
+
+        return path.Contains("ItemDetailPutIn", StringComparison.OrdinalIgnoreCase);
     }
 }

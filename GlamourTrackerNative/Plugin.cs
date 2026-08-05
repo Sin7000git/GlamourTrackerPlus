@@ -133,7 +133,6 @@ public sealed class Plugin : IDalamudPlugin
         artisanIpc = new ArtisanIpcClient(PluginInterface, Log);
         recipeLookup = new FashionRecipeLookup(DataManager);
         fashionProgress = new FashionReportProgressTracker(
-            PluginInterface,
             GameInterop,
             () => Configuration,
             GetLocalContentIdStatic,
@@ -248,6 +247,10 @@ public sealed class Plugin : IDalamudPlugin
             GlamourPlateStore.SyncFromGame(Configuration, GetLocalContentId());
 
         fashionReport.RebindOwnership();
+
+        // Dresser UI events / Refresh now update ownership without going through OnShow —
+        // Overview must rebuild or it stays stuck on stale 0/N after Clear + resync.
+        trackerNativeAddon?.RequestFormRebuild();
     }
 
     internal ulong GetLocalContentId() => GetLocalContentIdStatic();
@@ -310,6 +313,14 @@ public sealed class Plugin : IDalamudPlugin
         this.wasEnabled = true;
         plateRandomizer.Tick();
 
+        // ContentId can lag behind IsLoggedIn — finish deferred cache load before any wipe-prone refresh.
+        if (ownershipIndex.TryFinishPendingLoginLoad())
+        {
+            RefreshAll(true);
+            this.lastBackgroundRefresh = DateTime.UtcNow;
+            return;
+        }
+
         if ((DateTime.UtcNow - this.lastBackgroundRefresh).TotalSeconds < BackgroundRefreshSeconds)
             return;
 
@@ -319,9 +330,14 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnLogin()
     {
-        ownershipIndex.OnCharacterLogin(GetLocalContentId());
-        RefreshAll(true);
-        this.lastBackgroundRefresh = DateTime.UtcNow;
+        var contentId = GetLocalContentId();
+        ownershipIndex.OnCharacterLogin(contentId);
+        // Skip immediate RefreshAll when ContentId is still 0 — framework tick will load + refresh.
+        if (contentId != 0)
+        {
+            RefreshAll(true);
+            this.lastBackgroundRefresh = DateTime.UtcNow;
+        }
     }
 
     private void OnLogout(int type, int code)
@@ -441,6 +457,22 @@ public sealed class Plugin : IDalamudPlugin
             config.StorageIconAtlasConfigured = true;
             if (config.Version < 11)
                 config.Version = 11;
+            dirty = true;
+        }
+
+        // v12: one-shot clear Fashion Report progress (stale Complete survived week roll via Math.Max / bad saves).
+        if (config.Version < 12)
+        {
+            foreach (var cache in config.CharacterCaches.Values)
+            {
+                cache.FashionReportHighestScore = 0;
+                cache.FashionReportAllowancesRemaining = 4;
+                cache.FashionReportSynced = false;
+                cache.FashionReportFromDailyDuty = false;
+                cache.FashionReportNextResetUtc = default;
+            }
+
+            config.Version = 12;
             dirty = true;
         }
 

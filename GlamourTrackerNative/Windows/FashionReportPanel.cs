@@ -181,8 +181,7 @@ internal sealed class FashionReportPanel
             FashionReportProgressKind.Incomplete =>
                 $"Best score this week: {progress.HighestScore}. Attempts left: {progress.AllowancesRemaining}.",
             FashionReportProgressKind.Unknown =>
-                "Talk to Masked Rose at the Gold Saucer to sync your score.\n"
-                + "If DailyDuty is installed, its Fashion Report data is used automatically.",
+                "Talk to Masked Rose at the Gold Saucer to sync your score.",
             _ => "Fashion Report judging runs Friday through Tuesday reset.",
         };
 

@@ -7,7 +7,7 @@ namespace GlamourTracker;
 [Serializable]
 public sealed class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 11;
+    public int Version { get; set; } = 12;
 
     public bool Enabled { get; set; } = true;
 

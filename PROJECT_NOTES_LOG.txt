@@ -421,3 +421,61 @@
 [2026-07-29T19:09:27Z] Unlock icons: root cause was SD UV (ATK) vs HR crop 1x — now full-sheet recolor + UV*atkScale (0.1.92).
 
 [2026-07-29T19:13:37Z] Unlock brightness: alpha pow0.55 + AddColor timeline/ResNode (0.1.93).
+
+[2026-07-31] Fashion Report stale Complete + dresser cache wipe
+- Attempt: Respect DailyDuty NextReset (no Math.Max across weeks); clear unused-week DD imports; EnsureWeekReset clears missing NextReset; SavePersisted merge-in-place (keep FR fields); persist DresserSlotsUsed; defer login load until ContentId!=0; never overwrite dresser ids with empty non-authoritative read. Config v12 one-shot FR clear. Version 0.1.103.
+- Files: FashionReportProgressTracker.cs, GlamourOwnershipIndex.cs, CharacterGlamourCache.cs, Plugin.cs, TrackerNativeAddon.cs, Configuration.cs, csproj
+- Outcome: pending reload
+- Next: reload Release; Overview should show saved dresser without visit; FR should say talk to Rose / not Complete 88
+
+[2026-07-31] Standalone FR + clearer Overview + refresh on open
+- Attempt: Remove DailyDuty import (Masked Rose only). Clarify Overview saved-list wording. RefreshAll on TrackerNativeAddon.OnShow. 0.1.104.
+- Outcome: pending reload
+
+[2026-07-31] Completed-in-dresser 0/n from cache
+- Attempt: ItemFinder add-only (not replace); Overview counts set row ids as complete; live IsInDresser checks. 0.1.105.
+- Outcome: pending reload
+
+[2026-07-31] Remove native Randomize tab
+- Attempt: Drop TabRandomize + BuildRandomize* from TrackerNativeAddon; plate-editor ImGui overlay remains. README updated. 0.1.107.
+- Outcome: Release build ok
+
+[2026-07-31] Fix false 262/262 completed dresser sets
+- Attempt: Complete = all pieces in dresser only; stop treating piece ItemId==MirageStoreSetItem.RowId as set stored; rebuild set presence via IsSetSlotUnlocked. 0.1.108.
+- Outcome: Release build ok — but Overview then showed "—" (SetsInDresser=0) because cash-shop sets live as Mirage slot unlocks, not loose pieces; GetOverviewStats ignored rebuilt set rows.
+
+[2026-07-31] Restore Mirage set unlocks for Overview (no false complete)
+- Attempt: Count set presence/complete from Mirage all-glam-slot unlocks + pieces; persist DresserSetRowIds/CompleteSetRowIds; completed ratio uses DresserEligible (not SetsInDresser) so "0 / N" not "—"; harden auth agent empty + refresh logging. 0.1.109.
+- Outcome: Wrong UX — showed 0/1086 and 31/468 (vs all eligible). User wants 0.1.102 style completed/in-storage (73/262, 31/84).
+
+[2026-07-31] Restore Completed = finished / sets-in-storage
+- Attempt: Revert Overview ratios to Completed/SetsInDresser (and armoire); presence = IsUnlocked|set row; complete = all glam pieces only (0.1.102). 0.1.110.
+- Outcome: Showed "—" again — baked IsUnlocked stale; Mirage rebuild wiped DresserSetRowIds to []; config had empty set lists.
+
+[2026-07-31] Fix dresser Completed "—" (set-list presence)
+- Attempt: Sync/persist set presence from ItemFinder unlock bits; never wipe with empty Mirage; Overview uses live unlock + persisted set rows + any piece; complete = all pieces only. 0.1.111.
+- Outcome: Still "—"; config had 561 dresser items but DresserSetRowIds=[]. Unlock-bit sync found 0 (RowId≠bit index). Real presence = set RowIds inside dresser item list (0.1.102).
+
+[2026-07-31] Set presence from dresser item RowIds
+- Attempt: Rebuild cachedDresserSetRowIds from dresser items ∩ MirageStoreSetItem.RowId; recover on load; complete still = all glam pieces only. 0.1.112.
+- Outcome: Presence OK (262) but Completed stayed 0/262 — Overview ignored Mirage slot completes; sets are stored as set-rows not loose pieces.
+
+[2026-07-31] Completed uses Mirage slots + Clear resets UI to 0
+- Attempt: Overview complete = Mirage all glam slots OR all pieces (same as IsDresserSetComplete); persist complete cache; Clear saved data skips RefreshAll and rebuilds UI to zeros. 0.1.113.
+- Outcome: Still 0/262 — IsOutfitSlotUnlocked/IsMiragePrismReady required PrismBoxLoaded (0.1.102 did not).
+
+[2026-07-31] Restore 0.1.102 IsSetSlotUnlocked (no PrismBoxLoaded gate)
+- Attempt: Slot unlock checks work without PrismBoxLoaded; complete = piece in dresser OR slot unlocked; log overview ratios. 0.1.114.
+- Outcome: Config already had 74 complete / 264 present — UI stayed 0/262 because Overview OnUpdate skipped RebuildForm entirely after first paint.
+
+[2026-07-31] Overview rebuilds when stats signature changes
+- Attempt: RefreshActiveTab lets RebuildForm run (signature no-op when unchanged); OnShow ScheduleRebuildForm after RefreshAll; never save empty complete-set list over persisted; complete-cache check before empty glamPieces. 0.1.115.
+- Outcome: After Clear → 0/264 again; disk later had 74 completes but UI/refresh from dresser events didn't rebuild Overview.
+
+[2026-07-31] RefreshAll requests Overview rebuild; hydrate completes
+- Attempt: Plugin.RefreshAll → RequestFormRebuild; hydrate completes from config if runtime empty; Mirage complete scan requires PrismBoxLoaded and checks all non-empty slots. 0.1.116.
+- Outcome: Still 0/264 after Clear. Log: Complete scan found 0 with prismLoaded=true — IsSetSlotUnlocked was called with set RowId; API wants PrismBoxItemIds index.
+
+[2026-07-31] IsSetSlotUnlocked uses Prism Box index
+- Attempt: Scan PrismBoxItemIds for set-row entries; call IsSetSlotUnlocked(index, slot); persist completes; stop overview log spam. 0.1.117.
+- Outcome: pending build

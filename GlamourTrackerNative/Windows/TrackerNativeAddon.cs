@@ -8,15 +8,15 @@ using GlamourTracker.Windows.Native;
 using KamiToolKit.BaseTypes;
 using KamiToolKit.Enums;
 using KamiToolKit.Nodes;
-using KamiToolKit.Timelines;
 using Lumina.Excel.Sheets;
 using Lumina.Text.ReadOnly;
 
 namespace GlamourTracker.Windows;
 
 /// <summary>
-/// Main window: Overview, Outfit sets, Randomize, Settings.
+/// Main window: Overview, Outfit sets, Settings.
 /// Fashion Report opens via Overview button or <see cref="FashionReportNativeAddon"/>.
+/// Plate randomize lives on the plate-editor ImGui overlay (not a main-window tab).
 /// </summary>
 internal sealed class TrackerNativeAddon : NativeAddon
 {
@@ -31,7 +31,6 @@ internal sealed class TrackerNativeAddon : NativeAddon
 
     internal const string TabOverview = "Overview";
     internal const string TabOutfitSets = "Outfit sets";
-    internal const string TabRandomize = "Randomize";
     internal const string TabSettings = "Settings";
 
     private readonly Plugin plugin;
@@ -69,8 +68,6 @@ internal sealed class TrackerNativeAddon : NativeAddon
     private string lastFormSignature = string.Empty;
     private string lastBrowserListSignature = string.Empty;
     private string lastBrowserDetailKey = string.Empty;
-    private readonly ImGuiIconButtonNode?[] slotLockButtons = new ImGuiIconButtonNode?[GlamourPlateSlotMap.SlotCount];
-    private string? emptySlotTexturePath;
 
     private Vector2 bodyOrigin;
     private Vector2 bodySize;
@@ -113,7 +110,6 @@ internal sealed class TrackerNativeAddon : NativeAddon
         tabBar.AttachNode(this);
         tabBar.AddTab(TabOverview, () => SelectTab(TabOverview));
         tabBar.AddTab(TabOutfitSets, () => SelectTab(TabOutfitSets));
-        tabBar.AddTab(TabRandomize, () => SelectTab(TabRandomize));
         tabBar.AddTab(TabSettings, () => SelectTab(TabSettings));
 
         formScroll = new ScrollingNode<VerticalListNode>
@@ -322,6 +318,17 @@ internal sealed class TrackerNativeAddon : NativeAddon
         };
     }
 
+    protected override unsafe void OnShow(AtkUnitBase* addon)
+    {
+        base.OnShow(addon);
+        plugin.RefreshAll(true);
+        lastFormSignature = string.Empty;
+        lastBrowserListSignature = string.Empty;
+        lastBrowserDetailKey = string.Empty;
+        // RefreshAll may fill dresser set completes after the first paint — force a rebuild.
+        ScheduleRebuildForm();
+    }
+
     protected override unsafe void OnUpdate(AtkUnitBase* addon)
     {
         base.OnUpdate(addon);
@@ -419,11 +426,8 @@ internal sealed class TrackerNativeAddon : NativeAddon
             return;
         }
 
-        // Overview/Settings: only rebuild on explicit force (tab enter, Refresh, layout toggles).
-        // Rebuilding every OnUpdate when stats change tears down nodes → flicker + scroll jumps.
-        if (!force && selectedTab is TabOverview or TabSettings)
-            return;
-
+        // Overview/Settings: RebuildForm no-ops when the stats signature is unchanged, so this
+        // stays cheap every frame but still picks up dresser/armoire counts after a refresh.
         RebuildForm(force);
     }
 
@@ -440,6 +444,19 @@ internal sealed class TrackerNativeAddon : NativeAddon
             if (!IsOpen)
                 return;
             RebuildForm(force: true);
+        }, delayTicks: 1);
+    }
+
+    /// <summary>Called from Plugin.RefreshAll so Overview picks up dresser/armoire resyncs.</summary>
+    internal void RequestFormRebuild()
+    {
+        _ = Plugin.Framework.RunOnTick(() =>
+        {
+            if (!IsOpen)
+                return;
+
+            // Signature no-op when counts unchanged — avoids rebuilding every background refresh.
+            RebuildForm(force: false);
         }, delayTicks: 1);
     }
 
@@ -462,9 +479,6 @@ internal sealed class TrackerNativeAddon : NativeAddon
             case TabOverview:
                 BuildOverview(list, width);
                 break;
-            case TabRandomize:
-                BuildRandomize(list, width);
-                break;
             case TabSettings:
                 BuildSettings(list, width);
                 break;
@@ -486,9 +500,6 @@ internal sealed class TrackerNativeAddon : NativeAddon
         {
             TabOverview =>
                 BuildOverviewSignature(index),
-            // Only flags that add/remove child controls.
-            TabRandomize =>
-                $"rz|{(int)c.RandomizeJobFilter}|{c.RandomizeLimitRequiredLevel}|{c.RandomizeLimitItemLevel}",
             TabSettings =>
                 $"st|{c.ShowPlateEditorOverlay}",
             _ => selectedTab,
@@ -556,12 +567,14 @@ internal sealed class TrackerNativeAddon : NativeAddon
         var dresserSlots = index.DresserSlotsUsed > 0
             ? $"{index.DresserSlotsUsed} / 800"
             : "—";
-        leftCol.AddNode(MakeOverviewStatRow("Dresser", dresserSlots, colW));
+        leftCol.AddNode(MakeOverviewStatRow("Dresser slots", dresserSlots, colW));
         leftCol.AddNode(MakeOverviewStatRow("Unique items in dresser", $"{index.DresserUniqueCount}", colW));
         leftCol.AddNode(MakeOverviewStatRow("Unique items in armoire", $"{index.ArmoireCount}", colW));
         var dataNote = index.HasPersistedData
-            ? $"Last refresh {index.LastRefresh.ToLocalTime():t} · Saved"
-            : "Not saved yet — open dresser or armoire, then Refresh";
+            ? index.LastRefresh == DateTime.MinValue
+                ? "Showing your last saved dresser/armoire list"
+                : $"Last updated {index.LastRefresh.ToLocalTime():g}"
+            : "No saved list yet — open your dresser or armoire once";
         leftCol.AddNode(MakeMutedIndented(dataNote, colW));
         leftCol.RecalculateLayout();
 
@@ -617,15 +630,16 @@ internal sealed class TrackerNativeAddon : NativeAddon
         {
             Size = new Vector2(140f, RowH),
             String = "Clear saved data",
-            TextTooltip = "Clears ownership cache. Open dresser or armoire, then Refresh.",
+            TextTooltip = "Clears ownership cache and resets Overview counts. Open dresser or armoire, then Refresh.",
             OnClick = () =>
             {
+                // Do not RefreshAll here — live armoire/dresser reads would immediately refill the UI.
                 plugin.OwnershipIndex.ClearRuntimeCache();
                 plugin.Configuration.CharacterCaches.Clear();
                 plugin.Configuration.Save();
-                plugin.RefreshAll(true);
+                plugin.OutfitSets.Invalidate();
                 Plugin.ChatGui.Print(
-                    "Glamour Tracker+ saved ownership cleared. Open your dresser or armoire, then Refresh.");
+                    "Glamour Tracker+ saved ownership cleared. Open your glamour dresser (so sets can be rescanned), then click Refresh now.");
                 ScheduleRebuildForm();
             },
         });
@@ -679,337 +693,6 @@ internal sealed class TrackerNativeAddon : NativeAddon
             String = (ReadOnlySeString)text,
             TextFlags = TextFlags.Ellipsis,
         };
-
-    private void BuildRandomize(VerticalListNode list, float width)
-    {
-        var config = plugin.Configuration;
-        GlamourPlateRandomizer.EnsureLockArray(config);
-
-        var colGap = OverviewColumnGap;
-        var leftW = MathF.Floor((width - colGap) * 0.55f);
-        var rightW = width - colGap - leftW;
-
-        var leftCol = new VerticalListNode
-        {
-            Size = new Vector2(leftW, 1f),
-            FitContents = true,
-            FitWidth = true,
-            ItemSpacing = 4f,
-        };
-        var rightCol = new VerticalListNode
-        {
-            Size = new Vector2(rightW, 1f),
-            FitContents = true,
-            FitWidth = true,
-            ItemSpacing = 4f,
-        };
-
-        BuildRandomizeFilters(leftCol, config, leftW);
-        BuildRandomizeSlotLocks(rightCol, config, rightW);
-
-        leftCol.RecalculateLayout();
-        rightCol.RecalculateLayout();
-
-        var columnsH = MathF.Max(leftCol.Height, rightCol.Height);
-        var columns = new ResNode { Size = new Vector2(width, columnsH) };
-        leftCol.Position = Vector2.Zero;
-        rightCol.Position = new Vector2(leftW + colGap, 0f);
-        leftCol.AttachNode(columns);
-        rightCol.AttachNode(columns);
-        list.AddNode(columns);
-
-        list.AddNode(MakeMuted(
-            "Randomize and slot reroll run from the controls above the plate editor.",
-            width));
-    }
-
-    private void BuildRandomizeFilters(VerticalListNode list, Configuration config, float width)
-    {
-        list.AddNode(MakeSection("Sources"));
-        list.AddNode(MakeCheckbox("Use dresser items", config.RandomizeIncludeDresser, v =>
-        {
-            config.RandomizeIncludeDresser = v;
-            config.Save();
-        }));
-        list.AddNode(MakeCheckbox("Use armoire items", config.RandomizeIncludeArmoire, v =>
-        {
-            config.RandomizeIncludeArmoire = v;
-            config.Save();
-        }));
-
-        list.AddNode(MakeSection("Filters"));
-        var jobModes = TrackerNativeHelpers.JobModeLabels.ToList();
-        var modeIndex = Math.Clamp((int)config.RandomizeJobFilter, 0, jobModes.Count - 1);
-        var jobModeDrop = new StringDropDownNode
-        {
-            Size = new Vector2(MathF.Min(200f, width), RowH),
-            Options = jobModes,
-            SelectedOption = jobModes[modeIndex],
-            MaxListOptions = 3,
-        };
-        jobModeDrop.OnOptionSelected = label =>
-        {
-            var idx = jobModes.IndexOf(label);
-            if (idx < 0)
-                return;
-            config.RandomizeJobFilter = (RandomizeJobFilterMode)idx;
-            config.Save();
-            ScheduleRebuildForm();
-        };
-        list.AddNode(jobModeDrop);
-
-        if (config.RandomizeJobFilter == RandomizeJobFilterMode.CurrentJob)
-        {
-            var player = Plugin.ObjectTable.LocalPlayer;
-            var jobLine = "Current job unknown";
-            if (player != null
-                && Plugin.DataManager.GetExcelSheet<ClassJob>().TryGetRow(player.ClassJob.RowId, out var job))
-            {
-                jobLine = $"{job.Abbreviation.ExtractText()} — {job.Name.ExtractText()}";
-            }
-
-            list.AddNode(MakeIndentedText(jobLine, width));
-        }
-        else if (config.RandomizeJobFilter == RandomizeJobFilterMode.SpecificJob)
-        {
-            BuildJobPicker(list, config, width);
-        }
-
-        list.AddNode(MakeCheckbox("Limit by required level", config.RandomizeLimitRequiredLevel, v =>
-        {
-            config.RandomizeLimitRequiredLevel = v;
-            config.Save();
-            ScheduleRebuildForm();
-        }));
-        if (config.RandomizeLimitRequiredLevel)
-        {
-            list.AddNode(MakeLabeledSlider("Lowest", config.RandomizeMinRequiredLevel, 1, 100, v =>
-            {
-                config.RandomizeMinRequiredLevel = v;
-                config.Save();
-            }, width, indented: true));
-            list.AddNode(MakeLabeledSlider("Highest", config.RandomizeMaxRequiredLevel, 1, 100, v =>
-            {
-                config.RandomizeMaxRequiredLevel = v;
-                config.Save();
-            }, width, indented: true));
-        }
-
-        list.AddNode(MakeCheckbox("Limit by item level", config.RandomizeLimitItemLevel, v =>
-        {
-            config.RandomizeLimitItemLevel = v;
-            config.Save();
-            ScheduleRebuildForm();
-        }));
-        if (config.RandomizeLimitItemLevel)
-        {
-            list.AddNode(MakeLabeledNumeric("Minimum", config.RandomizeMinItemLevel, 1, 9999, v =>
-            {
-                config.RandomizeMinItemLevel = v;
-                config.Save();
-            }, width, indented: true));
-            list.AddNode(MakeLabeledNumeric("Maximum", config.RandomizeMaxItemLevel, 1, 9999, v =>
-            {
-                config.RandomizeMaxItemLevel = v;
-                config.Save();
-            }, width, indented: true));
-        }
-    }
-
-    private void BuildRandomizeSlotLocks(VerticalListNode list, Configuration config, float width)
-    {
-        list.AddNode(MakeSection("Slot locks"));
-        list.AddNode(MakeMuted("Click a slot to lock or unlock it. Light grey = unlocked, black = locked.", width));
-        GlamourPlateRandomizer.EnsureLockArray(config);
-        var locks = config.RandomizeLockedSlots;
-
-        emptySlotTexturePath = EmptyGearSlotAtlas.ResolveTexturePath(
-            Plugin.DataManager,
-            Plugin.TextureProvider);
-        Array.Clear(slotLockButtons);
-
-        const float cellSize = 48f;
-
-        // 2×6 grid matching plate order (weapons → armor → accessories).
-        for (var row = 0; row < 2; row++)
-        {
-            var rowNode = new HorizontalListNode
-            {
-                Size = new Vector2(width, cellSize + 4f),
-                ItemSpacing = 8f,
-            };
-            for (var col = 0; col < 6; col++)
-            {
-                var i = row * 6 + col;
-                if (i >= GlamourPlateSlotMap.SlotCount)
-                    break;
-                var slot = i;
-                var locked = locks[i];
-
-                // ImGuiIconButtonNode = BgParts chrome + atlas image (same as stock KamiToolKit icon buttons).
-                var iconBtn = new ImGuiIconButtonNode
-                {
-                    Size = new Vector2(cellSize, cellSize),
-                    ShowBackground = true,
-                };
-                ApplyEmptySlotTexture(iconBtn, slot);
-                slotLockButtons[slot] = iconBtn;
-                ApplySlotLockVisual(iconBtn, slot, locked);
-                // Do not RebuildForm here — disposing this button mid-click crashes the client.
-                iconBtn.OnClick = () =>
-                {
-                    GlamourPlateRandomizer.EnsureLockArray(plugin.Configuration);
-                    var nowLocked = !plugin.Configuration.RandomizeLockedSlots[slot];
-                    plugin.Configuration.RandomizeLockedSlots[slot] = nowLocked;
-                    plugin.Configuration.Save();
-                    ApplySlotLockVisual(iconBtn, slot, nowLocked);
-                };
-                rowNode.AddNode(iconBtn);
-            }
-
-            list.AddNode(rowNode);
-        }
-
-        var lockButtons = new HorizontalListNode
-        {
-            Size = new Vector2(width, RowH),
-            ItemSpacing = 8f,
-        };
-        lockButtons.AddNode(new TextButtonNode
-        {
-            Size = new Vector2(100f, RowH),
-            String = "Unlock all",
-            OnClick = () =>
-            {
-                GlamourPlateRandomizer.EnsureLockArray(config);
-                Array.Fill(config.RandomizeLockedSlots, false);
-                config.Save();
-                ScheduleRebuildForm();
-            },
-        });
-        lockButtons.AddNode(new TextButtonNode
-        {
-            Size = new Vector2(100f, RowH),
-            String = "Lock all",
-            OnClick = () =>
-            {
-                GlamourPlateRandomizer.EnsureLockArray(config);
-                Array.Fill(config.RandomizeLockedSlots, true);
-                config.Save();
-                ScheduleRebuildForm();
-            },
-        });
-        list.AddNode(lockButtons);
-    }
-
-    private void ApplyEmptySlotTexture(ImGuiIconButtonNode button, int slot)
-    {
-        var path = emptySlotTexturePath
-            ?? EmptyGearSlotAtlas.ResolveTexturePath(
-                Plugin.DataManager,
-                Plugin.TextureProvider);
-        var slice = EmptyGearSlotAtlas.GetSlice(slot);
-        if (!string.IsNullOrWhiteSpace(path))
-            button.TexturePath = path;
-
-        // ImGuiIconButtonNode defaults to AutoFit (whole sheet). Need explicit UV parts.
-        button.ImageNode.ImageNodeFlags = 0;
-        button.ImageNode.WrapMode = WrapMode.Stretch;
-        button.ImageNode.TextureCoordinates = new Vector2(slice.U, slice.V);
-        button.ImageNode.TextureSize = new Vector2(slice.Width, slice.Height);
-    }
-
-    /// <summary>
-    /// Unlocked silhouette brightness (0–1). ColorImageNode-style tint:
-    /// texture RGB is zeroed; AddColor paints the alpha shape (reads as light grey in ATK).
-    /// Restored from 0.1.87 — pixel-recolor white path abandoned.
-    /// </summary>
-    private const float UnlockedSlotBrightness = 1.0f;
-
-    private static void ApplySlotLockVisual(ImGuiIconButtonNode button, int slot, bool locked)
-    {
-        button.AddColor = Vector3.Zero;
-        button.Alpha = 1f;
-        ApplySlotLockImageTimeline(button);
-        button.ImageNode.MultiplyColor = Vector3.One;
-
-        if (locked)
-        {
-            // True black silhouette from the sheet.
-            button.ImageNode.Color = Vector4.One;
-            button.ImageNode.AddColor = Vector3.Zero;
-        }
-        else
-        {
-            // Zero texture RGB; AddColor fills the glyph (keeps alpha). Light grey unlocked.
-            button.ImageNode.Color = new Vector4(0f, 0f, 0f, 1f);
-            button.ImageNode.AddColor = new Vector3(UnlockedSlotBrightness);
-        }
-
-        button.TextTooltip = locked
-            ? $"{GlamourPlateSlotMap.Labels[slot]} — locked (click to unlock)"
-            : $"{GlamourPlateSlotMap.Labels[slot]} — unlocked (click to lock)";
-    }
-
-    /// <summary>
-    /// Keeps icon padding/hover motion without overwriting AddColor (stock timeline forces add 0).
-    /// </summary>
-    private static void ApplySlotLockImageTimeline(ImGuiIconButtonNode button)
-    {
-        var pad = new Vector2(8f, 8f);
-
-        button.ImageNode.AddTimeline(new TimelineBuilder()
-            .AddFrameSetWithFrame(1, 10, 1, pad, 255)
-            .AddFrameSetWithFrame(11, 17, 11, pad, 255)
-            .AddFrameSetWithFrame(18, 26, 18, pad + new Vector2(0f, 1f), 255)
-            .AddFrameSetWithFrame(27, 36, 27, pad, 255)
-            .AddFrameSetWithFrame(37, 46, 37, pad, 255)
-            .AddFrameSetWithFrame(47, 53, 47, pad, 255)
-            .AddFrameSetWithFrame(130, 139, 130, pad, 255)
-            .AddFrameSetWithFrame(140, 149, 140, pad, 255)
-            .AddFrameSetWithFrame(150, 159, 150, pad, 255)
-            .Build());
-    }
-
-    private void BuildJobPicker(VerticalListNode list, Configuration config, float width)
-    {
-        var sheet = Plugin.DataManager.GetExcelSheet<ClassJob>();
-        var jobs = ClassJobFilterList.Build(sheet);
-        if (jobs.Count == 0)
-            return;
-
-        var resolved = ClassJobFilterList.ResolveStoredJobId(config.RandomizeSpecificJobId, sheet);
-        if (resolved != config.RandomizeSpecificJobId)
-        {
-            config.RandomizeSpecificJobId = resolved;
-            config.Save();
-        }
-
-        var selected = jobs.FirstOrDefault(j => j.RowId == config.RandomizeSpecificJobId);
-        if (selected.RowId == 0)
-        {
-            selected = jobs[0];
-            config.RandomizeSpecificJobId = selected.RowId;
-            config.Save();
-        }
-
-        var drop = new StringDropDownNode
-        {
-            Size = new Vector2(MathF.Min(280f, width - TrackerNativeHelpers.Indent), RowH),
-            Options = jobs.Select(j => j.Label).ToList(),
-            SelectedOption = selected.Label,
-            MaxListOptions = 10,
-        };
-        drop.OnOptionSelected = label =>
-        {
-            var match = jobs.FirstOrDefault(j => j.Label == label);
-            if (match.RowId == 0 || config.RandomizeSpecificJobId == match.RowId)
-                return;
-            config.RandomizeSpecificJobId = match.RowId;
-            config.Save();
-        };
-        list.AddNode(MakeIndented(drop, width));
-    }
 
     private void BuildSettings(VerticalListNode list, float width)
     {
@@ -1753,17 +1436,6 @@ internal sealed class TrackerNativeAddon : NativeAddon
         return row;
     }
 
-    private static TextNode MakeIndentedText(string text, float width) =>
-        new()
-        {
-            Size = new Vector2(width - TrackerNativeHelpers.Indent, 16f),
-            X = TrackerNativeHelpers.Indent,
-            FontSize = 12,
-            TextColor = TrackerNativeHelpers.ColorMuted,
-            String = (ReadOnlySeString)text,
-            TextFlags = TextFlags.Ellipsis,
-        };
-
     private static ResNode MakeIndented(NodeBase child, float width)
     {
         var wrap = new ResNode
@@ -1791,52 +1463,6 @@ internal sealed class TrackerNativeAddon : NativeAddon
         node.IsChecked = isChecked;
         node.OnClick = onChanged;
         return node;
-    }
-
-    private static ResNode MakeLabeledSlider(
-        string label, int value, int min, int max, Action<int> onChanged, float width, bool indented = false)
-    {
-        var indent = indented ? TrackerNativeHelpers.Indent : 0f;
-        var row = new ResNode { Size = new Vector2(width, RowH + 4f) };
-        var text = MakeText(label, 12, TrackerNativeHelpers.ColorTitle, width * 0.35f, 18f);
-        text.Position = new Vector2(indent, 6f);
-        text.AttachNode(row);
-
-        var slider = new SliderNode
-        {
-            Position = new Vector2(indent + width * 0.35f, 2f),
-            Size = new Vector2(width * 0.5f - indent, RowH),
-            Min = min,
-            Max = max,
-            Step = 1,
-            Value = Math.Clamp(value, min, max),
-        };
-        slider.OnValueChanged = onChanged;
-        slider.AttachNode(row);
-        return row;
-    }
-
-    private static ResNode MakeLabeledNumeric(
-        string label, int value, int min, int max, Action<int> onChanged, float width, bool indented = false)
-    {
-        var indent = indented ? TrackerNativeHelpers.Indent : 0f;
-        var row = new ResNode { Size = new Vector2(width, RowH + 4f) };
-        var text = MakeText(label, 12, TrackerNativeHelpers.ColorTitle, width * 0.35f, 18f);
-        text.Position = new Vector2(indent, 6f);
-        text.AttachNode(row);
-
-        var input = new NumericInputNode
-        {
-            Position = new Vector2(indent + width * 0.35f, 0f),
-            Size = new Vector2(120f, RowH),
-            Min = min,
-            Max = max,
-            Step = 1,
-            Value = Math.Clamp(value, min, max),
-        };
-        input.OnValueUpdate = onChanged;
-        input.AttachNode(row);
-        return row;
     }
 
     private static string Truncate(string text, int max) =>

@@ -71,19 +71,23 @@ internal sealed class OutfitSetCatalog
             if (canArmoire)
                 armoireEligible++;
 
-            // "In dresser" = registered/unlocked in the glamour dresser set list (not necessarily fully owned).
-            var inDresser = set.IsUnlocked || this.ownershipIndex.IsOutfitSetInDresser(set.SetId);
-            var allGlamourInDresser = canDresser
-                && glamourPieces.All(p => p.Storage.HasFlag(GlamourStorageLocation.Dresser));
-            if (inDresser || allGlamourInDresser)
+            // Completed / sets-in-dresser (e.g. 73/262), not / all sets in the game.
+            // Presence = set row in dresser item list, unlock bits, or any glam piece stored.
+            // Complete = all glam pieces in dresser OR every glam Mirage slot unlocked for the set.
+            // Never treat presence alone as complete (that was the false 262/262 bug).
+            var anyGlamourInDresser = glamourPieces.Any(p => this.ownershipIndex.IsInDresser(p.ItemId));
+            var inDresser = this.ownershipIndex.IsOutfitSetUnlockedLive(set.SetId)
+                || this.ownershipIndex.IsOutfitSetInDresser(set.SetId)
+                || anyGlamourInDresser;
+            if (inDresser)
             {
                 setsInDresser++;
-                if (allGlamourInDresser)
+                if (IsDresserSetCompleteForOverview(set.SetId, glamourPieces))
                     completedInDresser++;
             }
 
             // "In armoire" = at least one armoire-eligible piece stored there; complete = all of them.
-            var armoireStoredCount = armoirePieces.Count(p => p.Storage.HasFlag(GlamourStorageLocation.Armoire));
+            var armoireStoredCount = armoirePieces.Count(p => this.ownershipIndex.IsInArmoire(p.ItemId));
             var allArmoireInArmoire = canArmoire && armoireStoredCount == armoirePieces.Count;
             if (canArmoire && armoireStoredCount > 0)
             {
@@ -160,14 +164,27 @@ internal sealed class OutfitSetCatalog
 
     private bool IsDresserSetComplete(MirageStoreSetItem row, List<OutfitPieceInfo> pieces)
     {
-        if (this.ownershipIndex.IsOutfitSetInDresser(row.RowId))
+        var glamourPieces = pieces.Where(p => this.IsGlamourPiece(p.ItemId)).ToList();
+        return IsDresserSetCompleteForOverview(row.RowId, glamourPieces);
+    }
+
+    /// <summary>
+    /// Fully finished in the dresser: persisted Mirage-complete cache, or every glam piece is
+    /// either in the dresser item list or unlocked via Mirage slot flags (0.1.102 — no PrismBoxLoaded gate).
+    /// Presence alone (set row in list) is NOT enough — that was the false 262/262.
+    /// </summary>
+    private bool IsDresserSetCompleteForOverview(uint setId, List<OutfitPieceInfo> glamourPieces)
+    {
+        // Persisted completes must win even if glam-piece filtering yields an empty list.
+        if (this.ownershipIndex.IsOutfitSetCompleteInDresser(setId))
             return true;
 
-        var glamourPieces = pieces.Where(p => this.IsGlamourPiece(p.ItemId)).ToList();
         if (glamourPieces.Count == 0)
             return false;
 
-        return glamourPieces.All(p => p.Storage.HasFlag(GlamourStorageLocation.Dresser));
+        return glamourPieces.All(p =>
+            this.ownershipIndex.IsInDresser(p.ItemId)
+            || this.ownershipIndex.IsOutfitSlotUnlocked(setId, p.SlotIndex));
     }
 
     private bool IsArmoireSetComplete(List<OutfitPieceInfo> pieces)

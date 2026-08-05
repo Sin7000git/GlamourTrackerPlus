@@ -42,13 +42,6 @@ internal static class TrackerNativeHelpers
     public static readonly Vector4 ColorInfo = new(0.55f, 0.78f, 1f, 1f);
     public static readonly Vector4 ColorTitle = new(0.95f, 0.95f, 0.92f, 1f);
 
-    public static readonly string[] JobModeLabels =
-    [
-        "Any job",
-        "Current job",
-        "Choose a job",
-    ];
-
     public static readonly string[] SortModeLabels =
     [
         "Sort: Name",

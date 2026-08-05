@@ -118,7 +118,7 @@ internal sealed class TrackerWindow : Window
             this.plugin.OwnershipIndex.ClearRuntimeCache();
             this.plugin.Configuration.CharacterCaches.Clear();
             this.plugin.Configuration.Save();
-            this.plugin.RefreshAll(true);
+            this.plugin.OutfitSets.Invalidate();
             Plugin.ChatGui.Print("Glamour Tracker+ saved ownership cleared. Open your dresser or armoire, then Refresh.");
         }
     }

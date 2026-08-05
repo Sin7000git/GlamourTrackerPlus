@@ -1,6 +1,4 @@
-using System.Text.Json;
 using Dalamud.Hooking;
-using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game.Event;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
@@ -12,7 +10,7 @@ internal enum FashionReportProgressKind
     /// <summary>Before Friday judging opens.</summary>
     Unavailable,
 
-    /// <summary>Judging is open, but we have not synced from Masked Rose (or DailyDuty) yet.</summary>
+    /// <summary>Judging is open, but we have not synced from Masked Rose yet.</summary>
     Unknown,
 
     /// <summary>Judged this week but best score is under 80.</summary>
@@ -25,34 +23,27 @@ internal enum FashionReportProgressKind
 internal readonly record struct FashionReportProgressView(
     FashionReportProgressKind Kind,
     int HighestScore,
-    int AllowancesRemaining,
-    bool FromDailyDuty);
+    int AllowancesRemaining);
 
 /// <summary>
-/// Standalone Fashion Report completion tracking (same Masked Rose scene data DailyDuty uses).
-/// Optionally reads DailyDuty's saved data when present — no DailyDuty IPC or source changes.
+/// Standalone Fashion Report completion tracking via Masked Rose NPC scene data.
 /// </summary>
 internal sealed unsafe class FashionReportProgressTracker : IDisposable
 {
     private const uint MaskedRoseBaseId = 1025176;
     private const int CompleteScoreThreshold = 80;
 
-    private readonly IDalamudPluginInterface pluginInterface;
     private readonly Func<Configuration> getConfig;
     private readonly Func<ulong> getContentId;
     private readonly IPluginLog log;
     private readonly Hook<EventFramework.Delegates.ProcessEventPlay>? eventHook;
 
-    private DateTime lastDailyDutyPollUtc = DateTime.MinValue;
-
     public FashionReportProgressTracker(
-        IDalamudPluginInterface pluginInterface,
         IGameInteropProvider gameInterop,
         Func<Configuration> getConfig,
         Func<ulong> getContentId,
         IPluginLog log)
     {
-        this.pluginInterface = pluginInterface;
         this.getConfig = getConfig;
         this.getContentId = getContentId;
         this.log = log;
@@ -66,7 +57,7 @@ internal sealed unsafe class FashionReportProgressTracker : IDisposable
         }
         catch (Exception ex)
         {
-            log.Warning(ex, "Could not hook Fashion Report NPC events; completion status needs DailyDuty data or Manual sync.");
+            log.Warning(ex, "Could not hook Fashion Report NPC events; talk to the Masked Rose to sync completion.");
             PluginFileLog.Error("fashion.progress", "ProcessEventPlay hook failed", ex);
         }
     }
@@ -74,18 +65,20 @@ internal sealed unsafe class FashionReportProgressTracker : IDisposable
     public FashionReportProgressView GetProgress()
     {
         EnsureWeekReset();
-        TryImportDailyDuty(quiet: true);
 
         var utc = DateTime.UtcNow;
         if (!FashionReportWeek.IsJudgingOpen(utc))
-            return new FashionReportProgressView(FashionReportProgressKind.Unavailable, 0, 4, false);
+            return new FashionReportProgressView(FashionReportProgressKind.Unavailable, 0, 4);
 
         var cache = GetOrCreateCache();
         if (cache == null)
-            return new FashionReportProgressView(FashionReportProgressKind.Unknown, 0, 4, false);
+            return new FashionReportProgressView(FashionReportProgressKind.Unknown, 0, 4);
 
         if (!cache.FashionReportSynced)
-            return new FashionReportProgressView(FashionReportProgressKind.Unknown, cache.FashionReportHighestScore, cache.FashionReportAllowancesRemaining, cache.FashionReportFromDailyDuty);
+            return new FashionReportProgressView(
+                FashionReportProgressKind.Unknown,
+                cache.FashionReportHighestScore,
+                cache.FashionReportAllowancesRemaining);
 
         var kind = cache.FashionReportHighestScore >= CompleteScoreThreshold
             ? FashionReportProgressKind.Complete
@@ -94,8 +87,7 @@ internal sealed unsafe class FashionReportProgressTracker : IDisposable
         return new FashionReportProgressView(
             kind,
             cache.FashionReportHighestScore,
-            cache.FashionReportAllowancesRemaining,
-            cache.FashionReportFromDailyDuty);
+            cache.FashionReportAllowancesRemaining);
     }
 
     public void Dispose()
@@ -124,6 +116,8 @@ internal sealed unsafe class FashionReportProgressTracker : IDisposable
             if (cache == null)
                 return;
 
+            EnsureWeekReset();
+
             var dirty = false;
             switch (scene)
             {
@@ -151,7 +145,7 @@ internal sealed unsafe class FashionReportProgressTracker : IDisposable
             getConfig().Save();
             PluginFileLog.Info(
                 "fashion.progress",
-                $"Masked Rose sync score={cache.FashionReportHighestScore} allowances={cache.FashionReportAllowancesRemaining}");
+                $"Masked Rose sync score={cache.FashionReportHighestScore} allowances={cache.FashionReportAllowancesRemaining} reset={cache.FashionReportNextResetUtc:o}");
         }
         catch (Exception ex)
         {
@@ -166,86 +160,38 @@ internal sealed unsafe class FashionReportProgressTracker : IDisposable
         if (cache == null)
             return;
 
+        var nextReset = FashionReportWeek.NextJudgingResetUtc();
+        var now = DateTime.UtcNow;
+
         if (cache.FashionReportNextResetUtc == default)
         {
-            cache.FashionReportNextResetUtc = FashionReportWeek.NextJudgingResetUtc();
+            if (cache.FashionReportSynced || cache.FashionReportHighestScore > 0)
+            {
+                ClearProgress(cache, nextReset);
+                getConfig().Save();
+                PluginFileLog.Info("fashion.progress", "Cleared progress with missing NextResetUtc");
+                return;
+            }
+
+            cache.FashionReportNextResetUtc = nextReset;
             return;
         }
 
-        if (DateTime.UtcNow < cache.FashionReportNextResetUtc)
+        if (now < cache.FashionReportNextResetUtc)
             return;
 
+        ClearProgress(cache, nextReset);
+        getConfig().Save();
+        PluginFileLog.Info("fashion.progress", $"Week rolled over; next reset {nextReset:o}");
+    }
+
+    private static void ClearProgress(CharacterGlamourCache cache, DateTime nextResetUtc)
+    {
         cache.FashionReportHighestScore = 0;
         cache.FashionReportAllowancesRemaining = 4;
         cache.FashionReportSynced = false;
         cache.FashionReportFromDailyDuty = false;
-        cache.FashionReportNextResetUtc = FashionReportWeek.NextJudgingResetUtc();
-        getConfig().Save();
-    }
-
-    private void TryImportDailyDuty(bool quiet)
-    {
-        // Cheap poll — DailyDuty writes when the player talks to Masked Rose.
-        if ((DateTime.UtcNow - lastDailyDutyPollUtc).TotalSeconds < 5)
-            return;
-        lastDailyDutyPollUtc = DateTime.UtcNow;
-
-        var cache = GetOrCreateCache();
-        if (cache == null)
-            return;
-
-        // Prefer our own NPC sync; only fill gaps / refresh when DailyDuty has data.
-        var contentId = getContentId();
-        if (contentId == 0)
-            return;
-
-        try
-        {
-            var configsRoot = pluginInterface.ConfigDirectory.Parent;
-            if (configsRoot == null)
-                return;
-
-            var path = Path.Combine(configsRoot.FullName, "DailyDuty", contentId.ToString(), "FashionReport.data.json");
-            if (!File.Exists(path))
-                return;
-
-            var json = File.ReadAllText(path);
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-            if (!root.TryGetProperty("HighestWeeklyScore", out var scoreEl)
-                || !root.TryGetProperty("AllowancesRemaining", out var allowEl))
-                return;
-
-            var score = scoreEl.GetInt32();
-            var allowances = allowEl.GetInt32();
-
-            // Ignore empty defaults when we already have a better local sync.
-            if (cache.FashionReportSynced
-                && !cache.FashionReportFromDailyDuty
-                && cache.FashionReportHighestScore >= score)
-                return;
-
-            if (score == 0 && allowances == 4 && !cache.FashionReportSynced)
-            {
-                // Likely untouched DailyDuty defaults — still mark unknown, not incomplete.
-                return;
-            }
-
-            cache.FashionReportHighestScore = Math.Max(score, cache.FashionReportHighestScore);
-            cache.FashionReportAllowancesRemaining = allowances;
-            cache.FashionReportSynced = true;
-            cache.FashionReportFromDailyDuty = true;
-            cache.FashionReportNextResetUtc = FashionReportWeek.NextJudgingResetUtc();
-            getConfig().Save();
-
-            if (!quiet)
-                PluginFileLog.Info("fashion.progress", $"Imported DailyDuty score={score} allowances={allowances}");
-        }
-        catch (Exception ex)
-        {
-            if (!quiet)
-                PluginFileLog.Warn("fashion.progress", $"DailyDuty import failed: {ex.Message}");
-        }
+        cache.FashionReportNextResetUtc = nextResetUtc;
     }
 
     private CharacterGlamourCache? GetOrCreateCache()

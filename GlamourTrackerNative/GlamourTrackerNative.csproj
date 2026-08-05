@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
-    <Version>0.1.102.0</Version>
+    <Version>0.1.117.0</Version>
     <Authors>Sin7000</Authors>
     <Description>Glamour Tracker+ — dresser/armoire tracking, Fashion Report, and plate tools. /glamplus · /glamplus report.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

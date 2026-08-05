@@ -20,9 +20,9 @@ Browse official Outfit sets and see which pieces you already have in the dresser
 
 Weekly Fashion Report helpers in a dedicated window: slot themes, recommended items, ownership from your dresser/armoire, materials, and links out when you want more detail. Also available via `/glamplus fashion` (or `fr` / `report`).
 
-### Randomize
+### Plate randomize
 
-Open **Edit Glamour Plates** at a dresser, then use the Randomize tab (or the floating controls above the plate editor) to roll a full plate — or reroll individual slots. Filter the pool by job, race, level, and whether to pull from dresser and/or armoire.
+Open **Edit Glamour Plates** at a dresser, then use the floating controls above the plate editor to roll a full plate — or reroll individual slots. Filters (job, level, dresser/armoire sources, slot locks) live on that same overlay.
 
 ### Item tooltips & GC delivery
 

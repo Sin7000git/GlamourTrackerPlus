@@ -179,11 +179,9 @@ internal sealed class OutfitSetCatalog
         if (storage.HasFlag(GlamourStorageLocation.Dresser) || !this.IsGlamourPiece(itemId))
             return storage;
 
-        if (this.ownershipIndex.IsOutfitSetCompleteInDresser(setId)
-            || this.ownershipIndex.IsOutfitSlotUnlocked(setId, slotIndex))
-        {
+        // Complete sets are already covered by GetStorage; this catches partially stored ones.
+        if (this.ownershipIndex.IsOutfitSlotUnlocked(setId, slotIndex))
             storage |= GlamourStorageLocation.Dresser;
-        }
 
         return storage;
     }
@@ -209,7 +207,7 @@ internal sealed class OutfitSetCatalog
             return false;
 
         return glamourPieces.All(p =>
-            this.ownershipIndex.IsInDresser(p.ItemId)
+            this.ownershipIndex.IsInDresserItemList(p.ItemId)
             || this.ownershipIndex.IsOutfitSlotUnlocked(setId, p.SlotIndex));
     }
 

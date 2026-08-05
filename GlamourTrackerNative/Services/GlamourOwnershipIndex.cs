@@ -41,6 +41,7 @@ internal sealed class GlamourOwnershipIndex
     private readonly HashSet<uint> cachedArmoireBaseIds = [];
 
     private HashSet<uint>? mirageStoreSetRowIds;
+    private Dictionary<uint, uint[]>? setsByPieceItemId;
 
     private int dresserSlotsUsed;
     private int revision;
@@ -162,7 +163,8 @@ internal sealed class GlamourOwnershipIndex
             var dresserAuthoritative = false;
             var armoireRead = false;
 
-            var dresserRead = ReadDresserItems(liveDresser, ref slotsUsed, out dresserAuthoritative);
+            var dresserRead = ReadDresserItems(
+                liveDresser, ref slotsUsed, out dresserAuthoritative, out var finderRead);
             if (ReadArmoire(liveArmoire))
                 armoireRead = true;
 
@@ -174,10 +176,12 @@ internal sealed class GlamourOwnershipIndex
             var dresserChanged = false;
             if (dresserRead)
             {
-                // Finder lists can be partial at login — only Prism Box / agent may replace.
+                // Pruning needs both sources: the Prism Box lists physical slots (a stored outfit is one
+                // set row) while ItemFinder lists the pieces inside those outfits. Replacing from the
+                // Prism Box alone deleted every piece id and left saved data too thin to mark items owned.
                 dresserChanged = MergeLiveDresser(
                     liveDresser,
-                    replaceMissing: dresserAuthoritative && liveDresser.Count > 0);
+                    replaceMissing: dresserAuthoritative && finderRead && liveDresser.Count > 0);
                 if (slotsUsed > 0 && slotsUsed != this.dresserSlotsUsed)
                 {
                     this.dresserSlotsUsed = slotsUsed;
@@ -306,7 +310,7 @@ internal sealed class GlamourOwnershipIndex
         var location = GlamourStorageLocation.None;
         var baseId = ItemIdHelper.GlamourBaseId(itemId);
 
-        if (this.cachedDresserBaseIds.Contains(baseId))
+        if (IsBaseIdInDresser(baseId))
             location |= GlamourStorageLocation.Dresser;
 
         if (this.cachedArmoireBaseIds.Contains(baseId))
@@ -318,6 +322,13 @@ internal sealed class GlamourOwnershipIndex
     public bool IsStored(uint itemId) => GetStorage(itemId) != GlamourStorageLocation.None;
 
     public bool IsInDresser(uint itemId) =>
+        IsBaseIdInDresser(ItemIdHelper.GlamourBaseId(itemId));
+
+    /// <summary>
+    /// Physical dresser contents only, with no set-piece inference. Completeness math needs this so a
+    /// set cannot be called finished just because other finished sets happen to share its pieces.
+    /// </summary>
+    public bool IsInDresserItemList(uint itemId) =>
         this.cachedDresserBaseIds.Contains(ItemIdHelper.GlamourBaseId(itemId));
 
     public bool IsInArmoire(uint itemId) =>
@@ -508,6 +519,58 @@ internal sealed class GlamourOwnershipIndex
             return;
 
         target.Add(ItemIdHelper.GlamourBaseId(itemId));
+    }
+
+    private bool IsBaseIdInDresser(uint baseId) =>
+        this.cachedDresserBaseIds.Contains(baseId) || IsPieceOfCompleteDresserSet(baseId);
+
+    /// <summary>
+    /// A full outfit takes a single dresser slot, so its individual pieces are absent from the item
+    /// list until the dresser has been opened. Complete sets vouch for every piece they contain.
+    /// </summary>
+    private bool IsPieceOfCompleteDresserSet(uint baseId)
+    {
+        if (baseId == 0 || this.cachedDresserCompleteSetRowIds.Count == 0)
+            return false;
+
+        EnsureSetsByPieceItemId();
+        if (!this.setsByPieceItemId!.TryGetValue(baseId, out var setRowIds))
+            return false;
+
+        foreach (var setRowId in setRowIds)
+        {
+            if (this.cachedDresserCompleteSetRowIds.Contains(setRowId))
+                return true;
+        }
+
+        return false;
+    }
+
+    private void EnsureSetsByPieceItemId()
+    {
+        if (this.setsByPieceItemId != null)
+            return;
+
+        var byPiece = new Dictionary<uint, HashSet<uint>>();
+        foreach (var row in this.dataManager.GetExcelSheet<MirageStoreSetItem>())
+        {
+            if (row.RowId == 0)
+                continue;
+
+            foreach (var (_, readItemId) in SetSlotReaders)
+            {
+                var pieceId = ItemIdHelper.GlamourBaseId(readItemId(row));
+                if (pieceId == 0)
+                    continue;
+
+                if (!byPiece.TryGetValue(pieceId, out var setRowIds))
+                    byPiece[pieceId] = setRowIds = [];
+
+                setRowIds.Add(row.RowId);
+            }
+        }
+
+        this.setsByPieceItemId = byPiece.ToDictionary(pair => pair.Key, pair => pair.Value.ToArray());
     }
 
     private void EnsureMirageStoreSetRowIds()
@@ -711,15 +774,21 @@ internal sealed class GlamourOwnershipIndex
         return changed;
     }
 
-    private unsafe bool ReadDresserItems(HashSet<uint> dresser, ref int slotsUsed, out bool authoritative)
+    private unsafe bool ReadDresserItems(
+        HashSet<uint> dresser,
+        ref int slotsUsed,
+        out bool authoritative,
+        out bool finderRead)
     {
         authoritative = false;
+        finderRead = false;
 
         // ItemFinder can be "cached" at login with an incomplete list. Use it to ADD ids only —
         // never as a replace source (that wiped saved piece ids and broke "completed in dresser").
         var finder = ItemFinderModule.Instance();
         if (finder != null && finder->IsGlamourDresserCached)
         {
+            finderRead = true;
             foreach (var id in finder->GlamourDresserItemIds)
                 AddItemId(dresser, id);
         }

@@ -359,5 +359,19 @@ Append one entry per phase. Keep it short and factual.
   shared `InDresser` rule for Overview and the Outfit sets filter.
 - Skipped: two items turned out not to be bugs — the Friday-based score expiry (correct as written,
   renamed only) and the `isEnhancing` re-entrancy guard. Both documented above.
-- In-game result: not verified yet.
+- In-game result: verified, except GC delivery showed armoire markers but no dresser markers until the
+  dresser was opened. Fixed in 0.1.120 (below); everything else on the watchlist passed.
 - Version: 0.1.119
+
+[2026-08-06] Phase 1 follow-up — dresser ownership survives a restart
+- Cause: the dresser cache mixed two sources with different meanings. ItemFinder lists ~1493 ids
+  (every piece inside a stored outfit); the Prism Box lists 563 physical slots, where a whole outfit
+  is one set row. A Prism Box read alone counted as authoritative and pruned the 930 piece ids, and
+  that thinned list is what got saved. Predates Phase 1 — the same 1493 → 563 drop is in the log
+  under 0.1.117.
+- Done: pruning now requires both sources to have been read in the same pass, and "in the dresser"
+  additionally answers true for pieces of a set already known to be complete, so tooltips, GC
+  markers, plates and the sets tab share one rule. Completeness math kept on the raw item list via
+  `IsInDresserItemList` so Overview counts cannot inflate.
+- In-game result: pending.
+- Version: 0.1.120

@@ -493,3 +493,11 @@
 - Outcome: Debug + Release build clean
 - Evidence: branch code-cleanup, plan in CODE_CLEANUP_PLAN.md
 - Next: in-game verification against the watchlist (Overview 74/264, armoire 31/84, clear/refresh, outfit sets, FR week, tooltips, GC markers)
+
+[2026-08-06] GC delivery dresser markers missing after game restart (0.1.120)
+- Symptom: after a restart the GC expert delivery list showed armoire markers but no dresser markers; opening the dresser once brought them back. Armoire unaffected.
+- Evidence: app.log ownership.refresh alternates dresser=1493 and dresser=563 with slots=563 throughout, including under 0.1.117 — so this predates the cleanup branch. 1493 = ItemFinder (pieces inside stored outfits), 563 = Prism Box physical slots (an outfit is one set row). A Prism Box read set authoritative=true on its own, MergeLiveDresser(replaceMissing) then deleted the 930 finder-only piece ids, and that thinned list was saved.
+- Attempt: ReadDresserItems reports finderRead; replaceMissing now needs authoritative && finderRead. IsInDresser/GetStorage also return true for a piece of a set in the persisted complete-set cache, via a lazy MirageStoreSetItem piece→set index. New IsInDresserItemList (raw physical list) used by IsDresserSetCompleteForOverview so completeness cannot feed on itself. ResolvePieceStorage complete-set branch dropped as redundant.
+- Files changed: GlamourOwnershipIndex.cs, OutfitSetCatalog.cs, csproj
+- Outcome: Debug + Release build clean
+- Next: restart the game without opening the dresser, check GC delivery dresser markers and that Overview still reads 74/264

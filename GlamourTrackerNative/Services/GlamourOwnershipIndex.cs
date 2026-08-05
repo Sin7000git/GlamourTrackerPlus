@@ -29,6 +29,7 @@ internal sealed class GlamourOwnershipIndex
     private bool pendingContentIdLoad;
     private HashSet<uint>? previousLiveDresser;
     private HashSet<uint>? previousLiveArmoire;
+    private int refreshRunning;
 
     public GlamourOwnershipIndex(
         IDataManager dataManager,
@@ -134,6 +135,12 @@ internal sealed class GlamourOwnershipIndex
         if (!force && (DateTime.UtcNow - this.lastRefresh).TotalSeconds < RefreshIntervalSeconds)
             return;
 
+        // Refreshes arrive from framework ticks, dresser UI events, commands and async completions.
+        // Two of them overlapping threw out of the middle of a rebuild, so the second one waits for
+        // the next tick instead.
+        if (Interlocked.Exchange(ref this.refreshRunning, 1) == 1)
+            return;
+
         try
         {
             var liveDresser = new HashSet<uint>();
@@ -185,6 +192,10 @@ internal sealed class GlamourOwnershipIndex
         catch (Exception ex)
         {
             PluginFileLog.Error("ownership.refresh", "Dresser/armoire refresh failed", ex);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref this.refreshRunning, 0);
         }
     }
 

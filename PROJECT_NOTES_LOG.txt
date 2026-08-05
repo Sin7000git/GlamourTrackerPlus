@@ -519,3 +519,12 @@
 - Files changed: OwnershipSnapshot.cs, OwnershipGameReader.cs, GlamourOwnershipIndex.cs, CharacterGlamourCache.cs, csproj
 - Outcome: Debug + Release build clean
 - Next: open the dresser once to seed DresserOutfitPieceIds, then check the Gauntlets tooltip, GC markers, and that the log stops churning 74<->71
+- Outcome: confirmed in game and in the log. dresser=563 outfitPieces=930 (563+930 = the old inflated 1493 exactly), armoire back to 470, completeSets steady at 71 with no churn, and both test item ids are in DresserOutfitPieceIds.
+
+[2026-08-06] Concurrent refresh corrupted the ownership sets (0.1.123)
+- Symptom: log at 22:23:03 shows a successful "Stored outfits: 264 scanned ... 930 pieces" line and, in the same second, IndexOutOfRangeException from HashSet.RemoveWhere inside OwnershipSnapshot.Merge via ScanStoredOutfits. Two writers in one HashSet.
+- Evidence: Refresh is reachable from framework ticks, dresser/plate ATK events, chat commands, UI buttons and async completions. All the call sites read as main-thread, so the second writer is most likely an async continuation; rather than chase it, the state was made safe for any caller.
+- Attempt: OwnershipSnapshot now takes a lock on every member, and the collection properties hand back copies so callers can iterate without holding it. GlamourOwnershipIndex.Refresh is gated with Interlocked so an overlapping refresh waits for the next tick instead of interleaving (the two-strike previousLive fields are plain fields and are not safe to race either).
+- Files changed: OwnershipSnapshot.cs, GlamourOwnershipIndex.cs, csproj
+- Outcome: Debug + Release build clean, both stamped 0.1.123
+- Next: watch the log for any further ownership.* exceptions; consider auditing the async call sites in Phase 5 (threading)

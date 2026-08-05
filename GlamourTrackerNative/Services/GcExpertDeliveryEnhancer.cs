@@ -46,6 +46,7 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
     private float lastAddonScale = float.NaN;
     private nint lastSupplyAddonAddress;
     private string lastAtlasSignature = string.Empty;
+    private int lastOwnershipRevision = -1;
 
 #if GLAMOUR_DEV
     private const string SheetPickerOverlayId = "glamour-tracker-gc-sheet-picker";
@@ -111,6 +112,7 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
             this.lastAddonScale = float.NaN;
             this.lastSupplyAddonAddress = 0;
             this.lastAtlasSignature = string.Empty;
+            this.lastOwnershipRevision = -1;
             return;
         }
 
@@ -133,6 +135,7 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
         this.lastAddonScale = float.NaN;
         this.lastSupplyAddonAddress = 0;
         this.lastAtlasSignature = string.Empty;
+        this.lastOwnershipRevision = -1;
     }
 
     public void DrawOverlays()
@@ -431,19 +434,21 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
         var supplyAddress = (nint)supplyUnit;
         var atlasSig = AtlasSignature(config, dresserSlice, armoireSlice);
         var uiScale = Math.Max(supplyUnit->Scale, 0.01f);
+        var ownershipRevision = this.ownershipIndex.Revision;
 
         var needsRebuild = list->ScrollOffset != this.lastScrollOffset
             || list->FirstVisibleItemIndex != this.lastFirstVisible
             || list->ListLength != this.lastListLength
             || supplyAddress != this.lastSupplyAddonAddress
             || atlasSig != this.lastAtlasSignature
+            || ownershipRevision != this.lastOwnershipRevision
             || Math.Abs(uiScale - this.lastAddonScale) > 0.001f
             || this.markerNodes.Count == 0;
 
         if (!needsRebuild)
             return this.markerNodes.Count;
 
-        // Rebuild on scroll / list / atlas / scale change — not while dragging with unchanged list.
+        // Rebuild on scroll / list / atlas / scale / ownership change — not while dragging with unchanged list.
         DisposeNativeMarkers();
         this.lastScrollOffset = list->ScrollOffset;
         this.lastFirstVisible = list->FirstVisibleItemIndex;
@@ -451,6 +456,7 @@ internal sealed unsafe class GcExpertDeliveryEnhancer : IDisposable
         this.lastSupplyAddonAddress = supplyAddress;
         this.lastAtlasSignature = atlasSig;
         this.lastAddonScale = uiScale;
+        this.lastOwnershipRevision = ownershipRevision;
 
         var dresserSize = dresserSlice.DisplaySize;
         var armoireSize = armoireSlice.DisplaySize;

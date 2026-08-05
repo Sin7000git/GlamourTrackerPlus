@@ -72,14 +72,9 @@ internal sealed class OutfitSetCatalog
                 armoireEligible++;
 
             // Completed / sets-in-dresser (e.g. 73/262), not / all sets in the game.
-            // Presence = set row in dresser item list, unlock bits, or any glam piece stored.
             // Complete = all glam pieces in dresser OR every glam Mirage slot unlocked for the set.
             // Never treat presence alone as complete (that was the false 262/262 bug).
-            var anyGlamourInDresser = glamourPieces.Any(p => this.ownershipIndex.IsInDresser(p.ItemId));
-            var inDresser = this.ownershipIndex.IsOutfitSetUnlockedLive(set.SetId)
-                || this.ownershipIndex.IsOutfitSetInDresser(set.SetId)
-                || anyGlamourInDresser;
-            if (inDresser)
+            if (set.InDresser)
             {
                 setsInDresser++;
                 if (IsDresserSetCompleteForOverview(set.SetId, glamourPieces))
@@ -134,6 +129,7 @@ internal sealed class OutfitSetCatalog
             var set = new OutfitSetInfo(row.RowId, ResolveSetName(row, itemSheet))
             {
                 IsUnlocked = IsOutfitSetUnlocked(row.RowId),
+                InDresser = ResolveInDresser(row.RowId, pieces),
                 SetStorage = ResolveSetStorage(row, pieces),
                 Pieces = pieces,
             };
@@ -144,6 +140,15 @@ internal sealed class OutfitSetCatalog
 
         return sets.OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase).ToList();
     }
+
+    /// <summary>
+    /// Presence in the dresser, which is not the same as being finished: the game stores an outfit
+    /// either as a set row or as loose pieces, so both count.
+    /// </summary>
+    private bool ResolveInDresser(uint setId, List<OutfitPieceInfo> pieces) =>
+        this.ownershipIndex.IsOutfitSetUnlockedLive(setId)
+        || this.ownershipIndex.IsOutfitSetInDresser(setId)
+        || pieces.Any(p => this.IsGlamourPiece(p.ItemId) && this.ownershipIndex.IsInDresser(p.ItemId));
 
     private OutfitSetStorageLocation ResolveSetStorage(MirageStoreSetItem row, List<OutfitPieceInfo> pieces)
     {
@@ -292,6 +297,13 @@ internal sealed class OutfitSetInfo
     public uint SetId { get; }
     public string Name { get; }
     public bool IsUnlocked { get; set; }
+
+    /// <summary>
+    /// The set is in the dresser in any form — on the stored set list, unlocked, or with at least one
+    /// glam piece stored. One rule for the Overview counts and the Outfit sets filter.
+    /// </summary>
+    public bool InDresser { get; set; }
+
     public OutfitSetStorageLocation SetStorage { get; set; }
     public int OwnedPieceCount { get; set; }
     public List<OutfitPieceInfo> Pieces { get; set; } = [];

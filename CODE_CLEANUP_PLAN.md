@@ -36,49 +36,50 @@ Verify these in game after every phase:
 
 # Phase 0 — Safety net and baseline
 
-**Status:** not started
+**Status:** done
 
-- [ ] Confirm branch `code-cleanup` is checked out and `main` holds the last known-good build.
-- [ ] Record baseline numbers from the watchlist above into the Progress log (actual in-game values).
-- [ ] Copy the current Release DLL somewhere outside the repo as a rollback artifact.
-- [ ] Confirm `dotnet build` succeeds in both Debug and Release before touching anything.
+- [x] Confirm branch `code-cleanup` is checked out and `main` holds the last known-good build.
+- [ ] Record baseline numbers from the watchlist above into the Progress log (needs the user in game).
+- [x] Copy the current Release DLL somewhere outside the repo as a rollback artifact — `.cursor/backups/2026-08-05_233257_pre-phase1/baseline-0.1.118.dll`.
+- [x] Confirm `dotnet build` succeeds in both Debug and Release before touching anything.
 
 ---
 
 # Phase 1 — Correctness bugs (do these before any restructuring)
 
-**Status:** not started
+**Status:** code done in 0.1.119, awaiting in-game verification
 **Why first:** restructuring on top of broken rules bakes the bugs in.
 
 ### 1.1 Ownership save/read guards
-- [ ] `GlamourOwnershipIndex.cs` `SavePersistedForCharacter` guards empty dresser and empty complete-set lists, but **not** empty `DresserSetRowIds` — a partial read can wipe set presence on disk. Add the same guard.
-- [ ] `Refresh()` bails entirely when neither dresser nor armoire read succeeds, so set/complete rebuilds never run off persisted data. Let the cache-only rebuild still happen.
-- [ ] `ReadArmoire` returns `false` when the cabinet is loaded but empty, so an emptied armoire stays stale forever. Return `true` when `IsCabinetLoaded()` and let the empty set replace.
-- [ ] Mirage complete scan **replaces** the whole complete list when it finds anything; a partial pass can drop valid completes. Union instead of replace.
+- [x] `GlamourOwnershipIndex.cs` `SavePersistedForCharacter` guards empty dresser and empty complete-set lists, but **not** empty `DresserSetRowIds` — a partial read can wipe set presence on disk. Add the same guard.
+- [x] `Refresh()` bails entirely when neither dresser nor armoire read succeeds, so set/complete rebuilds never run off persisted data. Let the cache-only rebuild still happen.
+- [x] `ReadArmoire` returns `false` when the cabinet is loaded but empty, so an emptied armoire stays stale forever. Return `true` when `IsCabinetLoaded()` and let the empty set replace.
+- [x] Mirage complete scan **replaces** the whole complete list when it finds anything; a partial pass can drop valid completes. Only sets the scan actually saw in the Prism Box may lose completeness; unscanned sets keep their saved result.
 
 ### 1.2 Fashion Report week boundaries
-- [ ] `FashionReportProgressTracker` stores the Friday judging reset instead of the Tuesday weekly reset, so a score can survive into the new week. Store one canonical week id / reset instant and use it everywhere.
-- [ ] `FashionReportWeek.IsJudgingOpen` takes `utcNow` but internally calls `DateTime.UtcNow`. Thread the passed time through every schedule helper.
-- [ ] Exact Tuesday 08:00 UTC boundary jumps a full week (`Hour < 8` branch). Fix the comparison.
-- [ ] The 10-minute snapshot cache ignores week changes, so Tuesday rollover can show last week's hints. Invalidate when the snapshot's week differs or the reset has passed.
-- [ ] `Math.Max` on the score never lowers it; combined with a failed reset it preserves stale high scores. Reset before applying NPC scenes.
+- [x] All `FashionReportWeek` helpers now take `utcNow`; no hidden clock reads.
+- [x] `NextJudgingResetUtc` renamed to `ScoreExpiryUtc` with a comment explaining why it is not simply "the next Friday". **Correction to the original plan:** the Friday-based expiry is correct — a score has to survive the closed Tuesday–Friday gap — so the semantics were kept, only the name and docs changed.
+- [x] Judging window boundary is now inclusive at exactly Friday 08:00 UTC.
+- [x] The 10-minute snapshot cache also expires at the weekly reset, so Tuesday rollover can't show last week's hints.
+- [x] Anchor initialisation now persists (it only lived in memory before).
+- [x] `Math.Max` on the score: verified safe — `EnsureWeekReset()` already runs before the NPC scenes are applied. No change.
 
 ### 1.3 Threading and lifetime
-- [ ] `FashionReportProgressTracker` calls `Save()` from a native hook thread. Marshal config saves to the framework thread.
-- [ ] `TrackerNativeAddon` async acquire loads use `CancellationToken.None` and keep running after the window closes. Add one `disposeCts`, cancel it in `OnFinalize`, thread it through `LoadSetAcquireAsync` / `ResolveNamedItemAsync` / `ScanAllSetCategoriesAsync`.
-- [ ] A failed acquire load is marked "loaded", so it never retries. Track failed separately and allow retry.
+- [x] `FashionReportProgressTracker` calls `Save()` from a native hook thread. Config saves now go through the framework thread.
+- [x] `TrackerNativeAddon` async acquire loads use `CancellationToken.None`. Added a window-scoped token, cancelled in `OnFinalize` and threaded through the acquire loads, the category scan, and `ResolveNamedItemAsync`.
+- [x] A failed acquire load is marked "loaded", so it never retries. Failures now record a 5-minute cooldown, show "Couldn't load sources", and retry after that.
 
 ### 1.4 ATK safety
-- [ ] `GcExpertDeliveryEnhancer` dereferences the addon after only an `Address != Zero` check. Guard on `IsReady`/`IsVisible` before every cast.
-- [ ] GC marker rebuild key ignores ownership changes, so markers go stale when the dresser changes without a list rebuild. Add an ownership revision to the key.
-- [ ] `ItemDetailEnhancer` early-exits without restoring the tooltip, leaving tint on reused addon memory. Restore on every exit path.
-- [ ] `ItemDetailEnhancer` has no `PreFinalize` listener; tints survive teardown. Register one.
-- [ ] `isEnhancing` silently drops concurrent refreshes. Debounce one frame or keep the latest item id instead of skipping.
+- [x] GC markers are no longer built for a hidden supply addon (`ShouldDrawAnyMarkers` now checks `IsVisible`).
+- [x] GC marker rebuild key ignores ownership changes. Added `GlamourOwnershipIndex.Revision` and included it in the key.
+- [x] `ItemDetailEnhancer` early-exits without restoring the tooltip. Restores on every exit path, and `RestoreTooltip` is null-safe.
+- [x] `ItemDetailEnhancer` has no `PreFinalize` listener; tints survive teardown. Registered one.
+- [x] `isEnhancing`: verified this is re-entrancy protection (tinting re-triggers the update), not a dropped-event bug. Kept, comment added.
 
 ### 1.5 Stale-data UI rules
-- [ ] `OutfitSetInfo.IsUnlocked` is baked once from unlock bits and then used by the storage filter, while Overview uses the live check. Use one source.
-- [ ] Category filter hides sets whose sources haven't been scanned yet, which looks like data loss. Show them with a "Scanning sources…" state.
-- [ ] `FashionVendorLocator` matches place names with raw `Contains`, so `Ul'dah` vs `Uldah` can miss. Add one shared name normalizer.
+- [x] Added `OutfitSetInfo.InDresser` as the single dresser-presence rule; Overview counting and the "In dresser" filter both read it instead of computing their own answer.
+- [x] Category filter hid unscanned sets with a "no matches" message. It now says sources are still being checked while the scan runs.
+- [x] `FashionVendorLocator` compares place names on letters and digits only, so `Ul'dah` vs `Ul’dah` matches.
 
 **Verify:** full watchlist, plus deliberately empty the armoire and confirm the count drops after opening it.
 
@@ -349,3 +350,14 @@ Append one entry per phase. Keep it short and factual.
 ```
 
 [2026-08-05] Plan created on branch `code-cleanup` from 0.1.118. No code changed yet.
+
+[2026-08-05] Phase 1 — correctness bugs
+- Done: all of 1.1–1.5. Ownership guards (set-presence save guard, cache-only rebuild, authoritative
+  empty armoire, scan-scoped completeness), Fashion Report week helpers take the clock and the
+  snapshot cache expires at reset, config saves off the hook thread, window-scoped cancellation plus
+  failed-source retry, ATK restore/visibility guards, ownership revision on GC markers, and one
+  shared `InDresser` rule for Overview and the Outfit sets filter.
+- Skipped: two items turned out not to be bugs — the Friday-based score expiry (correct as written,
+  renamed only) and the `isEnhancing` re-entrancy guard. Both documented above.
+- In-game result: not verified yet.
+- Version: 0.1.119

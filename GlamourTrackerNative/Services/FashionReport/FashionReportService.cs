@@ -78,12 +78,16 @@ internal sealed class FashionReportService : IDisposable
     public Task RefreshAsync(bool force = false)
     {
         CancellationToken ct;
+        var now = DateTime.UtcNow;
         lock (stateGate)
         {
+            // Reuse a recent fetch, but never one from before the weekly reset — that is last
+            // week's theme and hints.
             if (!force
                 && Snapshot != null
                 && LastFetchUtc is { } last
-                && (DateTime.UtcNow - last).TotalMinutes < 10)
+                && (now - last).TotalMinutes < 10
+                && last >= FashionReportWeek.LastWeeklyResetUtc(now))
             {
                 RebindOwnership();
                 return Task.CompletedTask;

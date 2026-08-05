@@ -41,16 +41,27 @@ internal sealed class ItemDetailEnhancer : IDisposable
 
         this.addonLifecycle.RegisterListener(AddonEvent.PostRequestedUpdate, ItemDetailAddonName, OnItemDetailEvent);
         this.addonLifecycle.RegisterListener(AddonEvent.PostRefresh, ItemDetailAddonName, OnItemDetailEvent);
+        this.addonLifecycle.RegisterListener(AddonEvent.PreFinalize, ItemDetailAddonName, OnItemDetailFinalize);
     }
 
     public void Dispose()
     {
         this.addonLifecycle.UnregisterListener(AddonEvent.PostRequestedUpdate, ItemDetailAddonName, OnItemDetailEvent);
         this.addonLifecycle.UnregisterListener(AddonEvent.PostRefresh, ItemDetailAddonName, OnItemDetailEvent);
+        this.addonLifecycle.UnregisterListener(AddonEvent.PreFinalize, ItemDetailAddonName, OnItemDetailFinalize);
         RestoreVisibleTooltip();
     }
 
     private void OnItemDetailEvent(AddonEvent type, AddonArgs args) => TryEnhanceTooltip(args);
+
+    /// <summary>The game reuses tooltip addon memory, so leave the icons as we found them.</summary>
+    private unsafe void OnItemDetailFinalize(AddonEvent type, AddonArgs args)
+    {
+        if (args.Addon.Address == nint.Zero)
+            return;
+
+        RestoreTooltip((AddonItemDetail*)args.Addon.Address);
+    }
 
     public unsafe void RestoreVisibleTooltip()
     {
@@ -63,6 +74,7 @@ internal sealed class ItemDetailEnhancer : IDisposable
 
     private unsafe void TryEnhanceTooltip(AddonArgs args)
     {
+        // Tinting nodes makes the addon fire another update — ignore our own re-entry.
         if (this.isEnhancing || args.Addon.Address == nint.Zero)
             return;
 
@@ -80,7 +92,10 @@ internal sealed class ItemDetailEnhancer : IDisposable
         {
             var agentModule = AgentModule.Instance();
             if (agentModule == null)
+            {
+                RestoreTooltip(addon);
                 return;
+            }
 
             var agent = (AgentItemDetail*)agentModule->GetAgentByInternalId(AgentId.ItemDetail);
             if (agent == null || agent->ItemId == 0)
@@ -91,7 +106,10 @@ internal sealed class ItemDetailEnhancer : IDisposable
 
             var itemId = agent->ItemId;
             if (!this.dataManager.GetExcelSheet<Item>().TryGetRow(itemId, out var item))
+            {
+                RestoreTooltip(addon);
                 return;
+            }
 
             if (!IsRelevantItem(item, itemId))
             {
@@ -126,6 +144,9 @@ internal sealed class ItemDetailEnhancer : IDisposable
 
     private static unsafe void RestoreTooltip(AddonItemDetail* addon)
     {
+        if (addon == null)
+            return;
+
         AtkUiHelper.RestoreIconGroup(addon->GlamourDresserIconGroup);
         AtkUiHelper.RestoreIconGroup(addon->ArmoireIconGroup);
     }

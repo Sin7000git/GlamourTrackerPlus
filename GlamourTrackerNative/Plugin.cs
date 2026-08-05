@@ -136,6 +136,7 @@ public sealed class Plugin : IDalamudPlugin
             GameInterop,
             () => Configuration,
             GetLocalContentIdStatic,
+            Framework,
             Log);
         pluginCommands = new PluginCommands(CommandManager, ChatGui, this);
 

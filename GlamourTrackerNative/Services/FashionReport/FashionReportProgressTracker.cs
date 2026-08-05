@@ -35,6 +35,7 @@ internal sealed unsafe class FashionReportProgressTracker : IDisposable
 
     private readonly Func<Configuration> getConfig;
     private readonly Func<ulong> getContentId;
+    private readonly IFramework framework;
     private readonly IPluginLog log;
     private readonly Hook<EventFramework.Delegates.ProcessEventPlay>? eventHook;
 
@@ -42,10 +43,12 @@ internal sealed unsafe class FashionReportProgressTracker : IDisposable
         IGameInteropProvider gameInterop,
         Func<Configuration> getConfig,
         Func<ulong> getContentId,
+        IFramework framework,
         IPluginLog log)
     {
         this.getConfig = getConfig;
         this.getContentId = getContentId;
+        this.framework = framework;
         this.log = log;
 
         try
@@ -141,8 +144,8 @@ internal sealed unsafe class FashionReportProgressTracker : IDisposable
 
             cache.FashionReportSynced = true;
             cache.FashionReportFromDailyDuty = false;
-            cache.FashionReportNextResetUtc = FashionReportWeek.NextJudgingResetUtc();
-            getConfig().Save();
+            cache.FashionReportNextResetUtc = FashionReportWeek.ScoreExpiryUtc(DateTime.UtcNow);
+            SaveConfig();
             PluginFileLog.Info(
                 "fashion.progress",
                 $"Masked Rose sync score={cache.FashionReportHighestScore} allowances={cache.FashionReportAllowancesRemaining} reset={cache.FashionReportNextResetUtc:o}");
@@ -160,30 +163,34 @@ internal sealed unsafe class FashionReportProgressTracker : IDisposable
         if (cache == null)
             return;
 
-        var nextReset = FashionReportWeek.NextJudgingResetUtc();
         var now = DateTime.UtcNow;
+        var expiry = FashionReportWeek.ScoreExpiryUtc(now);
 
         if (cache.FashionReportNextResetUtc == default)
         {
             if (cache.FashionReportSynced || cache.FashionReportHighestScore > 0)
             {
-                ClearProgress(cache, nextReset);
-                getConfig().Save();
-                PluginFileLog.Info("fashion.progress", "Cleared progress with missing NextResetUtc");
+                ClearProgress(cache, expiry);
+                SaveConfig();
+                PluginFileLog.Info("fashion.progress", "Cleared progress with missing expiry");
                 return;
             }
 
-            cache.FashionReportNextResetUtc = nextReset;
+            cache.FashionReportNextResetUtc = expiry;
+            SaveConfig();
             return;
         }
 
         if (now < cache.FashionReportNextResetUtc)
             return;
 
-        ClearProgress(cache, nextReset);
-        getConfig().Save();
-        PluginFileLog.Info("fashion.progress", $"Week rolled over; next reset {nextReset:o}");
+        ClearProgress(cache, expiry);
+        SaveConfig();
+        PluginFileLog.Info("fashion.progress", $"Week rolled over; score expires {expiry:o}");
     }
+
+    /// <summary>Config writes must not happen on the NPC event hook thread.</summary>
+    private void SaveConfig() => _ = this.framework.RunOnFrameworkThread(() => getConfig().Save());
 
     private static void ClearProgress(CharacterGlamourCache cache, DateTime nextResetUtc)
     {

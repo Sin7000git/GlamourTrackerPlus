@@ -43,6 +43,7 @@ internal sealed class GlamourOwnershipIndex
     private HashSet<uint>? mirageStoreSetRowIds;
 
     private int dresserSlotsUsed;
+    private int revision;
     private DateTime lastRefresh = DateTime.MinValue;
     private ulong activeContentId;
     private bool pendingContentIdLoad;
@@ -75,6 +76,10 @@ internal sealed class GlamourOwnershipIndex
     }
 
     public DateTime LastRefresh => this.lastRefresh;
+
+    /// <summary>Bumped whenever stored ownership changes, so views can tell if a rebuild is needed.</summary>
+    public int Revision => this.revision;
+
     public int DresserUniqueCount => this.cachedDresserBaseIds.Count;
     public int DresserSlotsUsed => this.dresserSlotsUsed;
     public int ArmoireCount => this.cachedArmoireBaseIds.Count;
@@ -126,6 +131,7 @@ internal sealed class GlamourOwnershipIndex
         this.cachedArmoireBaseIds.Clear();
         this.dresserSlotsUsed = 0;
         this.lastRefresh = DateTime.MinValue;
+        this.revision++;
     }
 
     public void Refresh(bool force = false)
@@ -160,7 +166,9 @@ internal sealed class GlamourOwnershipIndex
             if (ReadArmoire(liveArmoire))
                 armoireRead = true;
 
-            if (!dresserRead && !armoireRead)
+            // With no live read we can still rebuild set presence/completion from the saved cache,
+            // so a login that never opens the dresser keeps its counts.
+            if (!dresserRead && !armoireRead && !HasPersistedData)
                 return;
 
             var dresserChanged = false;
@@ -225,6 +233,7 @@ internal sealed class GlamourOwnershipIndex
 
             if (dresserChanged || armoireChanged)
             {
+                this.revision++;
                 SavePersistedForCharacter(contentId, dresserAuthoritative);
                 PluginFileLog.Info(
                     "ownership.refresh",
@@ -397,6 +406,8 @@ internal sealed class GlamourOwnershipIndex
 
         if (cache.LastSavedUtc != default)
             this.lastRefresh = cache.LastSavedUtc;
+
+        this.revision++;
     }
 
     private void SavePersistedForCharacter(ulong contentId, bool dresserAuthoritative)
@@ -430,6 +441,17 @@ internal sealed class GlamourOwnershipIndex
 
             if (this.dresserSlotsUsed <= 0 && existing.DresserSlotsUsed > 0)
                 this.dresserSlotsUsed = existing.DresserSlotsUsed;
+        }
+
+        // Never wipe a known set-presence list with empty (partial dresser read).
+        if (setSnapshot.Length == 0 && existing.DresserSetRowIds.Count > 0)
+        {
+            PluginFileLog.Warn(
+                "ownership.save",
+                $"Skipped empty set-presence overwrite ({existing.DresserSetRowIds.Count} saved sets kept)");
+            setSnapshot = existing.DresserSetRowIds.ToArray();
+            foreach (var id in setSnapshot)
+                this.cachedDresserSetRowIds.Add(id);
         }
 
         // Never wipe a known complete-set list with empty (Mirage may be unavailable this tick).
@@ -571,7 +593,7 @@ internal sealed class GlamourOwnershipIndex
         EnsureMirageStoreSetRowIds();
         var setSheet = this.dataManager.GetExcelSheet<MirageStoreSetItem>();
         var nextComplete = new HashSet<uint>();
-        var setEntries = 0;
+        var evaluated = new HashSet<uint>();
 
         // IsSetSlotUnlocked(itemIndex, slot) — itemIndex is the PrismBoxItemIds index, NOT the set RowId.
         var ids = mirage->PrismBoxItemIds;
@@ -584,7 +606,7 @@ internal sealed class GlamourOwnershipIndex
             if (!setSheet.TryGetRow(setId, out var row))
                 continue;
 
-            setEntries++;
+            evaluated.Add(setId);
             var slots = 0;
             var unlocked = 0;
             foreach (var (slotIndex, reader) in SetSlotReaders)
@@ -601,25 +623,31 @@ internal sealed class GlamourOwnershipIndex
                 nextComplete.Add(setId);
         }
 
-        // Empty Mirage result must not wipe a previously good complete list.
-        if (nextComplete.Count == 0)
+        if (evaluated.Count == 0)
         {
             PluginFileLog.Info(
                 "ownership.mirage-sets",
-                $"Complete scan found 0 (setEntries={setEntries}, prismLen={ids.Length}) — keeping cache={this.cachedDresserCompleteSetRowIds.Count}");
+                $"Complete scan saw no set rows (prismLen={ids.Length}) — keeping cache={this.cachedDresserCompleteSetRowIds.Count}");
             return false;
         }
 
-        if (nextComplete.SetEquals(this.cachedDresserCompleteSetRowIds))
+        // Only sets this scan actually looked at may lose completeness; a set the Prism Box did not
+        // list was not evaluated, so its saved result stands.
+        var merged = new HashSet<uint>(this.cachedDresserCompleteSetRowIds);
+        merged.ExceptWith(evaluated);
+        merged.UnionWith(nextComplete);
+
+        if (merged.SetEquals(this.cachedDresserCompleteSetRowIds))
             return false;
 
+        var dropped = this.cachedDresserCompleteSetRowIds.Count - merged.Intersect(this.cachedDresserCompleteSetRowIds).Count();
         this.cachedDresserCompleteSetRowIds.Clear();
-        foreach (var id in nextComplete)
+        foreach (var id in merged)
             this.cachedDresserCompleteSetRowIds.Add(id);
 
         PluginFileLog.Info(
             "ownership.mirage-sets",
-            $"Complete sets from Mirage slots: {nextComplete.Count} (setEntries={setEntries})");
+            $"Complete sets from Mirage slots: {merged.Count} (scanned={evaluated.Count}, complete={nextComplete.Count}, dropped={dropped})");
         return true;
     }
 
@@ -754,6 +782,7 @@ internal sealed class GlamourOwnershipIndex
                 AddItemId(armoire, itemId);
         }
 
-        return armoire.Count > 0;
+        // A loaded cabinet is authoritative even when empty, so emptying the armoire is picked up.
+        return true;
     }
 }

@@ -25,6 +25,7 @@ internal sealed class TrackerNativeAddon : NativeAddon
     private const float RowH = 28f;
     private const float ToolbarH = 64f;
 
+    private const int AcquireRetryCooldownMinutes = 5;
     private const float OverviewLabelWidth = 175f;
     private const float OverviewStatRowH = 22f;
     private const float OverviewColumnGap = 20f;
@@ -39,8 +40,11 @@ internal sealed class TrackerNativeAddon : NativeAddon
     private readonly ConcurrentDictionary<uint, byte> setAcquireLoaded = new();
     private readonly ConcurrentDictionary<uint, byte> setAcquireInFlight = new();
     private readonly ConcurrentDictionary<uint, byte> setAcquirePendingUi = new();
+    private readonly ConcurrentDictionary<uint, DateTime> setAcquireRetryAfter = new();
     private readonly HashSet<string> expandedPieceKeys = new(StringComparer.Ordinal);
     private CancellationTokenSource? categoryScanCts;
+    private CancellationTokenSource? windowCts;
+    private bool categoryScanRunning;
     private int detailRebuildEpoch;
     private bool suppressDetailScrollTop;
 
@@ -342,6 +346,9 @@ internal sealed class TrackerNativeAddon : NativeAddon
         categoryScanCts?.Cancel();
         categoryScanCts?.Dispose();
         categoryScanCts = null;
+        windowCts?.Cancel();
+        windowCts?.Dispose();
+        windowCts = null;
         expandedPieceKeys.Clear();
         tabBar = null;
         formScroll = null;
@@ -796,7 +803,10 @@ internal sealed class TrackerNativeAddon : NativeAddon
         else
         {
             selectedBrowserKey = string.Empty;
-            ClearBrowserDetail("No outfit sets match your filters.");
+            ClearBrowserDetail(
+                categoryFilter != OutfitCategoryFilter.All && categoryScanRunning
+                    ? "Still checking where these sets come from — results will fill in shortly."
+                    : "No outfit sets match your filters.");
         }
     }
 
@@ -912,8 +922,8 @@ internal sealed class TrackerNativeAddon : NativeAddon
             browserDetail.ScrollToTop();
         suppressDetailScrollTop = false;
 
-        if (!loaded)
-            _ = LoadSetAcquireAsync(set, refreshUi: true);
+        if (NeedsAcquireLoad(set.SetId))
+            _ = LoadSetAcquireAsync(set, refreshUi: true, WindowToken);
     }
 
     private void BuildOutfitDetail(VerticalListNode list, OutfitSetInfo set, float width)
@@ -1038,6 +1048,10 @@ internal sealed class TrackerNativeAddon : NativeAddon
             if (acquired.Sections.Count == 0 && string.IsNullOrWhiteSpace(acquired.Summary))
                 header.AddNode(MakeMuted("No source data for this piece.", contentWidth));
         }
+        else if (setAcquireRetryAfter.ContainsKey(set.SetId))
+        {
+            header.AddNode(MakeMuted("Couldn't load sources. Reopen this set to try again.", contentWidth));
+        }
         else if (!setAcquireLoaded.ContainsKey(set.SetId))
         {
             header.AddNode(MakeMuted("Loading sources…", contentWidth));
@@ -1057,8 +1071,8 @@ internal sealed class TrackerNativeAddon : NativeAddon
 
             RelayoutBrowserDetail();
 
-            if (visible && !setAcquireLoaded.ContainsKey(set.SetId))
-                _ = LoadSetAcquireAsync(set, refreshUi: true);
+            if (visible && NeedsAcquireLoad(set.SetId))
+                _ = LoadSetAcquireAsync(set, refreshUi: true, WindowToken);
         };
 
         row.AddNode(header);
@@ -1252,7 +1266,19 @@ internal sealed class TrackerNativeAddon : NativeAddon
         });
     }
 
-    private async Task LoadSetAcquireAsync(OutfitSetInfo set, bool refreshUi)
+    /// <summary>Window-scoped token so background source loads stop when the window closes.</summary>
+    private CancellationToken WindowToken => (windowCts ??= new CancellationTokenSource()).Token;
+
+    /// <summary>Sources load once per set; a failed load is retried after a cooldown, not every frame.</summary>
+    private bool NeedsAcquireLoad(uint setId)
+    {
+        if (setAcquireLoaded.ContainsKey(setId))
+            return false;
+
+        return !setAcquireRetryAfter.TryGetValue(setId, out var retryAt) || DateTime.UtcNow >= retryAt;
+    }
+
+    private async Task LoadSetAcquireAsync(OutfitSetInfo set, bool refreshUi, CancellationToken ct)
     {
         if (refreshUi)
             setAcquirePendingUi[set.SetId] = 1;
@@ -1277,7 +1303,7 @@ internal sealed class TrackerNativeAddon : NativeAddon
                     if (itemAcquireCache.ContainsKey(piece.ItemId))
                         return;
 
-                    await gate.WaitAsync().ConfigureAwait(false);
+                    await gate.WaitAsync(ct).ConfigureAwait(false);
                     try
                     {
                         var name = TrackerNativeHelpers.ResolveItemName(piece.ItemId);
@@ -1285,7 +1311,7 @@ internal sealed class TrackerNativeAddon : NativeAddon
                             return;
 
                         var resolved = await plugin.FashionReport
-                            .ResolveNamedItemAsync(name, CancellationToken.None)
+                            .ResolveNamedItemAsync(name, ct)
                             .ConfigureAwait(false);
                         var key = resolved.ItemId != 0 ? resolved.ItemId : piece.ItemId;
                         itemAcquireCache[key] = resolved;
@@ -1304,6 +1330,7 @@ internal sealed class TrackerNativeAddon : NativeAddon
                     .Select(p => itemAcquireCache.TryGetValue(p.ItemId, out var r) ? r.AcquireKind : FashionItemAcquireKind.Unknown);
                 setCategoryCache[set.SetId] = TrackerNativeHelpers.AggregateSetCategory(kinds);
                 setAcquireLoaded[set.SetId] = 1;
+                setAcquireRetryAfter.TryRemove(set.SetId, out _);
             }
 
             var wantUi = refreshUi || setAcquirePendingUi.TryRemove(set.SetId, out _);
@@ -1312,10 +1339,14 @@ internal sealed class TrackerNativeAddon : NativeAddon
             else
                 setAcquirePendingUi.TryRemove(set.SetId, out _);
         }
+        catch (OperationCanceledException)
+        {
+            setAcquirePendingUi.TryRemove(set.SetId, out _);
+        }
         catch (Exception ex)
         {
             PluginFileLog.Error("outfit.acquire", $"Failed loading sources for set {set.SetId}", ex);
-            setAcquireLoaded.TryAdd(set.SetId, 1);
+            setAcquireRetryAfter[set.SetId] = DateTime.UtcNow.AddMinutes(AcquireRetryCooldownMinutes);
         }
         finally
         {
@@ -1344,13 +1375,15 @@ internal sealed class TrackerNativeAddon : NativeAddon
     private async Task ScanAllSetCategoriesAsync()
     {
         categoryScanCts?.Cancel();
-        categoryScanCts = new CancellationTokenSource();
+        categoryScanCts?.Dispose();
+        categoryScanCts = CancellationTokenSource.CreateLinkedTokenSource(WindowToken);
         var ct = categoryScanCts.Token;
+        categoryScanRunning = true;
 
         try
         {
             var sets = plugin.OutfitSets.GetSets()
-                .Where(s => !setAcquireLoaded.ContainsKey(s.SetId))
+                .Where(s => NeedsAcquireLoad(s.SetId))
                 .ToList();
 
             var completed = 0;
@@ -1361,7 +1394,7 @@ internal sealed class TrackerNativeAddon : NativeAddon
                 try
                 {
                     ct.ThrowIfCancellationRequested();
-                    await LoadSetAcquireAsync(set, refreshUi: false).ConfigureAwait(false);
+                    await LoadSetAcquireAsync(set, refreshUi: false, ct).ConfigureAwait(false);
                     var n = Interlocked.Increment(ref completed);
                     if (n % 15 == 0 || n == sets.Count)
                     {
@@ -1391,6 +1424,10 @@ internal sealed class TrackerNativeAddon : NativeAddon
         catch (Exception ex)
         {
             PluginFileLog.Warn("outfit.acquire", $"Category scan failed: {ex.Message}");
+        }
+        finally
+        {
+            categoryScanRunning = false;
         }
     }
 

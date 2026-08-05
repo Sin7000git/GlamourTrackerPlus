@@ -142,13 +142,34 @@ internal sealed partial class FashionVendorLocator
         if (string.IsNullOrWhiteSpace(location))
             return false;
 
+        var normalizedLocation = NormalizePlaceName(location);
+
         foreach (var alias in context.Aliases)
         {
-            if (location.Contains(alias, StringComparison.OrdinalIgnoreCase))
+            if (normalizedLocation.Contains(NormalizePlaceName(alias), StringComparison.Ordinal))
                 return true;
         }
 
-        return location.Contains(context.PlaceName, StringComparison.OrdinalIgnoreCase);
+        return normalizedLocation.Contains(NormalizePlaceName(context.PlaceName), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Place names reach us from the web API and from Lumina, which disagree on punctuation
+    /// ("Ul'dah" vs "Ul’dah"). Compare letters and digits only.
+    /// </summary>
+    private static string NormalizePlaceName(string value)
+    {
+        var buffer = new char[value.Length];
+        var length = 0;
+        foreach (var c in value)
+        {
+            if (char.IsLetterOrDigit(c))
+                buffer[length++] = char.ToLowerInvariant(c);
+            else if (char.IsWhiteSpace(c) && length > 0 && buffer[length - 1] != ' ')
+                buffer[length++] = ' ';
+        }
+
+        return new string(buffer, 0, length).TrimEnd();
     }
 
     private static HashSet<string> GetAreaAliases(string placeName)

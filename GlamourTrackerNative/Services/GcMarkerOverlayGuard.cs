@@ -36,7 +36,7 @@ internal static unsafe class GcMarkerOverlayGuard
     ];
 
     public static bool ShouldDrawAnyMarkers(AtkUnitBase* supplyUnit) =>
-        supplyUnit != null && TryGetRootScreenRect(supplyUnit, out _, out _);
+        supplyUnit != null && supplyUnit->IsVisible && TryGetRootScreenRect(supplyUnit, out _, out _);
 
     public static bool TryGetClipRect(AtkUnitBase* supplyUnit, out Vector2 min, out Vector2 max)
     {

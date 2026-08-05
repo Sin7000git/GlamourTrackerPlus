@@ -486,3 +486,10 @@
 - Outcome: Release build ok
 - Evidence: Overview used set-level completes; Outfit Sets used GetStorage(pieceId) only — armoire piece ids work, dresser set-rows do not
 - Next: reload plugin, open Outfit sets → In dresser / Owned
+
+[2026-08-05] Cleanup Phase 1 — correctness pass (0.1.119)
+- Attempt: ownership save/read guards, scan-scoped set completeness, Fashion Report week helpers take utcNow + snapshot expires at reset, config save off NPC hook thread, window-scoped cancellation + acquire retry cooldown, ItemDetail restore/PreFinalize, GC markers keyed on ownership revision, single InDresser rule for Overview and Outfit sets filter.
+- Files changed: GlamourOwnershipIndex, OutfitSetCatalog, TrackerNativeHelpers, TrackerNativeAddon, ItemDetailEnhancer, GcExpertDeliveryEnhancer, GcMarkerOverlayGuard, FashionReportWeek, FashionReportProgressTracker, FashionReportService, FashionVendorLocator, Plugin, csproj
+- Outcome: Debug + Release build clean
+- Evidence: branch code-cleanup, plan in CODE_CLEANUP_PLAN.md
+- Next: in-game verification against the watchlist (Overview 74/264, armoire 31/84, clear/refresh, outfit sets, FR week, tooltips, GC markers)

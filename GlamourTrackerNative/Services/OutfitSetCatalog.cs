@@ -6,21 +6,6 @@ namespace GlamourTracker.Services;
 
 internal sealed class OutfitSetCatalog
 {
-    private static readonly (string Label, int SlotIndex, Func<MirageStoreSetItem, uint> ItemId)[] SlotReaders =
-    [
-        ("Main hand", 0, s => s.MainHand.RowId),
-        ("Off-hand", 1, s => s.OffHand.RowId),
-        ("Head", 2, s => s.Head.RowId),
-        ("Body", 3, s => s.Body.RowId),
-        ("Hands", 4, s => s.Hands.RowId),
-        ("Legs", 5, s => s.Legs.RowId),
-        ("Feet", 6, s => s.Feet.RowId),
-        ("Earrings", 7, s => s.Earrings.RowId),
-        ("Necklace", 8, s => s.Necklace.RowId),
-        ("Bracelets", 9, s => s.Bracelets.RowId),
-        ("Ring", 10, s => s.Ring.RowId),
-    ];
-
     private readonly IDataManager dataManager;
     private readonly GlamourOwnershipIndex ownershipIndex;
     private readonly CabinetCatalog cabinetCatalog;
@@ -77,7 +62,7 @@ internal sealed class OutfitSetCatalog
             if (set.InDresser)
             {
                 setsInDresser++;
-                if (IsDresserSetCompleteForOverview(set.SetId, glamourPieces))
+                if (this.ownershipIndex.IsOutfitSetComplete(set.SetId))
                     completedInDresser++;
             }
 
@@ -113,13 +98,13 @@ internal sealed class OutfitSetCatalog
                 continue;
 
             var pieces = new List<OutfitPieceInfo>();
-            foreach (var (label, slotIndex, reader) in SlotReaders)
+            foreach (var (label, slotIndex, readItemId) in OutfitSetSlots.All)
             {
-                var itemId = reader(row);
+                var itemId = readItemId(row);
                 if (itemId == 0)
                     continue;
 
-                var storage = ResolvePieceStorage(row.RowId, itemId, slotIndex);
+                var storage = this.ownershipIndex.GetStorage(itemId, row.RowId, slotIndex);
                 pieces.Add(new OutfitPieceInfo(row.RowId, itemId, slotIndex, label, storage));
             }
 
@@ -128,7 +113,7 @@ internal sealed class OutfitSetCatalog
 
             var set = new OutfitSetInfo(row.RowId, ResolveSetName(row, itemSheet))
             {
-                IsUnlocked = IsOutfitSetUnlocked(row.RowId),
+                IsUnlocked = this.ownershipIndex.IsOutfitSetUnlockedLive(row.RowId),
                 InDresser = ResolveInDresser(row.RowId, pieces),
                 SetStorage = ResolveSetStorage(row, pieces),
                 Pieces = pieces,
@@ -152,7 +137,7 @@ internal sealed class OutfitSetCatalog
 
     private OutfitSetStorageLocation ResolveSetStorage(MirageStoreSetItem row, List<OutfitPieceInfo> pieces)
     {
-        var dresserComplete = IsDresserSetComplete(row, pieces);
+        var dresserComplete = this.ownershipIndex.IsOutfitSetComplete(row.RowId);
         var armoireComplete = IsArmoireSetComplete(pieces);
 
         if (dresserComplete && armoireComplete)
@@ -167,50 +152,6 @@ internal sealed class OutfitSetCatalog
         return OutfitSetStorageLocation.None;
     }
 
-    /// <summary>
-    /// Piece storage for the Outfit Sets browser. The Prism Box often stores an outfit as a
-    /// <see cref="MirageStoreSetItem"/> row id, not each glam piece id — so item-only
-    /// <see cref="GlamourOwnershipIndex.GetStorage"/> misses dresser ownership that Overview
-    /// already sees via complete-set / Mirage slot caches.
-    /// </summary>
-    private GlamourStorageLocation ResolvePieceStorage(uint setId, uint itemId, int slotIndex)
-    {
-        var storage = this.ownershipIndex.GetStorage(itemId);
-        if (storage.HasFlag(GlamourStorageLocation.Dresser) || !this.IsGlamourPiece(itemId))
-            return storage;
-
-        // Complete sets are already covered by GetStorage; this catches partially stored ones.
-        if (this.ownershipIndex.IsOutfitSlotUnlocked(setId, slotIndex))
-            storage |= GlamourStorageLocation.Dresser;
-
-        return storage;
-    }
-
-    private bool IsDresserSetComplete(MirageStoreSetItem row, List<OutfitPieceInfo> pieces)
-    {
-        var glamourPieces = pieces.Where(p => this.IsGlamourPiece(p.ItemId)).ToList();
-        return IsDresserSetCompleteForOverview(row.RowId, glamourPieces);
-    }
-
-    /// <summary>
-    /// Fully finished in the dresser: persisted Mirage-complete cache, or every glam piece is
-    /// either in the dresser item list or unlocked via Mirage slot flags (0.1.102 — no PrismBoxLoaded gate).
-    /// Presence alone (set row in list) is NOT enough — that was the false 262/262.
-    /// </summary>
-    private bool IsDresserSetCompleteForOverview(uint setId, List<OutfitPieceInfo> glamourPieces)
-    {
-        // Persisted completes must win even if glam-piece filtering yields an empty list.
-        if (this.ownershipIndex.IsOutfitSetCompleteInDresser(setId))
-            return true;
-
-        if (glamourPieces.Count == 0)
-            return false;
-
-        return glamourPieces.All(p =>
-            this.ownershipIndex.IsInDresserItemList(p.ItemId)
-            || this.ownershipIndex.IsOutfitSlotUnlocked(setId, p.SlotIndex));
-    }
-
     private bool IsArmoireSetComplete(List<OutfitPieceInfo> pieces)
     {
         var armoirePieces = pieces.Where(p => this.cabinetCatalog.IsArmoireEligible(p.ItemId)).ToList();
@@ -220,29 +161,7 @@ internal sealed class OutfitSetCatalog
         return armoirePieces.All(p => p.Storage.HasFlag(GlamourStorageLocation.Armoire));
     }
 
-    private bool IsGlamourPiece(uint itemId)
-    {
-        var itemSheet = this.dataManager.GetExcelSheet<Item>();
-        if (!itemSheet.TryGetRow(itemId, out var item))
-            return false;
-
-        return GlamourOwnershipIndex.IsGlamourGear(item);
-    }
-
-    private static unsafe bool IsOutfitSetUnlocked(uint setId)
-    {
-        var finder = ItemFinderModule.Instance();
-        if (finder == null || !finder->IsGlamourDresserCached)
-            return false;
-
-        var bitIndex = (int)setId;
-        var bits = finder->GlamourDresserItemSetUnlockBits;
-        var wordIndex = bitIndex / 16;
-        if (wordIndex < 0 || wordIndex >= bits.Length)
-            return false;
-
-        return (bits[wordIndex] & (1 << (bitIndex % 16))) != 0;
-    }
+    private bool IsGlamourPiece(uint itemId) => this.ownershipIndex.Sets.IsGlamourPiece(itemId);
 
     private static string ResolveSetName(MirageStoreSetItem row, Lumina.Excel.ExcelSheet<Item> itemSheet)
     {

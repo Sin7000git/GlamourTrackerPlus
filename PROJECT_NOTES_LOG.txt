@@ -501,3 +501,12 @@
 - Files changed: GlamourOwnershipIndex.cs, OutfitSetCatalog.cs, csproj
 - Outcome: Debug + Release build clean
 - Next: restart the game without opening the dresser, check GC delivery dresser markers and that Overview still reads 74/264
+- Outcome: confirmed working in game — dresser and armoire markers both load after a restart
+
+[2026-08-06] Cleanup Phase 2 — one ownership model (0.1.121)
+- Attempt: split GlamourOwnershipIndex into OwnershipSnapshot (state + Version, every mutation reports whether it changed anything), OwnershipGameReader (all unsafe reads, returns DresserRead describing how much of the dresser it saw), SetCompletionRules (the only definition of a finished outfit + set metadata), and the index itself as orchestration + queries.
+- Also: GetStorage(itemId, setRowId, slotIndex) overload replaces OutfitSetCatalog.ResolvePieceStorage; one KeepSavedWhenEmpty guard for all persisted lists; shared OutfitSetSlots map; memoized IsGlamourPiece; merged the two identical finder unlock-bit readers; CharacterGlamourCache.DresserSetRowIds renamed to DresserSetPresenceRowIds with [JsonProperty] keeping the old on-disk key.
+- Removed as unused: IsMiragePrismReady, OutfitSetsCompleteInDresser.
+- Files changed: GlamourOwnershipIndex.cs (rewritten), OutfitSetCatalog.cs, CharacterGlamourCache.cs, csproj; new OwnershipSnapshot.cs, OwnershipGameReader.cs, SetCompletionRules.cs, OutfitSetSlots.cs
+- Outcome: Debug + Release build clean; saved config verified to still carry DresserBaseIds=1493, DresserSetRowIds=264, DresserCompleteSetRowIds=74, slots=563
+- Next: in-game check of Overview 74/264 and 31/84, outfit sets filters, tooltips, GC markers, plate randomizer

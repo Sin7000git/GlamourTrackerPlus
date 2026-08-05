@@ -1,4 +1,5 @@
 using System;
+using Newtonsoft.Json;
 
 namespace GlamourTracker;
 
@@ -10,8 +11,13 @@ public sealed class CharacterGlamourCache
     public List<StoredGlamourPlate> GlamourPlates { get; set; } = [];
     public DateTime LastSavedUtc { get; set; }
 
-    /// <summary>Outfit sets with at least one Mirage slot unlocked (from last dresser open).</summary>
-    public List<uint> DresserSetRowIds { get; set; } = [];
+    /// <summary>
+    /// Outfit sets the dresser is holding in any form. Presence only — see
+    /// <see cref="DresserCompleteSetRowIds"/> for the ones that are actually finished.
+    /// The saved name is the old one so existing configs keep loading.
+    /// </summary>
+    [JsonProperty("DresserSetRowIds")]
+    public List<uint> DresserSetPresenceRowIds { get; set; } = [];
 
     /// <summary>Outfit sets with every glam piece slot unlocked via Mirage (from last dresser open).</summary>
     public List<uint> DresserCompleteSetRowIds { get; set; } = [];

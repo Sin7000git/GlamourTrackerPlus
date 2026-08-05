@@ -87,7 +87,7 @@ Verify these in game after every phase:
 
 # Phase 2 — One ownership model
 
-**Status:** not started
+**Status:** done (0.1.121)
 **Why:** four parallel caches with different merge rules is the root cause of most past bugs.
 
 Target shape:
@@ -99,13 +99,19 @@ Target shape:
 
 Work:
 
-- [ ] Introduce `OwnershipSnapshot` and move the four `cached*` sets behind it.
-- [ ] Extract the adapters out of `Refresh()` so the pipeline reads as a list of steps with declared semantics.
-- [ ] Extract `SetCompletionRules` and delete the duplicate completion logic in `GlamourOwnershipIndex.RebuildCompleteSetsFromOwnedPieces`, `OutfitSetCatalog.IsDresserSetComplete`, and `IsDresserSetCompleteForOverview`.
-- [ ] Extract `ItemStorageResolver` and route `OutfitSetCatalog.ResolvePieceStorage`, plate store, tooltips and GC markers through it (this is what 0.1.118 patched in one place only).
-- [ ] Replace `Invalidate()`-everything with a snapshot `Version` the UI can compare.
-- [ ] Add the empty-overwrite guard once, for every persisted list.
-- [ ] Fix the contradictory doc comments on `DresserSetRowIds` (says "Mirage slot unlocked", actually "set row present in dresser item list") — rename to `DresserSetPresenceRowIds`.
+- [x] Introduce `OwnershipSnapshot` and move the four `cached*` sets behind it. It owns `Version` and every mutation returns whether anything actually changed.
+- [x] Extract the adapters out of `Refresh()` so the pipeline reads as a list of steps with declared semantics — `OwnershipGameReader` holds every unsafe read and returns a `DresserRead` describing how much it saw.
+- [x] Extract `SetCompletionRules` and delete the duplicate completion logic in `GlamourOwnershipIndex.RebuildCompleteSetsFromOwnedPieces`, `OutfitSetCatalog.IsDresserSetComplete`, and `IsDresserSetCompleteForOverview`. All three are now `SetCompletionRules.IsComplete`, which takes one flag for whether live dresser slot flags may be consulted.
+- [x] Route piece storage, plate store, tooltips and GC markers through one resolver. Done without a separate `ItemStorageResolver` class: the index owns the snapshot, so `GetStorage(itemId)` plus the new `GetStorage(itemId, setRowId, slotIndex)` overload is that resolver and `OutfitSetCatalog.ResolvePieceStorage` is gone.
+- [x] Replace `Invalidate()`-everything with a snapshot `Version` the UI can compare — `Revision` now comes straight from `OwnershipSnapshot.Version`, which only moves on a real change.
+- [x] Add the empty-overwrite guard once, for every persisted list — `KeepSavedWhenEmpty`.
+- [x] Fix the contradictory doc comments on `DresserSetRowIds` — the property is now `DresserSetPresenceRowIds`. The on-disk key stays `DresserSetRowIds` via `[JsonProperty]` so existing configs load untouched; renaming the key itself belongs with the Phase 6 schema bump.
+
+**Pulled forward from Phase 3** because Phase 2 needed them: the shared `OutfitSetSlots` map (was duplicated in the index and the catalog), memoized `IsGlamourPiece`, and the merged unlock-bit reader (`IsFinderSetUnlockBitSet` and `OutfitSetCatalog.IsOutfitSetUnlocked` were the same code twice).
+
+**Also removed:** unused `IsMiragePrismReady` and `OutfitSetsCompleteInDresser`.
+
+**One deliberate behaviour change:** a saved slot count is now restored whenever the runtime count is zero, not only when the empty-dresser save guard happens to fire.
 
 **Blast radius to check:** Overview stats, Outfit sets list + filters + detail, item tooltips, GC delivery markers, plate randomizer, Fashion Report owned flags.
 
@@ -373,5 +379,16 @@ Append one entry per phase. Keep it short and factual.
   additionally answers true for pieces of a set already known to be complete, so tooltips, GC
   markers, plates and the sets tab share one rule. Completeness math kept on the raw item list via
   `IsInDresserItemList` so Overview counts cannot inflate.
-- In-game result: pending.
+- In-game result: confirmed by the user — GC delivery loads both dresser and armoire markers after a
+  restart now.
 - Version: 0.1.120
+
+[2026-08-06] Phase 2 — one ownership model
+- Done: every checklist item. `OwnershipSnapshot` holds the state and the version, `OwnershipGameReader`
+  holds every unsafe read and says how much it saw, `SetCompletionRules` is the only definition of a
+  finished outfit, and `GlamourOwnershipIndex` is now orchestration plus queries. Three copies of the
+  completion rule, two copies of the slot map, and two copies of the unlock-bit reader are gone.
+- Skipped: a separate `ItemStorageResolver` class. The index owns the snapshot, so splitting the
+  resolver out would only add a hop; the duplicated callers were removed instead.
+- In-game result: pending.
+- Version: 0.1.121

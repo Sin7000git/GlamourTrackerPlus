@@ -22,6 +22,16 @@ internal readonly record struct DresserRead(
     bool ReadItemFinder,
     int SlotsUsed);
 
+/// <summary>What one walk of the stored outfits in the Prism Box found.</summary>
+/// <param name="Evaluated">Outfits the box listed, and so the only ones this scan may speak for.</param>
+/// <param name="Complete">Of those, the ones with every slot filled.</param>
+/// <param name="UnlockedPieces">Item ids held inside those outfits, whole or partial.</param>
+internal readonly record struct StoredOutfitScan(
+    HashSet<uint> Evaluated,
+    HashSet<uint> Complete,
+    HashSet<uint> UnlockedPieces,
+    int PrismBoxLength);
+
 /// <summary>
 /// Every read of live glamour state out of the game. Three structures answer overlapping questions
 /// and each is trustworthy only at certain times, so the rules for that all live here.
@@ -171,28 +181,31 @@ internal static unsafe class OwnershipGameReader
     }
 
     /// <summary>
-    /// Walks the Prism Box and reports which outfits have every slot unlocked. Slot flags are only
-    /// meaningful while the box is loaded, and outfits the box never listed stay unevaluated so a
-    /// partial view cannot revoke what an earlier one established.
+    /// Walks the Prism Box and reports, for every stored outfit, which of its slots are actually
+    /// filled and whether that adds up to the whole outfit.
     /// </summary>
-    public static bool TryScanCompleteSets(
+    /// <remarks>
+    /// Outfits can be stored partially, so the per-slot answer is the useful one: those pieces are in
+    /// the dresser and can be worn even though they never appear in the item list, which holds one
+    /// row for the outfit as a whole. Slot flags mean nothing unless the box is loaded, and outfits
+    /// the box never listed stay unevaluated so a partial view cannot revoke an earlier one.
+    /// </remarks>
+    public static bool TryScanStoredOutfits(
         ExcelSheet<MirageStoreSetItem> setSheet,
         HashSet<uint> knownSetRowIds,
-        out HashSet<uint> evaluated,
-        out HashSet<uint> complete,
-        out int prismBoxLength)
+        out StoredOutfitScan scan)
     {
-        evaluated = [];
-        complete = [];
-        prismBoxLength = 0;
+        scan = new StoredOutfitScan([], [], [], 0);
 
         var mirage = MirageManager.Instance();
         if (mirage == null || !mirage->PrismBoxLoaded)
             return false;
 
-        var ids = mirage->PrismBoxItemIds;
-        prismBoxLength = ids.Length;
+        var evaluated = new HashSet<uint>();
+        var complete = new HashSet<uint>();
+        var pieces = new HashSet<uint>();
 
+        var ids = mirage->PrismBoxItemIds;
         for (var i = 0; i < ids.Length; i++)
         {
             var setRowId = ItemIdHelper.GlamourBaseId(ids[i]);
@@ -207,18 +220,23 @@ internal static unsafe class OwnershipGameReader
             var unlocked = 0;
             foreach (var (_, slotIndex, readItemId) in OutfitSetSlots.All)
             {
-                if (readItemId(row) == 0)
+                var itemId = readItemId(row);
+                if (itemId == 0)
                     continue;
 
                 slots++;
-                if (mirage->IsSetSlotUnlocked((uint)i, slotIndex))
-                    unlocked++;
+                if (!mirage->IsSetSlotUnlocked((uint)i, slotIndex))
+                    continue;
+
+                unlocked++;
+                pieces.Add(ItemIdHelper.GlamourBaseId(itemId));
             }
 
             if (slots > 0 && unlocked == slots)
                 complete.Add(setRowId);
         }
 
+        scan = new StoredOutfitScan(evaluated, complete, pieces, ids.Length);
         return true;
     }
 

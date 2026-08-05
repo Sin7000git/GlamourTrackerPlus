@@ -390,5 +390,20 @@ Append one entry per phase. Keep it short and factual.
   completion rule, two copies of the slot map, and two copies of the unlock-bit reader are gone.
 - Skipped: a separate `ItemStorageResolver` class. The index owns the snapshot, so splitting the
   resolver out would only add a hop; the duplicated callers were removed instead.
-- In-game result: pending.
+- In-game result: found three bugs, all pre-existing and all the same mistake — trusting a narrow read
+  as the whole truth. Fixed in 0.1.122 (below).
 - Version: 0.1.121
+
+[2026-08-06] Phase 2 follow-up — pieces inside stored outfits
+- Cause: an outfit can be stored partially, and the dresser item list keeps one row for the whole
+  outfit, so its pieces appear nowhere. Tooltips and delivery markers have no set context, so they
+  could only infer ownership from complete outfits and silently missed every piece of a partial one.
+  Two related faults from the same log: a single partial read pruned the dresser from 1493 ids to 563
+  and the armoire from 470 to 124, and the Mirage scan and the all-pieces fallback overruled each
+  other every 30 seconds, rewriting the config each time.
+- Done: the snapshot now tracks pieces held inside stored outfits, read from per-slot unlock flags and
+  persisted, so every consumer sees them without needing set context. Removal requires two consecutive
+  reads to agree, and the first read of a session may not remove anything. The completeness fallback
+  leaves outfits the scan already ruled on alone.
+- In-game result: pending.
+- Version: 0.1.122

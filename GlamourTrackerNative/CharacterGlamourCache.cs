@@ -7,6 +7,13 @@ namespace GlamourTracker;
 public sealed class CharacterGlamourCache
 {
     public List<uint> DresserBaseIds { get; set; } = [];
+
+    /// <summary>
+    /// Pieces the dresser holds inside stored outfits. They are absent from the item list, which keeps
+    /// one row per outfit, so without this an outfit's contents are invisible until the box is opened.
+    /// </summary>
+    public List<uint> DresserOutfitPieceIds { get; set; } = [];
+
     public List<uint> ArmoireBaseIds { get; set; } = [];
     public List<StoredGlamourPlate> GlamourPlates { get; set; } = [];
     public DateTime LastSavedUtc { get; set; }

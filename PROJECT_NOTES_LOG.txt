@@ -510,3 +510,12 @@
 - Files changed: GlamourOwnershipIndex.cs (rewritten), OutfitSetCatalog.cs, CharacterGlamourCache.cs, csproj; new OwnershipSnapshot.cs, OwnershipGameReader.cs, SetCompletionRules.cs, OutfitSetSlots.cs
 - Outcome: Debug + Release build clean; saved config verified to still carry DresserBaseIds=1493, DresserSetRowIds=264, DresserCompleteSetRowIds=74, slots=563
 - Next: in-game check of Overview 74/264 and 31/84, outfit sets filters, tooltips, GC markers, plate randomizer
+
+[2026-08-06] Pieces inside stored outfits were invisible to tooltips/GC (0.1.122)
+- Symptom: "Xenobian Paladin's Choker" showed the dresser icon, "Valerian Rune Fencer's Gauntlets" did not, while the Outfit sets tab listed both outfits as in dresser.
+- Evidence: item 18798 belongs to set 51442 (present + complete), item 18759 belongs to set 51443 (present, NOT complete). Neither item id is in DresserBaseIds. Tooltips/GC have no set context so they could only infer ownership from *complete* sets; a partially stored outfit's pieces fell through. FFXIVClientStructs confirms partial outfits are real (PrismBoxStain0Ids carries per-slot bit arrays since 7.4) and that IsSetSlotUnlocked takes MirageStoreSetItem column order, so the 11-slot map was already right.
+- Also found in the log: dresser 1493 -> 563 at 22:11:50 and armoire 470 -> 124 at 22:06:37, both from a single read pruning against a partial view; and completeSets oscillating 74 <-> 71 every 30s (Mirage scan vs all-pieces fallback overruling each other), which rewrote the config every 30s.
+- Attempt: (1) OwnershipSnapshot gains dresserOutfitPieces, filled by TryScanStoredOutfits from per-slot unlock flags and persisted as CharacterGlamourCache.DresserOutfitPieceIds, so "in dresser" covers pieces held inside partial outfits with no set context needed. (2) ConfirmRemovals: an id must be missing from two consecutive reads before removal, and the first read of a session may never prune. (3) The all-pieces completeness fallback now skips outfits the Mirage scan already ruled on.
+- Files changed: OwnershipSnapshot.cs, OwnershipGameReader.cs, GlamourOwnershipIndex.cs, CharacterGlamourCache.cs, csproj
+- Outcome: Debug + Release build clean
+- Next: open the dresser once to seed DresserOutfitPieceIds, then check the Gauntlets tooltip, GC markers, and that the log stops churning 74<->71

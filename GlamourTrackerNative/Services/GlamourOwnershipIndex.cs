@@ -27,6 +27,8 @@ internal sealed class GlamourOwnershipIndex
     private DateTime lastRefresh = DateTime.MinValue;
     private ulong activeContentId;
     private bool pendingContentIdLoad;
+    private HashSet<uint>? previousLiveDresser;
+    private HashSet<uint>? previousLiveArmoire;
 
     public GlamourOwnershipIndex(
         IDataManager dataManager,
@@ -110,6 +112,8 @@ internal sealed class GlamourOwnershipIndex
     {
         this.snapshot.Clear();
         this.lastRefresh = DateTime.MinValue;
+        this.previousLiveDresser = null;
+        this.previousLiveArmoire = null;
     }
 
     public void Refresh(bool force = false)
@@ -146,20 +150,25 @@ internal sealed class GlamourOwnershipIndex
             var dresserChanged = false;
             if (dresser.FoundAnything)
             {
-                // Pruning needs both dresser sources. The Prism Box lists physical slots, where a stored
-                // outfit is one row, while ItemFinder lists the pieces inside those outfits. Replacing
-                // from the Prism Box alone deleted every piece id and left saved data too thin to mark
-                // items owned, which is why delivery markers vanished after a restart.
-                var mayPrune = dresser.SpeaksForWholeDresser && dresser.ReadItemFinder && liveDresser.Count > 0;
-                dresserChanged = this.snapshot.MergeDresserItems(liveDresser, mayPrune);
+                var (ids, mayPrune) = ConfirmRemovals(
+                    liveDresser,
+                    ref this.previousLiveDresser,
+                    dresser.SpeaksForWholeDresser && liveDresser.Count > 0);
+
+                dresserChanged = this.snapshot.MergeDresserItems(ids, mayPrune);
                 dresserChanged |= this.snapshot.SetDresserSlotsUsed(dresser.SlotsUsed);
             }
 
             dresserChanged |= RefreshSetPresence();
-            dresserChanged |= RefreshCompleteSets(contentId);
+            dresserChanged |= RefreshStoredOutfits(contentId);
 
-            // A loaded cabinet is the whole armoire, so items it no longer lists really are gone.
-            var armoireChanged = armoireRead && this.snapshot.MergeArmoireItems(liveArmoire, replaceMissing: true);
+            var armoireChanged = false;
+            if (armoireRead)
+            {
+                // A loaded cabinet is the whole armoire, so items it stops listing really are gone.
+                var (ids, mayPrune) = ConfirmRemovals(liveArmoire, ref this.previousLiveArmoire, mayPrune: true);
+                armoireChanged = this.snapshot.MergeArmoireItems(ids, mayPrune);
+            }
             this.lastRefresh = DateTime.UtcNow;
 
             if (!dresserChanged && !armoireChanged)
@@ -168,8 +177,9 @@ internal sealed class GlamourOwnershipIndex
             SavePersistedForCharacter(contentId, dresser.SpeaksForWholeDresser);
             PluginFileLog.Info(
                 "ownership.refresh",
-                $"dresser={this.snapshot.DresserItemCount} slots={this.snapshot.DresserSlotsUsed} " +
-                $"sets={this.snapshot.SetsInDresserCount} completeSets={this.snapshot.CompleteSetsInDresserCount} " +
+                $"dresser={this.snapshot.DresserItemCount} outfitPieces={this.snapshot.DresserOutfitPieceCount} " +
+                $"slots={this.snapshot.DresserSlotsUsed} sets={this.snapshot.SetsInDresserCount} " +
+                $"completeSets={this.snapshot.CompleteSetsInDresserCount} " +
                 $"armoire={this.snapshot.ArmoireItemCount} auth={dresser.SpeaksForWholeDresser}");
         }
         catch (Exception ex)
@@ -247,7 +257,31 @@ internal sealed class GlamourOwnershipIndex
         item.EquipSlotCategory.RowId != 0 && item.ItemUICategory.RowId is not 59 and not 60;
 
     private bool IsBaseIdInDresser(uint baseId) =>
-        this.snapshot.HasDresserItem(baseId) || this.Sets.IsPieceOfCompleteSet(baseId, this.snapshot);
+        this.snapshot.HasDresserItem(baseId)
+        || this.snapshot.HasDresserOutfitPiece(baseId)
+        || this.Sets.IsPieceOfCompleteSet(baseId, this.snapshot);
+
+    /// <summary>
+    /// Decides what a read is allowed to forget. A single read can be a moment of nonsense — a cabinet
+    /// halfway through loading, a dresser halfway through opening — and one of those quietly deleted
+    /// 346 armoire entries, so an id has to be missing from two reads in a row before it counts as
+    /// gone, and the first read of a session is never allowed to remove anything by itself.
+    /// </summary>
+    private static (HashSet<uint> Ids, bool MayPrune) ConfirmRemovals(
+        HashSet<uint> live,
+        ref HashSet<uint>? previousLive,
+        bool mayPrune)
+    {
+        var previous = previousLive;
+        previousLive = live;
+
+        if (!mayPrune || previous == null)
+            return (live, false);
+
+        var spared = new HashSet<uint>(live);
+        spared.UnionWith(previous);
+        return (spared, true);
+    }
 
     /// <summary>
     /// Which outfits are in the dresser. The item list holds an outfit as a set row id, and ItemFinder
@@ -290,23 +324,31 @@ internal sealed class GlamourOwnershipIndex
         return changed;
     }
 
-    private bool RefreshCompleteSets(ulong contentId)
+    /// <summary>
+    /// Works out what the stored outfits are holding: which pieces are in them, and which of them are
+    /// whole. The scan is the authority for the outfits it saw; anything else falls back to the item
+    /// list, which is the only evidence for an outfit kept as loose pieces.
+    /// </summary>
+    private bool RefreshStoredOutfits(ulong contentId)
     {
         var changed = false;
+        var scanned = new HashSet<uint>();
 
         try
         {
-            changed |= ScanCompleteSetsFromDresserSlots();
+            changed |= ScanStoredOutfits(ref scanned);
         }
         catch (Exception ex)
         {
-            PluginFileLog.Error("ownership.mirage-sets", "Rebuild complete set unlocks failed", ex);
+            PluginFileLog.Error("ownership.mirage-sets", "Reading stored outfit slots failed", ex);
         }
 
-        // Fallback for outfits kept as loose pieces: every glamour piece present means it is finished.
         if (this.snapshot.SetsInDresserCount > 0 && this.snapshot.DresserItemCount > 0)
         {
+            // Outfits the scan already ruled on are left alone, or the two keep overruling each other
+            // and every refresh looks like a change worth saving.
             var complete = this.snapshot.SetsInDresser
+                .Where(setRowId => !scanned.Contains(setRowId))
                 .Where(setRowId => !this.snapshot.HasCompleteSetInDresser(setRowId))
                 .Where(setRowId => this.Sets.IsComplete(setRowId, this.snapshot, useMirageSlots: false))
                 .ToList();
@@ -320,44 +362,45 @@ internal sealed class GlamourOwnershipIndex
         return changed;
     }
 
-    /// <summary>
-    /// Reads per-slot unlock flags out of the open dresser. Outfits the Prism Box did not list were
-    /// never looked at, so a partial view cannot revoke completeness an earlier one established.
-    /// </summary>
-    private bool ScanCompleteSetsFromDresserSlots()
+    private bool ScanStoredOutfits(ref HashSet<uint> evaluated)
     {
-        var scanned = OwnershipGameReader.TryScanCompleteSets(
-            this.dataManager.GetExcelSheet<MirageStoreSetItem>(),
-            this.Sets.AllSetRowIds,
-            out var evaluated,
-            out var complete,
-            out var prismBoxLength);
-
-        if (!scanned)
+        if (!OwnershipGameReader.TryScanStoredOutfits(
+                this.dataManager.GetExcelSheet<MirageStoreSetItem>(),
+                this.Sets.AllSetRowIds,
+                out var scan))
             return false;
 
-        if (evaluated.Count == 0)
+        if (scan.Evaluated.Count == 0)
         {
             PluginFileLog.Info(
                 "ownership.mirage-sets",
-                $"Complete scan saw no set rows (prismLen={prismBoxLength}) — " +
+                $"Outfit scan saw no set rows (prismLen={scan.PrismBoxLength}) — " +
                 $"keeping cache={this.snapshot.CompleteSetsInDresserCount}");
             return false;
         }
 
-        var merged = new HashSet<uint>(this.snapshot.CompleteSetsInDresser);
-        merged.ExceptWith(evaluated);
-        merged.UnionWith(complete);
+        evaluated = scan.Evaluated;
+
+        var completes = new HashSet<uint>(this.snapshot.CompleteSetsInDresser);
+        completes.ExceptWith(scan.Evaluated);
+        completes.UnionWith(scan.Complete);
 
         var before = this.snapshot.CompleteSetsInDresserCount;
-        if (!this.snapshot.ReplaceCompleteSetsInDresser(merged))
-            return false;
+        var changed = this.snapshot.ReplaceCompleteSetsInDresser(completes);
 
-        PluginFileLog.Info(
-            "ownership.mirage-sets",
-            $"Complete sets from Mirage slots: {merged.Count} (scanned={evaluated.Count}, " +
-            $"complete={complete.Count}, was={before})");
-        return true;
+        // Only a scan that covered every outfit we know about may forget pieces.
+        var sawEverything = scan.Evaluated.Count >= this.snapshot.SetsInDresserCount;
+        changed |= this.snapshot.MergeDresserOutfitPieces(scan.UnlockedPieces, replaceMissing: sawEverything);
+
+        if (changed)
+        {
+            PluginFileLog.Info(
+                "ownership.mirage-sets",
+                $"Stored outfits: {scan.Evaluated.Count} scanned, {completes.Count} complete (was {before}), " +
+                $"{this.snapshot.DresserOutfitPieceCount} pieces held inside them");
+        }
+
+        return changed;
     }
 
     private bool TryHydrateCompleteSetsFromConfig(ulong contentId)
@@ -391,6 +434,7 @@ internal sealed class GlamourOwnershipIndex
 
         this.snapshot.Restore(
             cache.DresserBaseIds,
+            cache.DresserOutfitPieceIds,
             cache.DresserSetPresenceRowIds,
             cache.DresserCompleteSetRowIds,
             cache.ArmoireBaseIds,
@@ -429,6 +473,12 @@ internal sealed class GlamourOwnershipIndex
         if (this.snapshot.DresserSlotsUsed <= 0 && saved.DresserSlotsUsed > 0)
             this.snapshot.SetDresserSlotsUsed(saved.DresserSlotsUsed);
 
+        var outfitPieceIds = KeepSavedWhenEmpty(
+            "outfit-piece",
+            this.snapshot.DresserOutfitPieces,
+            saved.DresserOutfitPieceIds,
+            ids => this.snapshot.MergeDresserOutfitPieces(ids, replaceMissing: false));
+
         var setIds = KeepSavedWhenEmpty(
             "set-presence",
             this.snapshot.SetsInDresser,
@@ -444,6 +494,7 @@ internal sealed class GlamourOwnershipIndex
         var armoireIds = this.snapshot.ArmoireItems.ToList();
 
         if (Same(saved.DresserBaseIds, dresserIds)
+            && Same(saved.DresserOutfitPieceIds, outfitPieceIds)
             && Same(saved.ArmoireBaseIds, armoireIds)
             && Same(saved.DresserSetPresenceRowIds, setIds)
             && Same(saved.DresserCompleteSetRowIds, completeSetIds)
@@ -455,6 +506,7 @@ internal sealed class GlamourOwnershipIndex
 
         // Merged in place so the Fashion Report fields and saved plates survive.
         saved.DresserBaseIds = dresserIds;
+        saved.DresserOutfitPieceIds = outfitPieceIds;
         saved.DresserSetPresenceRowIds = setIds;
         saved.DresserCompleteSetRowIds = completeSetIds;
         saved.ArmoireBaseIds = armoireIds;

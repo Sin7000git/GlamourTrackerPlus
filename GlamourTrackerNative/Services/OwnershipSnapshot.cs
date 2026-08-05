@@ -12,6 +12,7 @@ namespace GlamourTracker.Services;
 internal sealed class OwnershipSnapshot
 {
     private readonly HashSet<uint> dresserItems = [];
+    private readonly HashSet<uint> dresserOutfitPieces = [];
     private readonly HashSet<uint> setsInDresser = [];
     private readonly HashSet<uint> completeSetsInDresser = [];
     private readonly HashSet<uint> armoireItems = [];
@@ -21,6 +22,7 @@ internal sealed class OwnershipSnapshot
     public int DresserSlotsUsed { get; private set; }
 
     public int DresserItemCount => this.dresserItems.Count;
+    public int DresserOutfitPieceCount => this.dresserOutfitPieces.Count;
     public int ArmoireItemCount => this.armoireItems.Count;
     public int SetsInDresserCount => this.setsInDresser.Count;
     public int CompleteSetsInDresserCount => this.completeSetsInDresser.Count;
@@ -28,11 +30,18 @@ internal sealed class OwnershipSnapshot
     public bool HasAnyItems => this.dresserItems.Count > 0 || this.armoireItems.Count > 0;
 
     public IReadOnlyCollection<uint> DresserItems => this.dresserItems;
+    public IReadOnlyCollection<uint> DresserOutfitPieces => this.dresserOutfitPieces;
     public IReadOnlyCollection<uint> SetsInDresser => this.setsInDresser;
     public IReadOnlyCollection<uint> CompleteSetsInDresser => this.completeSetsInDresser;
     public IReadOnlyCollection<uint> ArmoireItems => this.armoireItems;
 
     public bool HasDresserItem(uint baseId) => this.dresserItems.Contains(baseId);
+
+    /// <summary>
+    /// A piece the dresser is holding inside a stored outfit rather than in a slot of its own. The
+    /// outfit does not have to be complete — the box tracks each slot separately.
+    /// </summary>
+    public bool HasDresserOutfitPiece(uint baseId) => this.dresserOutfitPieces.Contains(baseId);
 
     public bool HasArmoireItem(uint baseId) => this.armoireItems.Contains(baseId);
 
@@ -43,6 +52,7 @@ internal sealed class OwnershipSnapshot
     public void Clear()
     {
         this.dresserItems.Clear();
+        this.dresserOutfitPieces.Clear();
         this.setsInDresser.Clear();
         this.completeSetsInDresser.Clear();
         this.armoireItems.Clear();
@@ -53,12 +63,14 @@ internal sealed class OwnershipSnapshot
     /// <summary>Refill from saved data. Callers clear first; this does not merge.</summary>
     public void Restore(
         IEnumerable<uint> dresserItemIds,
+        IEnumerable<uint> outfitPieceIds,
         IEnumerable<uint> setRowIds,
         IEnumerable<uint> completeSetRowIds,
         IEnumerable<uint> armoireItemIds,
         int dresserSlotsUsed)
     {
         this.dresserItems.UnionWith(dresserItemIds);
+        this.dresserOutfitPieces.UnionWith(outfitPieceIds);
         this.setsInDresser.UnionWith(setRowIds);
         this.completeSetsInDresser.UnionWith(completeSetRowIds);
         this.armoireItems.UnionWith(armoireItemIds);
@@ -87,6 +99,13 @@ internal sealed class OwnershipSnapshot
 
     public bool MergeArmoireItems(HashSet<uint> live, bool replaceMissing) =>
         Merge(this.armoireItems, live, replaceMissing);
+
+    /// <summary>
+    /// Replaces the pieces held inside stored outfits. Only pass <paramref name="replaceMissing"/> for
+    /// a scan that walked the whole box, since a partial one has no idea what it did not look at.
+    /// </summary>
+    public bool MergeDresserOutfitPieces(HashSet<uint> live, bool replaceMissing) =>
+        Merge(this.dresserOutfitPieces, live, replaceMissing);
 
     public bool ReplaceSetsInDresser(HashSet<uint> next)
     {

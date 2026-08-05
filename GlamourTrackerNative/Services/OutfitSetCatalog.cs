@@ -124,7 +124,7 @@ internal sealed class OutfitSetCatalog
                 if (itemId == 0)
                     continue;
 
-                var storage = this.ownershipIndex.GetStorage(itemId);
+                var storage = ResolvePieceStorage(row.RowId, itemId, slotIndex);
                 pieces.Add(new OutfitPieceInfo(row.RowId, itemId, slotIndex, label, storage));
             }
 
@@ -160,6 +160,27 @@ internal sealed class OutfitSetCatalog
             return OutfitSetStorageLocation.Armoire;
 
         return OutfitSetStorageLocation.None;
+    }
+
+    /// <summary>
+    /// Piece storage for the Outfit Sets browser. The Prism Box often stores an outfit as a
+    /// <see cref="MirageStoreSetItem"/> row id, not each glam piece id — so item-only
+    /// <see cref="GlamourOwnershipIndex.GetStorage"/> misses dresser ownership that Overview
+    /// already sees via complete-set / Mirage slot caches.
+    /// </summary>
+    private GlamourStorageLocation ResolvePieceStorage(uint setId, uint itemId, int slotIndex)
+    {
+        var storage = this.ownershipIndex.GetStorage(itemId);
+        if (storage.HasFlag(GlamourStorageLocation.Dresser) || !this.IsGlamourPiece(itemId))
+            return storage;
+
+        if (this.ownershipIndex.IsOutfitSetCompleteInDresser(setId)
+            || this.ownershipIndex.IsOutfitSlotUnlocked(setId, slotIndex))
+        {
+            storage |= GlamourStorageLocation.Dresser;
+        }
+
+        return storage;
     }
 
     private bool IsDresserSetComplete(MirageStoreSetItem row, List<OutfitPieceInfo> pieces)

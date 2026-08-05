@@ -479,3 +479,10 @@
 [2026-07-31] IsSetSlotUnlocked uses Prism Box index
 - Attempt: Scan PrismBoxItemIds for set-row entries; call IsSetSlotUnlocked(index, slot); persist completes; stop overview log spam. 0.1.117.
 - Outcome: pending build
+
+[2026-08-05] Outfit Sets tab missing dresser pieces
+- Attempt: ResolvePieceStorage marks glam pieces dresser-owned via complete-set cache / Mirage slot unlocks (set rows lack piece ids); SetMatchesStorage In dresser also matches set unlock/complete. 0.1.118.
+- Files changed: OutfitSetCatalog.cs, TrackerNativeHelpers.cs, csproj
+- Outcome: Release build ok
+- Evidence: Overview used set-level completes; Outfit Sets used GetStorage(pieceId) only — armoire piece ids work, dresser set-rows do not
+- Next: reload plugin, open Outfit sets → In dresser / Owned

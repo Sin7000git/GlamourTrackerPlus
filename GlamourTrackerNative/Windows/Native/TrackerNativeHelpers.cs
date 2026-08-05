@@ -88,7 +88,17 @@ internal static class TrackerNativeHelpers
         if (filter == OutfitStorageFilter.All)
             return true;
 
-        return set.Pieces.Any(p => PieceMatchesStorage(p.Storage, filter));
+        if (set.Pieces.Any(p => PieceMatchesStorage(p.Storage, filter)))
+            return true;
+
+        // Set-level dresser presence/complete (set row in Prism Box) when piece ids are absent.
+        if (filter == OutfitStorageFilter.Dresser)
+        {
+            return set.IsUnlocked
+                || set.SetStorage is OutfitSetStorageLocation.Dresser or OutfitSetStorageLocation.Both;
+        }
+
+        return false;
     }
 
     /// <summary>

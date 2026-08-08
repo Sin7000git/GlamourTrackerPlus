@@ -161,6 +161,7 @@ internal sealed class GlamourOwnershipIndex
                 return;
 
             var dresserChanged = false;
+            var dresserPruned = false;
             if (dresser.FoundAnything)
             {
                 // Without ItemFinder the read cannot name the pieces inside stored outfits, so it
@@ -170,6 +171,7 @@ internal sealed class GlamourOwnershipIndex
                     ref this.previousLiveDresser,
                     dresser.SpeaksForWholeDresser && dresser.ReadItemFinder && liveDresser.Count > 0);
 
+                dresserPruned = mayPrune;
                 dresserChanged = this.snapshot.MergeDresserItems(ids, mayPrune);
                 dresserChanged |= this.snapshot.SetDresserSlotsUsed(dresser.SlotsUsed);
             }
@@ -200,7 +202,8 @@ internal sealed class GlamourOwnershipIndex
                 $"slots={this.snapshot.DresserSlotsUsed} sets={this.snapshot.SetsInDresserCount} " +
                 $"completeSets={this.snapshot.CompleteSetsInDresserCount} " +
                 $"armoire={this.snapshot.ArmoireItemCount} auth={dresser.SpeaksForWholeDresser} " +
-                $"armoireOpened={this.armoireHasBeenOpened}");
+                $"armoireOpened={this.armoireHasBeenOpened} " +
+                $"read={liveDresser.Count} finder={dresser.FinderIdCount} pruned={dresserPruned}");
         }
         catch (Exception ex)
         {

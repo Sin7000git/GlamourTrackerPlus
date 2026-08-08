@@ -17,10 +17,16 @@ namespace GlamourTracker.Services;
 /// The ItemFinder list was available. It is the only source that names the pieces inside a stored
 /// outfit, so without it the picture is too thin to prune anything.
 /// </param>
+/// <param name="FinderIdCount">
+/// How many ids ItemFinder alone accounted for. It calls itself cached while holding anything from
+/// the bare slot contents to every piece inside every outfit, so the count is the honest measure of
+/// how much this read really saw.
+/// </param>
 internal readonly record struct DresserRead(
     bool FoundAnything,
     bool SpeaksForWholeDresser,
     bool ReadItemFinder,
+    int FinderIdCount,
     int SlotsUsed);
 
 /// <summary>What one walk of the stored outfits in the Prism Box found.</summary>
@@ -50,6 +56,7 @@ internal static unsafe class OwnershipGameReader
         var speaksForWholeDresser = false;
         var readItemFinder = false;
         var slotsUsed = 0;
+        var finderIdCount = 0;
 
         // ItemFinder can report "cached" at login while still incomplete, so it only ever adds ids.
         var finder = ItemFinderModule.Instance();
@@ -58,6 +65,8 @@ internal static unsafe class OwnershipGameReader
             readItemFinder = true;
             foreach (var id in finder->GlamourDresserItemIds)
                 Add(into, id);
+
+            finderIdCount = into.Count;
         }
 
         var mirage = MirageManager.Instance();
@@ -103,6 +112,7 @@ internal static unsafe class OwnershipGameReader
             FoundAnything: into.Count > 0 || speaksForWholeDresser,
             SpeaksForWholeDresser: speaksForWholeDresser,
             ReadItemFinder: readItemFinder,
+            FinderIdCount: finderIdCount,
             SlotsUsed: slotsUsed);
     }
 

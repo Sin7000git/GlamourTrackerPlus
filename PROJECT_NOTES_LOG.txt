@@ -577,3 +577,11 @@
 - Files changed: GlamourOwnershipIndex.cs, csproj
 - Outcome: Debug + Release build clean, both stamped 0.1.128
 - Next: watch app.log — ownership.refresh should settle at dresser=1494 and stop logging every minute, since an unchanged snapshot writes nothing
+- Outcome: DID NOT WORK. 17:01:39, on 0.1.128 (dlls built 16:48Z, plugin reloaded 17:01:11Z), pruned to 564 again. So ItemFinder reports IsGlamourDresserCached in both the fat and the thin read, and "was the finder readable" is the wrong question to gate on. My assumption, not evidence.
+
+[2026-08-08] Instrumenting the dresser prune decision (0.1.129)
+- Refusing to guess a third time. ownership.refresh now logs read=<ids this pass saw> finder=<ids ItemFinder alone accounted for> pruned=<whether removals were allowed>, and DresserRead carries FinderIdCount.
+- What the next log read settles: if a pruning pass shows finder=564 then ItemFinder itself is the thing that shrinks, and the gate must measure how much it returned rather than whether it answered. If it shows finder=1494 while read=564 then something downstream is dropping ids and the fault is not in the reader at all.
+- No behaviour change in this build. The flip and its config write continue until the cause is known.
+- Files changed: OwnershipGameReader.cs, GlamourOwnershipIndex.cs, csproj
+- Outcome: Debug + Release build clean, both stamped 0.1.129

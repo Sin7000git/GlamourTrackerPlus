@@ -75,7 +75,7 @@ internal sealed class GlamourPlateRandomizer
         if (!TryBuildFilteredPool(config, out var all, out var beforeFilter, out var jobId, out var fail))
             return fail;
 
-        var usedPrismSlots = CollectUsedPrismSources(agent, excludeSlot: slotFilter);
+        var usedPrismItems = CollectUsedPrismSources(agent, excludeSlot: slotFilter);
         var plan = new List<PendingPlateSlot>();
         var skippedLocked = 0;
         var skippedEmptyPool = 0;
@@ -94,7 +94,7 @@ internal sealed class GlamourPlateRandomizer
             }
 
             var plateSlot = (GlamourPlateSlot)slot;
-            var pool = this.candidatePool.FilterForPlateSlot(all, plateSlot, usedPrismSlots);
+            var pool = this.candidatePool.FilterForPlateSlot(all, plateSlot, usedPrismItems);
             if (pool.Count == 0)
             {
                 skippedEmptyPool++;
@@ -107,7 +107,7 @@ internal sealed class GlamourPlateRandomizer
 
             var pick = pool[this.random.Next(pool.Count)];
             if (pick.Source == AgentMiragePrismMiragePlateData.ItemSource.PrismBox)
-                usedPrismSlots.Add((pick.Source, pick.SourceId));
+                usedPrismItems.Add(GlamourCandidateKey.For(pick.Source, pick.SourceId, pick.ItemId));
 
             plan.Add(new PendingPlateSlot(slot, pick));
         }
@@ -199,11 +199,11 @@ internal sealed class GlamourPlateRandomizer
         return true;
     }
 
-    private static unsafe HashSet<(AgentMiragePrismMiragePlateData.ItemSource, uint)> CollectUsedPrismSources(
+    private static unsafe HashSet<GlamourCandidateKey> CollectUsedPrismSources(
         AgentMiragePrismMiragePlate* agent,
         int? excludeSlot)
     {
-        var used = new HashSet<(AgentMiragePrismMiragePlateData.ItemSource, uint)>();
+        var used = new HashSet<GlamourCandidateKey>();
         for (var i = 0; i < GlamourPlateSlotMap.SlotCount; i++)
         {
             if (excludeSlot is int skip && i == skip)
@@ -214,7 +214,7 @@ internal sealed class GlamourPlateRandomizer
                 continue;
 
             if (item.Source == AgentMiragePrismMiragePlateData.ItemSource.PrismBox)
-                used.Add((item.Source, item.SourceId));
+                used.Add(GlamourCandidateKey.For(item.Source, item.SourceId, item.ItemId));
         }
 
         return used;

@@ -38,7 +38,7 @@ internal sealed class GlamourCandidatePool
     public IReadOnlyList<GlamourCandidate> FilterForPlateSlot(
         IReadOnlyList<GlamourCandidate> all,
         GlamourPlateSlot plateSlot,
-        HashSet<(AgentMiragePrismMiragePlateData.ItemSource Source, uint SourceId)>? excludeSources = null)
+        HashSet<GlamourCandidateKey>? excludeSources = null)
     {
         var categorySheet = this.dataManager.GetExcelSheet<EquipSlotCategory>();
         var matches = new List<GlamourCandidate>();
@@ -50,7 +50,7 @@ internal sealed class GlamourCandidatePool
 
             if (excludeSources != null
                 && candidate.Source == AgentMiragePrismMiragePlateData.ItemSource.PrismBox
-                && excludeSources.Contains((candidate.Source, candidate.SourceId)))
+                && excludeSources.Contains(GlamourCandidateKey.For(candidate.Source, candidate.SourceId, candidate.ItemId)))
                 continue;
 
             if (!categorySheet.TryGetRow(candidate.EquipSlotCategory, out var category))
@@ -119,10 +119,21 @@ internal sealed class GlamourCandidatePool
 
     private unsafe void AppendDresserCandidates(List<GlamourCandidate> candidates, ExcelSheet<Item> itemSheet)
     {
+        var offered = new HashSet<uint>();
+        AppendLooseDresserCandidates(candidates, itemSheet, offered);
+        AppendStoredOutfitCandidates(candidates, itemSheet, offered);
+    }
+
+    private unsafe void AppendLooseDresserCandidates(
+        List<GlamourCandidate> candidates,
+        ExcelSheet<Item> itemSheet,
+        HashSet<uint> offered)
+    {
         // Prefer Prism Box agent entries — SourceId must be PrismBoxItem.Slot (Glamaholic).
         var agent = AgentMiragePrismPrismBox.Instance();
         if (agent != null && agent->Data != null)
         {
+            var before = candidates.Count;
             var seenSlots = new HashSet<uint>();
             foreach (ref var entry in agent->Data->PrismBoxItems)
             {
@@ -137,6 +148,7 @@ internal sealed class GlamourCandidatePool
 
                 var s0 = entry.Stains.Length > 0 ? entry.Stains[0] : (byte)0;
                 var s1 = entry.Stains.Length > 1 ? entry.Stains[1] : (byte)0;
+                offered.Add(ItemIdHelper.GlamourBaseId(entry.ItemId));
                 candidates.Add(new GlamourCandidate(
                     AgentMiragePrismMiragePlateData.ItemSource.PrismBox,
                     entry.Slot,
@@ -146,7 +158,7 @@ internal sealed class GlamourCandidatePool
                     equipSlot));
             }
 
-            if (candidates.Count > 0)
+            if (candidates.Count > before)
                 return;
         }
 
@@ -168,6 +180,7 @@ internal sealed class GlamourCandidatePool
             if (!TryResolveEquipSlot(itemSheet, itemId, out var equipSlot))
                 continue;
 
+            offered.Add(ItemIdHelper.GlamourBaseId(itemId));
             candidates.Add(new GlamourCandidate(
                 AgentMiragePrismMiragePlateData.ItemSource.PrismBox,
                 (uint)i,
@@ -175,6 +188,62 @@ internal sealed class GlamourCandidatePool
                 i < stain0.Length ? stain0[i] : (byte)0,
                 i < stain1.Length ? stain1[i] : (byte)0,
                 equipSlot));
+        }
+    }
+
+    /// <summary>
+    /// Unfolds stored outfits into the pieces they hold. An outfit occupies a single dresser slot
+    /// and its pieces never appear in the item list, so without this the randomizer only ever sees
+    /// gear stored loose.
+    /// </summary>
+    private unsafe void AppendStoredOutfitCandidates(
+        List<GlamourCandidate> candidates,
+        ExcelSheet<Item> itemSheet,
+        HashSet<uint> offered)
+    {
+        var mirage = MirageManager.Instance();
+        if (mirage == null || !mirage->PrismBoxLoaded)
+            return;
+
+        var setSheet = this.dataManager.GetExcelSheet<MirageStoreSetItem>();
+        var ids = mirage->PrismBoxItemIds;
+        var count = Math.Min(ids.Length, MaxDresserSlots);
+
+        for (var i = 0; i < count; i++)
+        {
+            var setRowId = ItemIdHelper.GlamourBaseId(ids[i]);
+            if (setRowId == 0)
+                continue;
+
+            // Outfits are the slots that carry no equip slot of their own.
+            if (TryResolveEquipSlot(itemSheet, ids[i], out _))
+                continue;
+
+            if (!setSheet.TryGetRow(setRowId, out var row))
+                continue;
+
+            foreach (var (_, slotIndex, readItemId) in OutfitSetSlots.All)
+            {
+                var pieceId = ItemIdHelper.GlamourBaseId(readItemId(row));
+                if (pieceId == 0 || !mirage->IsSetSlotUnlocked((uint)i, slotIndex))
+                    continue;
+
+                if (!offered.Add(pieceId))
+                    continue;
+
+                if (!TryResolveEquipSlot(itemSheet, pieceId, out var equipSlot))
+                    continue;
+
+                // Dyes are unreadable here: for outfit slots the stain arrays hold the
+                // partial-outfit bits instead, so a piece can only go on undyed.
+                candidates.Add(new GlamourCandidate(
+                    AgentMiragePrismMiragePlateData.ItemSource.PrismBox,
+                    (uint)i,
+                    pieceId,
+                    0,
+                    0,
+                    equipSlot));
+            }
         }
     }
 

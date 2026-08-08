@@ -545,3 +545,14 @@
 - Attempt: OwnershipSnapshot.DresserTotalCount returns the union (memoized by Version so the Overview signature can ask per frame); GlamourOwnershipIndex.DresserUniqueCount uses it. DresserItemCount stays as-is for the refresh log line.
 - Files changed: OwnershipSnapshot.cs, GlamourOwnershipIndex.cs, csproj
 - Outcome: Debug + Release build clean, both stamped 0.1.125
+
+[2026-08-08] Randomizer could not use pieces held inside stored outfits (0.1.126)
+- Found while checking whether the ownership work had touched Fashion Report or the randomizer. Neither was a regression: Fashion Report asks per item through GetStorage so it picked up outfit pieces for free, and the randomizer never reads our cache at all (BuildLiveCandidates goes straight to the game).
+- Symptom: the randomizer drew from ~300 wearable items when the dresser holds ~1200. Pre-existing, predates the cleanup branch.
+- Cause: an outfit occupies one Prism Box slot and its pieces are not in the item list, exactly the reason 0.1.122 had to track them separately. The pool only walked slots, so every piece inside an outfit was invisible to it.
+- Attempt: AppendStoredOutfitCandidates unfolds each outfit slot via MirageManager.IsSetSlotUnlocked (same read as OwnershipGameReader.TryScanStoredOutfits), skipping pieces a loose slot already offers. SourceId stays the outfit's Prism Box index and the piece item id picks the piece, which is how RestorePrismBoxSetItem addresses them.
+- Note: stains are passed as 0 for outfit pieces. Since 7.4 PrismBoxStain0Ids doubles as the partial-outfit bit array for those slots, so reading a dye out of it would apply a random colour.
+- Also: the "already used" key was the Prism Box slot alone, which after this change would let one piece of an outfit block the other ten. Now keyed on slot + item id (GlamourCandidateKey), which still stops the same ring landing in both ring slots.
+- Files changed: GlamourCandidatePool.cs, GlamourCandidate.cs, GlamourPlateRandomizer.cs, csproj
+- Outcome: Debug + Release build clean, both stamped 0.1.126
+- Next: open the plate editor and randomize; the "planned N slots from X/Y items" log line should show Y jump from ~300 to ~1200

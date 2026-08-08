@@ -29,6 +29,7 @@ internal sealed class GlamourOwnershipIndex
     private bool pendingContentIdLoad;
     private HashSet<uint>? previousLiveDresser;
     private HashSet<uint>? previousLiveArmoire;
+    private bool armoireHasBeenOpened;
     private int refreshRunning;
 
     public GlamourOwnershipIndex(
@@ -115,6 +116,7 @@ internal sealed class GlamourOwnershipIndex
         this.lastRefresh = DateTime.MinValue;
         this.previousLiveDresser = null;
         this.previousLiveArmoire = null;
+        this.armoireHasBeenOpened = false;
     }
 
     public void Refresh(bool force = false)
@@ -172,8 +174,12 @@ internal sealed class GlamourOwnershipIndex
             var armoireChanged = false;
             if (armoireRead)
             {
-                // A loaded cabinet is the whole armoire, so items it stops listing really are gone.
-                var (ids, mayPrune) = ConfirmRemovals(liveArmoire, ref this.previousLiveArmoire, mayPrune: true);
+                // Until the player has opened the armoire the cabinet is only partly filled in, so a
+                // read before that may add items but may not decide anything is missing.
+                this.armoireHasBeenOpened |= OwnershipGameReader.IsArmoireOpen();
+                var (ids, mayPrune) = ConfirmRemovals(
+                    liveArmoire, ref this.previousLiveArmoire, this.armoireHasBeenOpened);
+
                 armoireChanged = this.snapshot.MergeArmoireItems(ids, mayPrune);
             }
             this.lastRefresh = DateTime.UtcNow;
@@ -187,7 +193,8 @@ internal sealed class GlamourOwnershipIndex
                 $"dresser={this.snapshot.DresserItemCount} outfitPieces={this.snapshot.DresserOutfitPieceCount} " +
                 $"slots={this.snapshot.DresserSlotsUsed} sets={this.snapshot.SetsInDresserCount} " +
                 $"completeSets={this.snapshot.CompleteSetsInDresserCount} " +
-                $"armoire={this.snapshot.ArmoireItemCount} auth={dresser.SpeaksForWholeDresser}");
+                $"armoire={this.snapshot.ArmoireItemCount} auth={dresser.SpeaksForWholeDresser} " +
+                $"armoireOpened={this.armoireHasBeenOpened}");
         }
         catch (Exception ex)
         {

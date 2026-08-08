@@ -528,3 +528,12 @@
 - Files changed: OwnershipSnapshot.cs, GlamourOwnershipIndex.cs, csproj
 - Outcome: Debug + Release build clean, both stamped 0.1.123
 - Next: watch the log for any further ownership.* exceptions; consider auditing the async call sites in Phase 5 (threading)
+
+[2026-08-08] Armoire pruned to 124 before the armoire is opened (0.1.124)
+- Symptom: after a reboot, Overview showed "Completed in armoire" 16/18 instead of 31/84; opening the armoire fixed it.
+- Evidence: log 15:13:27 armoire=470 then armoire=124 in the same second, 15:15:57 back to 470 after the armoire was opened. Cabinet.IsCabinetLoaded() returns true while the cabinet holds only a subset, and the count stayed at 124 across consecutive reads so the two-strike rule did not catch it (both strikes agreed on the wrong answer).
+- Attempt: OwnershipGameReader.IsArmoireOpen() checks the Cabinet / CabinetWithdraw addons; the index keeps a sticky armoireHasBeenOpened flag and only allows the armoire read to remove items once that has been true. Additive reads are unaffected. Logged as armoireOpened= on the refresh line.
+- Note: the same partial-read pattern shows on the dresser (dresser=1494 -> 564 when ItemFinder is warm vs Prism Box only) but is harmless now, because the 930 outfit pieces are tracked separately and the union stays at 1494.
+- Files changed: OwnershipGameReader.cs, GlamourOwnershipIndex.cs, csproj
+- Outcome: Debug + Release build clean, both stamped 0.1.124; saved armoire still 470
+- Next: reboot, check Overview reads 31/84 before opening the armoire

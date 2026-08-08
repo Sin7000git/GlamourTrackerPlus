@@ -1,5 +1,6 @@
 using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
+using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using Lumina.Excel;
@@ -39,6 +40,8 @@ internal readonly record struct StoredOutfitScan(
 internal static unsafe class OwnershipGameReader
 {
     private const int MaxDresserSlots = 800;
+
+    private static readonly string[] ArmoireAddonNames = ["Cabinet", "CabinetWithdraw"];
 
     public static DresserRead ReadDresser(HashSet<uint> into)
     {
@@ -122,6 +125,31 @@ internal static unsafe class OwnershipGameReader
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Whether the armoire window is open.
+    /// </summary>
+    /// <remarks>
+    /// The cabinet calls itself loaded long before it holds everything — 124 of 470 items in one
+    /// session, unchanged across reads — and only fills in once the player opens it. So a read is
+    /// always worth believing about what it found, and only worth believing about what it is missing
+    /// once this has been true at least once.
+    /// </remarks>
+    public static bool IsArmoireOpen()
+    {
+        var manager = RaptureAtkUnitManager.Instance();
+        if (manager == null)
+            return false;
+
+        foreach (var name in ArmoireAddonNames)
+        {
+            var addon = manager->GetAddonByName(name);
+            if (addon != null && addon->IsVisible)
+                return true;
+        }
+
+        return false;
     }
 
     public static bool IsPrismBoxLoaded()

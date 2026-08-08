@@ -537,3 +537,11 @@
 - Files changed: OwnershipGameReader.cs, GlamourOwnershipIndex.cs, csproj
 - Outcome: Debug + Release build clean, both stamped 0.1.124; saved armoire still 470
 - Next: reboot, check Overview reads 31/84 before opening the armoire
+- Outcome: outfit set counts correct on reboot
+
+[2026-08-08] "Unique items in dresser" showed 564 instead of ~1494 (0.1.125)
+- Symptom: on reboot Overview showed 564 unique dresser items; the union including outfit pieces is 1494.
+- Cause: splitting the dresser into an item list plus outfit pieces (0.1.122) left DresserUniqueCount reporting only the item list. Correct for diagnostics, wrong for a user-facing total.
+- Attempt: OwnershipSnapshot.DresserTotalCount returns the union (memoized by Version so the Overview signature can ask per frame); GlamourOwnershipIndex.DresserUniqueCount uses it. DresserItemCount stays as-is for the refresh log line.
+- Files changed: OwnershipSnapshot.cs, GlamourOwnershipIndex.cs, csproj
+- Outcome: Debug + Release build clean, both stamped 0.1.125

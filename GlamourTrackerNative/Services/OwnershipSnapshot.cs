@@ -24,6 +24,8 @@ internal sealed class OwnershipSnapshot
 
     private int version;
     private int dresserSlotsUsed;
+    private int totalCount;
+    private int totalCountVersion = -1;
 
     public int Version
     {
@@ -35,9 +37,37 @@ internal sealed class OwnershipSnapshot
         get { lock (this.gate) return this.dresserSlotsUsed; }
     }
 
+    /// <summary>Rows in the dresser's own item list. Diagnostics — see <see cref="DresserTotalCount"/>.</summary>
     public int DresserItemCount
     {
         get { lock (this.gate) return this.dresserItems.Count; }
+    }
+
+    /// <summary>
+    /// Everything the dresser can hand back: its item list plus the pieces held inside stored outfits.
+    /// The game reports those separately, but to anyone reading a total they are the same thing.
+    /// </summary>
+    public int DresserTotalCount
+    {
+        get
+        {
+            lock (this.gate)
+            {
+                if (this.totalCountVersion == this.version)
+                    return this.totalCount;
+
+                var total = this.dresserItems.Count;
+                foreach (var id in this.dresserOutfitPieces)
+                {
+                    if (!this.dresserItems.Contains(id))
+                        total++;
+                }
+
+                this.totalCount = total;
+                this.totalCountVersion = this.version;
+                return total;
+            }
+        }
     }
 
     public int DresserOutfitPieceCount

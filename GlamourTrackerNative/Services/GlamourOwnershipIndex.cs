@@ -68,7 +68,8 @@ internal sealed class GlamourOwnershipIndex
     /// <summary>Moves whenever stored ownership changes, so views can tell if a rebuild is needed.</summary>
     public int Revision => this.snapshot.Version;
 
-    public int DresserUniqueCount => this.snapshot.DresserItemCount;
+    /// <summary>Distinct appearances in the dresser, counting the pieces inside stored outfits.</summary>
+    public int DresserUniqueCount => this.snapshot.DresserTotalCount;
     public int DresserSlotsUsed => this.snapshot.DresserSlotsUsed;
     public int ArmoireCount => this.snapshot.ArmoireItemCount;
     public int OutfitSetsInDresser => this.snapshot.SetsInDresserCount;

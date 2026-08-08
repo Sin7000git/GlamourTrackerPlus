@@ -13,20 +13,18 @@ namespace GlamourTracker.Services;
 /// <param name="SpeaksForWholeDresser">
 /// The read covered the dresser well enough that missing ids can be treated as removed.
 /// </param>
-/// <param name="ReadItemFinder">
-/// The ItemFinder list was available. It is the only source that names the pieces inside a stored
-/// outfit, so without it the picture is too thin to prune anything.
+/// <param name="ListedOutfitPieces">
+/// The Prism Box agent had its expanded list, the one that names the pieces inside stored outfits
+/// rather than just the outfits. Only such a read knows enough to decide something is gone.
 /// </param>
-/// <param name="FinderIdCount">
-/// How many ids ItemFinder alone accounted for. It calls itself cached while holding anything from
-/// the bare slot contents to every piece inside every outfit, so the count is the honest measure of
-/// how much this read really saw.
-/// </param>
+/// <param name="FinderIdCount">Ids ItemFinder alone accounted for. Diagnostics.</param>
+/// <param name="AgentRowCount">Rows the Prism Box agent listed. Diagnostics.</param>
 internal readonly record struct DresserRead(
     bool FoundAnything,
     bool SpeaksForWholeDresser,
-    bool ReadItemFinder,
+    bool ListedOutfitPieces,
     int FinderIdCount,
+    int AgentRowCount,
     int SlotsUsed);
 
 /// <summary>What one walk of the stored outfits in the Prism Box found.</summary>
@@ -59,15 +57,15 @@ internal static unsafe class OwnershipGameReader
     public static DresserRead ReadDresser(HashSet<uint> into)
     {
         var speaksForWholeDresser = false;
-        var readItemFinder = false;
         var slotsUsed = 0;
         var finderIdCount = 0;
+        var agentRowCount = 0;
 
         // ItemFinder can report "cached" at login while still incomplete, so it only ever adds ids.
+        // It lists the dresser slots and nothing inside the outfits sitting in them.
         var finder = ItemFinderModule.Instance();
         if (finder != null && finder->IsGlamourDresserCached)
         {
-            readItemFinder = true;
             foreach (var id in finder->GlamourDresserItemIds)
                 Add(into, id);
 
@@ -105,6 +103,7 @@ internal static unsafe class OwnershipGameReader
                 if (entry.ItemId == 0 || entry.Slot >= MaxDresserSlots)
                     continue;
 
+                agentRowCount++;
                 Add(into, entry.ItemId);
             }
 
@@ -113,11 +112,16 @@ internal static unsafe class OwnershipGameReader
                 speaksForWholeDresser = true;
         }
 
+        // Several rows per occupied slot means the agent unfolded the outfits, which is the only way
+        // a read gets to see the pieces inside them. Fewer, and it is listing slots at best.
+        var listedOutfitPieces = agentRowCount > 0 && agentRowCount >= slotsUsed;
+
         return new DresserRead(
             FoundAnything: into.Count > 0 || speaksForWholeDresser,
             SpeaksForWholeDresser: speaksForWholeDresser,
-            ReadItemFinder: readItemFinder,
+            ListedOutfitPieces: listedOutfitPieces,
             FinderIdCount: finderIdCount,
+            AgentRowCount: agentRowCount,
             SlotsUsed: slotsUsed);
     }
 

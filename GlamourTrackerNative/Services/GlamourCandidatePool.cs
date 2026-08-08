@@ -134,13 +134,16 @@ internal sealed class GlamourCandidatePool
         if (agent != null && agent->Data != null)
         {
             var before = candidates.Count;
-            var seenSlots = new HashSet<uint>();
+
+            // Keyed on slot and item, not slot alone: when this list is populated it unfolds each
+            // stored outfit into its pieces, and they all carry the slot of the outfit holding them.
+            var seen = new HashSet<(uint Slot, uint ItemId)>();
             foreach (ref var entry in agent->Data->PrismBoxItems)
             {
                 if (entry.ItemId == 0 || entry.Slot >= MaxDresserSlots)
                     continue;
 
-                if (!seenSlots.Add(entry.Slot))
+                if (!seen.Add((entry.Slot, entry.ItemId)))
                     continue;
 
                 if (!TryResolveEquipSlot(itemSheet, entry.ItemId, out var equipSlot))

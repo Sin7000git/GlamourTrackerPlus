@@ -593,4 +593,13 @@
   - They counted 976 pieces inside outfits against our 930. Likely the same appearance in more than one outfit, since ours is a set of distinct ids. ownership.mirage-sets now logs distinct pieces and filled slots side by side; if it reads "930 distinct across 976 filled slots" the difference is shared pieces and our number is the right one for a line labelled "unique".
   - They counted 70 complete outfits against our 71. Ours comes straight from the game's per-slot unlock flags with all 264 outfits scanned, so a fallback rule is not involved. ownership.complete-sets now logs the names, alphabetically, so the extra one can be identified by eye rather than argued about.
 - Files changed: OwnershipSnapshot.cs, OwnershipGameReader.cs, GlamourOwnershipIndex.cs, csproj
-- Outcome: Debug + Release build clean, both stamped 0.1.130
+- Outcome: Debug + Release build clean, both stamped 0.1.130; user confirms the Overview now reads 1230
+
+[2026-08-08] The dresser flip, actually diagnosed (0.1.131)
+- 0.1.129's instrumentation answered it in one pass: "read=1494 finder=564 pruned=True" next to "read=564 finder=564 pruned=True". ItemFinder returns 564 every time. It lists dresser slots and never looks inside the outfits in them, so the comment claiming it was the source that names outfit pieces was simply wrong, and both my earlier fixes were built on it.
+- The source that varies is the Prism Box agent. Its PrismBoxItems array is 8000 entries against 800 slots because, once populated, it unfolds every stored outfit into its pieces; each piece row carries the slot of the outfit holding it. Not populated, the read sees 564; populated, 1494.
+- Fix: DresserRead.ListedOutfitPieces = the agent listed at least as many rows as there are occupied slots, meaning it unfolded the outfits. Only such a read may prune. ReadItemFinder is gone; FinderIdCount and AgentRowCount stay in the log.
+- Same discovery fixes the randomizer properly: AppendLooseDresserCandidates deduped by slot, so when the agent list was populated it kept the outfit row and dropped all the piece rows sharing that slot. Now keyed on slot + item, so those pieces come through with their stored dyes instead of being re-derived undyed by the outfit pass. That pass still earns its keep when the agent is not populated.
+- Files changed: OwnershipGameReader.cs, GlamourOwnershipIndex.cs, GlamourCandidatePool.cs, csproj
+- Outcome: Debug + Release build clean, both stamped 0.1.131
+- Next: ownership.refresh should settle at dresser=1494 and stop repeating. Still waiting on the 0.1.130 lines (distinct pieces vs filled slots, and the complete-set names) — they only print when the stored outfits change, so the dresser needs opening once.

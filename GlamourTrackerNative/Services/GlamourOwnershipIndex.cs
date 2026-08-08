@@ -167,12 +167,13 @@ internal sealed class GlamourOwnershipIndex
             var dresserPruned = false;
             if (dresser.FoundAnything)
             {
-                // Without ItemFinder the read cannot name the pieces inside stored outfits, so it
-                // sees roughly a third of the dresser and must not be allowed to forget the rest.
+                // A read that only saw the dresser slots is missing every piece inside every stored
+                // outfit — roughly two thirds of the list here — and must not be allowed to forget
+                // them. ItemFinder is no help in telling the two apart: it lists slots either way.
                 var (ids, mayPrune) = ConfirmRemovals(
                     liveDresser,
                     ref this.previousLiveDresser,
-                    dresser.SpeaksForWholeDresser && dresser.ReadItemFinder && liveDresser.Count > 0);
+                    dresser.SpeaksForWholeDresser && dresser.ListedOutfitPieces && liveDresser.Count > 0);
 
                 dresserPruned = mayPrune;
                 dresserChanged = this.snapshot.MergeDresserItems(ids, mayPrune);
@@ -206,7 +207,8 @@ internal sealed class GlamourOwnershipIndex
                 $"completeSets={this.snapshot.CompleteSetsInDresserCount} " +
                 $"armoire={this.snapshot.ArmoireItemCount} auth={dresser.SpeaksForWholeDresser} " +
                 $"armoireOpened={this.armoireHasBeenOpened} " +
-                $"read={liveDresser.Count} finder={dresser.FinderIdCount} pruned={dresserPruned}");
+                $"read={liveDresser.Count} finder={dresser.FinderIdCount} " +
+                $"agentRows={dresser.AgentRowCount} pruned={dresserPruned}");
         }
         catch (Exception ex)
         {

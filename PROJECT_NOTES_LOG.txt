@@ -611,3 +611,14 @@
 - Fixed in passing: a read that cannot reach the agent reports zero slots, and that was being written straight into the snapshot, so the Overview slot row blanked to "—" until the next save put it back. Zero slots is now ignored rather than believed.
 - Files changed: GlamourOwnershipIndex.cs, csproj
 - Outcome: Debug + Release build clean, both stamped 0.1.132
+- Verified after a wait: dresser stays at 1494 through a thin read (18:22:45 read=564 agentRows=0 pruned=False) and a full one (18:24:33 read=1494 agentRows=1540 pruned=True). No further flip-flop. User confirmed 71 complete sets by hand; pieces 930 distinct / 976 slots is settled. Unique dresser total of 1230 accepted.
+- Minor leftover: completeSets briefly hit 74 on the thin read (auth=False) then the Mirage scan put it back to 71. Item list itself did not move. Worth watching later; not blocking.
+- Outcome: user recounted and got 71 as well, so the completed-sets number was right all along.
+
+[2026-08-08] Completed sets flipped 71 <-> 74 once the item list stopped shrinking (0.1.133)
+- Uncovered by fixing the dresser flip: with the item list now holding steady at 1494, a refresh taken while the Prism Box was unloaded reported 74 complete, and the next scan put it back to 71. Same oscillation the Phase 2 notes recorded, from the same place, and 0.1.122's "only judge outfits the scan did not evaluate" does not help when the scan could not run at all and so evaluated nothing.
+- Cause: the all-pieces fallback asked whether each piece is in the dresser item list. That list unfolds stored outfits, so it also names pieces belonging to other outfits, and three sets were declared finished on the strength of pieces sitting inside somebody else's outfit. This is the false-completeness the 262/262 bug was about, in a smaller disguise; it was hidden while the item list kept collapsing to the 564 loose rows.
+- Fix: a piece counts towards completion only when the dresser lists it outside any outfit (HasDresserItem && !HasDresserOutfitPiece), or when the live slot flags say it is in this outfit's own slot. The fallback now means what its name says: an outfit assembled from loose pieces.
+- Files changed: SetCompletionRules.cs, csproj
+- Outcome: Debug + Release build clean, both stamped 0.1.133
+- Next: completeSets should stay 71 through a refresh taken with the dresser closed (the auth=False, agentRows=0 case)

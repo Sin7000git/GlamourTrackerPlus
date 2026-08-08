@@ -56,6 +56,15 @@ internal sealed class SetCompletionRules
         return this.glamourPiecesBySet!.TryGetValue(setRowId, out var pieces) ? pieces : [];
     }
 
+    /// <summary>
+    /// Whether this outfit is finished: every glamour piece of it either stored loose in the dresser
+    /// or, when live slot flags may be consulted, held in this outfit's own slot.
+    /// </summary>
+    /// <remarks>
+    /// A piece only counts as loose when the dresser lists it outside any outfit. The dresser's item
+    /// list unfolds stored outfits, so it also names pieces that belong to other outfits entirely,
+    /// and accepting those declared an outfit finished on the strength of somebody else's pieces.
+    /// </remarks>
     public bool IsComplete(uint setRowId, OwnershipSnapshot snapshot, bool useMirageSlots)
     {
         var pieces = GlamourPieces(setRowId);
@@ -64,7 +73,8 @@ internal sealed class SetCompletionRules
 
         foreach (var piece in pieces)
         {
-            if (snapshot.HasDresserItem(ItemIdHelper.GlamourBaseId(piece.ItemId)))
+            var baseId = ItemIdHelper.GlamourBaseId(piece.ItemId);
+            if (snapshot.HasDresserItem(baseId) && !snapshot.HasDresserOutfitPiece(baseId))
                 continue;
 
             if (useMirageSlots && OwnershipGameReader.IsSetSlotUnlocked(setRowId, piece.SlotIndex))

@@ -555,4 +555,5 @@
 - Also: the "already used" key was the Prism Box slot alone, which after this change would let one piece of an outfit block the other ten. Now keyed on slot + item id (GlamourCandidateKey), which still stops the same ring landing in both ring slots.
 - Files changed: GlamourCandidatePool.cs, GlamourCandidate.cs, GlamourPlateRandomizer.cs, csproj
 - Outcome: Debug + Release build clean, both stamped 0.1.126
-- Next: open the plate editor and randomize; the "planned N slots from X/Y items" log line should show Y jump from ~300 to ~1200
+- Verified in game 18:56: pool 1230 before filters / 1224 after, seven runs, every slot applied on the first pass with no retry lines. So the game does accept an outfit piece addressed by the outfit's Prism Box slot plus the piece item id, which had only been inferred from the struct layout.
+- Known and accepted: repeat full randomizes report "no pool 1" for the off-hand. Only one shield is stored, and a full run excludes each slot's current item so it cannot be re-picked. Targeted rerolls exempt their own slot and work.

@@ -622,3 +622,12 @@
 - Files changed: SetCompletionRules.cs, csproj
 - Outcome: Debug + Release build clean, both stamped 0.1.133
 - Next: completeSets should stay 71 through a refresh taken with the dresser closed (the auth=False, agentRows=0 case)
+
+[2026-08-08] Clear saved data still looked owned, then auto-refilled (0.1.134)
+- Symptom: Clear showed Completed 71/264 (then 71/276), Total sets 264/1086, slots "—". Clicking Refresh or waiting made counts return without opening the dresser. UI flickered as background refresh rewrote Overview.
+- Cause: Clear wiped our CharacterCaches and runtime snapshot, but FFXIV's in-session ItemFinder unlock bits and Mirage Prism Box stay warm until logout. Background RefreshOwnership every 30s and live getters (IsOutfitSetUnlockedLive / IsOutfitSetComplete) rebuilt presence from that game memory. That is not the between-session save — login restore from disk is unchanged.
+- Fix: ClearSaved() sets liveOwnershipSuspended. While set, Refresh returns without merging live dresser/armoire/set data, and live unlock/complete getters return false. Opening MiragePrismPrismBox / MiragePrismMiragePlate or the armoire clears the flag and resumes. Plugin.ClearSavedOwnership centralises clear + one UI rebuild; background ticks no longer Invalidate the catalog while still suspended (stops the flicker).
+- UI: dresser slots always "N / 800" (including 0); completed ratios show "—" when nothing is owned; totals show "0 / eligible".
+- Files changed: OwnershipGameReader.cs, GlamourOwnershipIndex.cs, Plugin.cs, TrackerNativeAddon.cs, TrackerWindow.cs, csproj
+- Outcome: Debug + Release build clean, both stamped 0.1.134
+- Next: Clear → Overview zeros stay put without opening dresser; open dresser → counts refill; reboot with a prior save still restores as before

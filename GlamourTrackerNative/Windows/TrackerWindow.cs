@@ -100,9 +100,8 @@ internal sealed class TrackerWindow : Window
             ImGui.Text($"Saved glamour plates: {plateCount}");
 
         ImGui.Separator();
-        var slots = index.DresserSlotsUsed;
         var persisted = index.HasPersistedData ? "saved" : "not saved yet";
-        ImGui.Text($"Dresser slots used: {(slots > 0 ? $"{slots} / 800" : "— (sync from dresser)")} ({persisted})");
+        ImGui.Text($"Dresser slots used: {index.DresserSlotsUsed} / 800 ({persisted})");
         ImGui.Text($"Unique stored appearances: {index.DresserUniqueCount}");
         ImGui.Text($"Outfit sets in dresser: {index.OutfitSetsInDresser}");
         ImGui.Text($"Outfit sets in armoire: {this.plugin.OutfitSets.CountSetsInArmoire()}");
@@ -114,13 +113,7 @@ internal sealed class TrackerWindow : Window
 
         ImGui.SameLine();
         if (ImGui.Button("Clear saved data"))
-        {
-            this.plugin.OwnershipIndex.ClearRuntimeCache();
-            this.plugin.Configuration.CharacterCaches.Clear();
-            this.plugin.Configuration.Save();
-            this.plugin.OutfitSets.Invalidate();
-            Plugin.ChatGui.Print("Glamour Tracker+ saved ownership cleared. Open your dresser or armoire, then Refresh.");
-        }
+            this.plugin.ClearSavedOwnership();
     }
 
     private void DrawOutfitSets()

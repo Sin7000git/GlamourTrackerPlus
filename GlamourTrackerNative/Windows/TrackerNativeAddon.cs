@@ -571,10 +571,10 @@ internal sealed class TrackerNativeAddon : NativeAddon
         };
 
         leftCol.AddNode(MakeSection("Stored"));
-        var dresserSlots = index.DresserSlotsUsed > 0
-            ? $"{index.DresserSlotsUsed} / 800"
-            : "—";
-        leftCol.AddNode(MakeOverviewStatRow("Dresser slots", dresserSlots, colW));
+        leftCol.AddNode(MakeOverviewStatRow(
+            "Dresser slots",
+            $"{index.DresserSlotsUsed} / 800",
+            colW));
         leftCol.AddNode(MakeOverviewStatRow("Unique items in dresser", $"{index.DresserUniqueCount}", colW));
         leftCol.AddNode(MakeOverviewStatRow("Unique items in armoire", $"{index.ArmoireCount}", colW));
         var dataNote = index.HasPersistedData
@@ -588,12 +588,12 @@ internal sealed class TrackerNativeAddon : NativeAddon
         rightCol.AddNode(MakeSection("Outfit sets"));
         rightCol.AddNode(MakeOverviewStatRow(
             "Completed in dresser",
-            FormatRatio(setStats.CompletedInDresser, setStats.SetsInDresser),
+            FormatOwnedRatio(setStats.CompletedInDresser, setStats.SetsInDresser),
             colW,
             setStats.CompletedInDresser > 0 ? TrackerNativeHelpers.ColorOk : TrackerNativeHelpers.ColorMuted));
         rightCol.AddNode(MakeOverviewStatRow(
             "Completed in armoire",
-            FormatRatio(setStats.CompletedInArmoire, setStats.SetsInArmoire),
+            FormatOwnedRatio(setStats.CompletedInArmoire, setStats.SetsInArmoire),
             colW,
             setStats.CompletedInArmoire > 0 ? TrackerNativeHelpers.ColorOk : TrackerNativeHelpers.ColorMuted));
         rightCol.AddNode(MakeOverviewStatRow(
@@ -637,24 +637,19 @@ internal sealed class TrackerNativeAddon : NativeAddon
         {
             Size = new Vector2(140f, RowH),
             String = "Clear saved data",
-            TextTooltip = "Clears ownership cache and resets Overview counts. Open dresser or armoire, then Refresh.",
-            OnClick = () =>
-            {
-                // Do not RefreshAll here — live armoire/dresser reads would immediately refill the UI.
-                plugin.OwnershipIndex.ClearRuntimeCache();
-                plugin.Configuration.CharacterCaches.Clear();
-                plugin.Configuration.Save();
-                plugin.OutfitSets.Invalidate();
-                Plugin.ChatGui.Print(
-                    "Glamour Tracker+ saved ownership cleared. Open your glamour dresser (so sets can be rescanned), then click Refresh now.");
-                ScheduleRebuildForm();
-            },
+            TextTooltip =
+                "Deletes saved dresser/armoire ownership. Counts stay at zero until you open the dresser or armoire again.",
+            OnClick = () => plugin.ClearSavedOwnership(),
         });
         list.AddNode(buttons);
     }
 
     private static string FormatRatio(int have, int total) =>
         total > 0 ? $"{have} / {total}" : "—";
+
+    /// <summary>Completed / owned ratios collapse to a dash when nothing is owned yet.</summary>
+    private static string FormatOwnedRatio(int completedOrOwned, int ownedOrEligible) =>
+        ownedOrEligible > 0 ? $"{completedOrOwned} / {ownedOrEligible}" : "—";
 
     private static (Vector4 Color, string Text) FormatOverviewFashionProgress(FashionReportProgressView progress) =>
         progress.Kind switch

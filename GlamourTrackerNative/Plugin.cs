@@ -233,10 +233,38 @@ public sealed class Plugin : IDalamudPlugin
     /// <summary>Reloads dresser/armoire ownership used by tooltips and GC markers.</summary>
     public void RefreshOwnership(bool force = false)
     {
+        var wasSuspended = ownershipIndex.IsLiveOwnershipSuspended;
+        var revisionBefore = ownershipIndex.Revision;
         ownershipIndex.Refresh(force);
+
+        // After Clear, keep Overview at zeros until the dresser/armoire is opened — do not rebuild
+        // the catalog from the game's leftover in-session ItemFinder cache every background tick.
+        if (wasSuspended && ownershipIndex.IsLiveOwnershipSuspended)
+            return;
+
+        if (ownershipIndex.Revision != revisionBefore
+            || wasSuspended
+            || force)
+        {
+            outfitSetCatalog.Invalidate();
+            fashionReport.RebindOwnership();
+        }
+    }
+
+    /// <summary>
+    /// Deletes saved and runtime ownership for every character. Stays empty until the dresser or
+    /// armoire is opened again; does not discard the normal between-session save once data is re-read.
+    /// </summary>
+    public void ClearSavedOwnership()
+    {
+        ownershipIndex.ClearSaved();
+        Configuration.CharacterCaches.Clear();
+        Configuration.Save();
         outfitSetCatalog.Invalidate();
-        // Keep Fashion Report owned flags in sync when dresser/armoire index changes.
         fashionReport.RebindOwnership();
+        ChatGui.Print(
+            "Glamour Tracker+ saved ownership cleared. Open your glamour dresser or armoire to scan again.");
+        trackerNativeAddon?.RequestFormRebuild();
     }
 
     /// <summary>Also persists glamour plates from the client.</summary>

@@ -30,6 +30,7 @@ internal sealed class GlamourOwnershipIndex
     private HashSet<uint>? previousLiveDresser;
     private HashSet<uint>? previousLiveArmoire;
     private bool armoireHasBeenOpened;
+    private bool liveOwnershipSuspended;
     private int refreshRunning;
 
     public GlamourOwnershipIndex(
@@ -67,6 +68,12 @@ internal sealed class GlamourOwnershipIndex
 
     /// <summary>Moves whenever stored ownership changes, so views can tell if a rebuild is needed.</summary>
     public int Revision => this.snapshot.Version;
+
+    /// <summary>
+    /// True after Clear until the player opens the dresser or armoire. Stops the game's in-session
+    /// ItemFinder / Mirage caches from refilling Overview without a fresh interaction.
+    /// </summary>
+    public bool IsLiveOwnershipSuspended => this.liveOwnershipSuspended;
 
     /// <summary>
     /// Distinct appearances in the dresser: loose items plus the pieces inside stored outfits, and
@@ -124,6 +131,19 @@ internal sealed class GlamourOwnershipIndex
         this.armoireHasBeenOpened = false;
     }
 
+    /// <summary>
+    /// Wipes runtime ownership and refuses live game reads until the dresser or armoire is opened.
+    /// Pair with clearing <see cref="Configuration.CharacterCaches"/> so the empty state also persists.
+    /// </summary>
+    public void ClearSaved()
+    {
+        ClearRuntimeCache();
+        this.liveOwnershipSuspended = true;
+        PluginFileLog.Info(
+            "ownership.clear",
+            "Saved ownership cleared; live reads suspended until dresser or armoire is opened");
+    }
+
     public void Refresh(bool force = false)
     {
         if (!this.clientState.IsLoggedIn)
@@ -150,6 +170,20 @@ internal sealed class GlamourOwnershipIndex
 
         try
         {
+            if (this.liveOwnershipSuspended)
+            {
+                if (!OwnershipGameReader.IsDresserOpen() && !OwnershipGameReader.IsArmoireOpen())
+                {
+                    this.lastRefresh = DateTime.UtcNow;
+                    return;
+                }
+
+                this.liveOwnershipSuspended = false;
+                PluginFileLog.Info(
+                    "ownership.clear",
+                    "Live ownership reads resumed after dresser/armoire was opened");
+            }
+
             OwnershipGameReader.ForgetSlotMap();
 
             var liveDresser = new HashSet<uint>();
@@ -249,7 +283,8 @@ internal sealed class GlamourOwnershipIndex
         if (storage.HasFlag(GlamourStorageLocation.Dresser) || !this.Sets.IsGlamourPiece(itemId))
             return storage;
 
-        if (OwnershipGameReader.IsSetSlotUnlocked(setRowId, slotIndex))
+        if (!this.liveOwnershipSuspended
+            && OwnershipGameReader.IsSetSlotUnlocked(setRowId, slotIndex))
             storage |= GlamourStorageLocation.Dresser;
 
         return storage;
@@ -279,15 +314,16 @@ internal sealed class GlamourOwnershipIndex
         this.snapshot.HasCompleteSetInDresser(setRowId);
 
     public bool IsOutfitSetUnlockedLive(uint setRowId) =>
-        OwnershipGameReader.IsSetUnlockedInFinder(setRowId);
+        !this.liveOwnershipSuspended && OwnershipGameReader.IsSetUnlockedInFinder(setRowId);
 
     public bool IsOutfitSlotUnlocked(uint setRowId, int slotIndex) =>
-        OwnershipGameReader.IsSetSlotUnlocked(setRowId, slotIndex);
+        !this.liveOwnershipSuspended && OwnershipGameReader.IsSetSlotUnlocked(setRowId, slotIndex);
 
     /// <summary>Whether the set counts as finished right now, including live dresser slot flags.</summary>
     public bool IsOutfitSetComplete(uint setRowId) =>
         this.snapshot.HasCompleteSetInDresser(setRowId)
-        || this.Sets.IsComplete(setRowId, this.snapshot, useMirageSlots: true);
+        || (!this.liveOwnershipSuspended
+            && this.Sets.IsComplete(setRowId, this.snapshot, useMirageSlots: true));
 
     public static bool IsGlamourGear(Item item) =>
         item.EquipSlotCategory.RowId != 0 && item.ItemUICategory.RowId is not 59 and not 60;
@@ -474,6 +510,8 @@ internal sealed class GlamourOwnershipIndex
     {
         this.activeContentId = contentId;
         ClearRuntimeCache();
+        // Login restore is the opposite of Clear: trust saved data and live reads again.
+        this.liveOwnershipSuspended = false;
 
         if (contentId == 0)
             return;

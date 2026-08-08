@@ -51,6 +51,7 @@ internal static unsafe class OwnershipGameReader
     private const int MaxDresserSlots = 800;
 
     private static readonly string[] ArmoireAddonNames = ["Cabinet", "CabinetWithdraw"];
+    private static readonly string[] DresserAddonNames = ["MiragePrismPrismBox", "MiragePrismMiragePlate"];
 
     private static volatile Dictionary<uint, uint>? slotByItemId;
 
@@ -157,13 +158,24 @@ internal static unsafe class OwnershipGameReader
     /// always worth believing about what it found, and only worth believing about what it is missing
     /// once this has been true at least once.
     /// </remarks>
-    public static bool IsArmoireOpen()
+    public static bool IsArmoireOpen() => IsAnyAddonVisible(ArmoireAddonNames);
+
+    /// <summary>Whether the glamour dresser or plate editor window is open.</summary>
+    public static bool IsDresserOpen() => IsAnyAddonVisible(DresserAddonNames);
+
+    public static bool IsPrismBoxLoaded()
+    {
+        var mirage = MirageManager.Instance();
+        return mirage != null && mirage->PrismBoxLoaded;
+    }
+
+    private static bool IsAnyAddonVisible(string[] names)
     {
         var manager = RaptureAtkUnitManager.Instance();
         if (manager == null)
             return false;
 
-        foreach (var name in ArmoireAddonNames)
+        foreach (var name in names)
         {
             var addon = manager->GetAddonByName(name);
             if (addon != null && addon->IsVisible)
@@ -171,12 +183,6 @@ internal static unsafe class OwnershipGameReader
         }
 
         return false;
-    }
-
-    public static bool IsPrismBoxLoaded()
-    {
-        var mirage = MirageManager.Instance();
-        return mirage != null && mirage->PrismBoxLoaded;
     }
 
     /// <summary>ItemFinder's per-set unlock bit — the same source the plugin used before 0.1.102.</summary>

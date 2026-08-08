@@ -603,3 +603,11 @@
 - Files changed: OwnershipGameReader.cs, GlamourOwnershipIndex.cs, GlamourCandidatePool.cs, csproj
 - Outcome: Debug + Release build clean, both stamped 0.1.131
 - Next: ownership.refresh should settle at dresser=1494 and stop repeating. Still waiting on the 0.1.130 lines (distinct pieces vs filled slots, and the complete-set names) — they only print when the stored outfits change, so the dresser needs opening once.
+- Outcome: confirmed at 18:15. "agentRows=0 pruned=False" on the thin reads and "agentRows=1540 pruned=True" on the full one, which is the gate behaving exactly as intended. 1540 = 264 outfit rows + 300 loose + 976 piece rows, so the agent list really is the unfolded one.
+
+[2026-08-08] The two disputed counts, settled (0.1.132)
+- Pieces inside outfits: the log reads "930 distinct pieces held inside them across 976 filled slots". The user's hand count of 976 was exactly right and so is ours; 46 appearances sit in more than one outfit. A line labelled "unique items" wants the distinct number, so nothing changes.
+- Complete outfits: all 71 names logged, all distinct (checked with sort -u, no repeats), so it is not two sets sharing a display name. The number comes straight from the game's per-slot unlock flags with every outfit scanned, so the likeliest answer is one outfit missed by eye. Easy candidates in the list: "#55 Armor" and "The Emperor's New Attire", neither of which reads like an outfit at a glance.
+- Fixed in passing: a read that cannot reach the agent reports zero slots, and that was being written straight into the snapshot, so the Overview slot row blanked to "—" until the next save put it back. Zero slots is now ignored rather than believed.
+- Files changed: GlamourOwnershipIndex.cs, csproj
+- Outcome: Debug + Release build clean, both stamped 0.1.132

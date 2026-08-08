@@ -177,7 +177,11 @@ internal sealed class GlamourOwnershipIndex
 
                 dresserPruned = mayPrune;
                 dresserChanged = this.snapshot.MergeDresserItems(ids, mayPrune);
-                dresserChanged |= this.snapshot.SetDresserSlotsUsed(dresser.SlotsUsed);
+
+                // A read that could not reach the agent reports no slots at all, which is not the
+                // same as an empty dresser and would blank the slot row until the next save.
+                if (dresser.SlotsUsed > 0)
+                    dresserChanged |= this.snapshot.SetDresserSlotsUsed(dresser.SlotsUsed);
             }
 
             dresserChanged |= RefreshSetPresence();

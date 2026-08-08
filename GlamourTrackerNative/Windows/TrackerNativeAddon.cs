@@ -519,7 +519,9 @@ internal sealed class TrackerNativeAddon : NativeAddon
         var progress = plugin.FashionProgress.GetProgress();
         var week = plugin.FashionReport.Snapshot?.Week ?? string.Empty;
 
-        return $"ov|{index.DresserSlotsUsed}|{index.DresserUniqueCount}|{index.ArmoireCount}|{index.HasPersistedData}|{index.LastRefresh.Ticks}|{sets.DresserEligible}|{sets.ArmoireEligible}|{sets.SetsInDresser}|{sets.SetsInArmoire}|{sets.CompletedInDresser}|{sets.CompletedInArmoire}|{week}|{(int)progress.Kind}|{progress.HighestScore}";
+        // Deliberately omit LastRefresh: background ownership ticks update that clock even when
+        // every count is unchanged, and putting it here rebuilt the whole Overview every 30s.
+        return $"ov|{index.Revision}|{index.DresserSlotsUsed}|{index.DresserUniqueCount}|{index.ArmoireCount}|{index.HasPersistedData}|{sets.DresserEligible}|{sets.ArmoireEligible}|{sets.SetsInDresser}|{sets.SetsInArmoire}|{sets.CompletedInDresser}|{sets.CompletedInArmoire}|{week}|{(int)progress.Kind}|{progress.HighestScore}";
     }
 
     private void BuildOverview(VerticalListNode list, float width)

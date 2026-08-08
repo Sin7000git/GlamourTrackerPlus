@@ -232,11 +232,10 @@ internal sealed class GlamourOwnershipIndex
 
                 armoireChanged = this.snapshot.MergeArmoireItems(ids, mayPrune);
             }
-            this.lastRefresh = DateTime.UtcNow;
-
             if (!dresserChanged && !armoireChanged)
                 return;
 
+            this.lastRefresh = DateTime.UtcNow;
             SavePersistedForCharacter(contentId, dresser.SpeaksForWholeDresser);
             PluginFileLog.Info(
                 "ownership.refresh",
@@ -356,44 +355,29 @@ internal sealed class GlamourOwnershipIndex
     }
 
     /// <summary>
-    /// Which outfits are in the dresser. The item list holds an outfit as a set row id, and ItemFinder
-    /// keeps unlock bits that can name outfits the item list has not caught up with.
+    /// Which outfits are in the dresser: set row ids sitting in the dresser item list. Unlock bits are
+    /// not presence — they mark outfits the character has unlocked, not which ones this dresser holds.
     /// </summary>
     private bool RefreshSetPresence()
     {
-        var changed = false;
+        if (this.snapshot.DresserItemCount == 0)
+            return false;
 
-        if (this.snapshot.DresserItemCount > 0)
+        var present = new HashSet<uint>();
+        foreach (var id in this.snapshot.DresserItems)
         {
-            var present = new HashSet<uint>();
-            foreach (var id in this.snapshot.DresserItems)
-            {
-                if (this.Sets.AllSetRowIds.Contains(id))
-                    present.Add(id);
-            }
-
-            if (this.snapshot.ReplaceSetsInDresser(present))
-            {
-                changed = true;
-                PluginFileLog.Info(
-                    "ownership.set-presence",
-                    $"Set-list presence from dresser items: {present.Count} sets " +
-                    $"(of {this.snapshot.DresserItemCount} items)");
-            }
+            if (this.Sets.AllSetRowIds.Contains(id))
+                present.Add(id);
         }
 
-        try
-        {
-            // Add-only: unlock bits must never retract what the item list established.
-            foreach (var setRowId in OwnershipGameReader.UnlockedSetsInFinder(this.Sets.AllSetRowIds))
-                changed |= this.snapshot.AddSetInDresser(setRowId);
-        }
-        catch (Exception ex)
-        {
-            PluginFileLog.Error("ownership.finder-sets", "Sync set unlock bits failed", ex);
-        }
+        if (!this.snapshot.ReplaceSetsInDresser(present))
+            return false;
 
-        return changed;
+        PluginFileLog.Info(
+            "ownership.set-presence",
+            $"Set-list presence from dresser items: {present.Count} sets " +
+            $"(of {this.snapshot.DresserItemCount} items)");
+        return true;
     }
 
     /// <summary>

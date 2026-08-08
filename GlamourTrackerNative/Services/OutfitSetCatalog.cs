@@ -105,13 +105,17 @@ internal sealed class OutfitSetCatalog
     /// Presence in the dresser is not the same as being finished: the game stores an outfit either as
     /// a set row or as loose pieces, so both count as present.
     /// </summary>
+    /// <remarks>
+    /// ItemFinder unlock bits are not presence. They light up for outfits the character has unlocked
+    /// somewhere, including ones that are not in this dresser's set list, and that is what pushed
+    /// "sets in dresser" from 264 to 276.
+    /// </remarks>
     private SetDresserState ResolveDresserState(uint setId, bool anyGlamourPieceInDresser)
     {
         if (this.ownershipIndex.IsOutfitSetComplete(setId))
             return SetDresserState.Complete;
 
         var present = anyGlamourPieceInDresser
-                      || this.ownershipIndex.IsOutfitSetUnlockedLive(setId)
                       || this.ownershipIndex.IsOutfitSetInDresser(setId);
 
         return present ? SetDresserState.Partial : SetDresserState.None;

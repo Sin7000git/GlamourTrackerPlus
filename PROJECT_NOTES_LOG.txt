@@ -631,3 +631,10 @@
 - Files changed: OwnershipGameReader.cs, GlamourOwnershipIndex.cs, Plugin.cs, TrackerNativeAddon.cs, TrackerWindow.cs, csproj
 - Outcome: Debug + Release build clean, both stamped 0.1.134
 - Next: Clear → Overview zeros stay put without opening dresser; open dresser → counts refill; reboot with a prior save still restores as before
+
+[2026-08-08] Completed showed 71/276 and Overview flickered every 30s (0.1.135)
+- 276 vs 264: ItemFinder unlock bits were treated as dresser presence (ResolveDresserState + RefreshSetPresence add-only merge). Unlock means "this character has unlocked the outfit", not "it is in this dresser", and about a dozen extras were inflating the denominator. Presence is only set rows in the dresser item list, plus loose glam pieces / completion.
+- Flicker: BuildOverviewSignature included LastRefresh.Ticks, and Refresh stamped that clock on every background tick even when nothing changed, so OnUpdate rebuilt the whole Overview every 30s. LastRefresh is no longer in the signature; the clock only moves when ownership actually changes. Revision is in the signature instead.
+- Side effect of the unlock merge: every refresh replaced presence with the 264 item-list sets then re-added the unlock extras, so Revision also moved every tick. Removing that merge stops that churn too.
+- Files changed: OutfitSetCatalog.cs, GlamourOwnershipIndex.cs, TrackerNativeAddon.cs, csproj
+- Outcome: Debug + Release build clean, both stamped 0.1.135

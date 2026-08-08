@@ -301,6 +301,10 @@ internal sealed class GlamourOwnershipIndex
     public bool IsInDresserItemList(uint itemId) =>
         this.snapshot.HasDresserItem(ItemIdHelper.GlamourBaseId(itemId));
 
+    /// <summary>True when this appearance is known to sit inside a stored outfit.</summary>
+    public bool IsDresserOutfitPiece(uint itemId) =>
+        this.snapshot.HasDresserOutfitPiece(ItemIdHelper.GlamourBaseId(itemId));
+
     public bool IsInArmoire(uint itemId) =>
         this.snapshot.HasArmoireItem(ItemIdHelper.GlamourBaseId(itemId));
 

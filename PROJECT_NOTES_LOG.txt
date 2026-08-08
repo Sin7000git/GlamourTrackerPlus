@@ -638,3 +638,10 @@
 - Side effect of the unlock merge: every refresh replaced presence with the 264 item-list sets then re-added the unlock extras, so Revision also moved every tick. Removing that merge stops that churn too.
 - Files changed: OutfitSetCatalog.cs, GlamourOwnershipIndex.cs, TrackerNativeAddon.cs, csproj
 - Outcome: Debug + Release build clean, both stamped 0.1.135
+- Partial: flicker gone; user still saw 71/276. Ownership log already had sets=264 — the Overview tally was the liar.
+
+[2026-08-08] Overview still showed 71/276 after unlock bits were removed (0.1.136)
+- Ownership refresh correctly reports sets=264 completeSets=71. The Overview catalog was still counting a set as "in dresser" when any of its glam pieces looked owned via GetStorage, and GetStorage attributes pieces held inside *other* outfits / complete sets to every sheet row that shares them. Twelve outfits not among the 264 set rows were sneaking in that way.
+- Fix: Overview SetsInDresser / CompletedInDresser tally only rows on the set-presence list (IsOutfitSetInDresser). Tab InDresser still allows own loose pieces or this outfit's Mirage slot unlocks, but no longer treats "piece exists inside somebody else's outfit" as presence.
+- Files changed: OutfitSetCatalog.cs, GlamourOwnershipIndex.cs, csproj
+- Outcome: Debug + Release build clean, both stamped 0.1.136

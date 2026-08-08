@@ -67,7 +67,7 @@ internal sealed class OutfitSetCatalog
         var pieces = new List<OutfitPieceInfo>(template.Pieces.Length);
         var owned = 0;
         var armoireStored = 0;
-        var anyGlamourPieceInDresser = false;
+        var hasOwnDresserPresence = false;
 
         foreach (var piece in template.Pieces)
         {
@@ -80,14 +80,14 @@ internal sealed class OutfitSetCatalog
             if (piece.IsArmoireEligible && storage.HasFlag(GlamourStorageLocation.Armoire))
                 armoireStored++;
 
-            if (piece.IsGlamourPiece && storage.HasFlag(GlamourStorageLocation.Dresser))
-                anyGlamourPieceInDresser = true;
+            if (piece.IsGlamourPiece && IsOwnDresserPresence(piece.ItemId, template.SetId, piece.SlotIndex))
+                hasOwnDresserPresence = true;
         }
 
-        var dresserState = ResolveDresserState(template.SetId, anyGlamourPieceInDresser);
+        var dresserState = ResolveDresserState(template.SetId, hasOwnDresserPresence);
         var armoireComplete = template.ArmoirePieceCount > 0 && armoireStored == template.ArmoirePieceCount;
 
-        Tally(ref tally, template, dresserState, armoireStored, armoireComplete);
+        Tally(ref tally, template, armoireStored, armoireComplete);
 
         return new OutfitSetInfo
         {
@@ -105,26 +105,35 @@ internal sealed class OutfitSetCatalog
     /// Presence in the dresser is not the same as being finished: the game stores an outfit either as
     /// a set row or as loose pieces, so both count as present.
     /// </summary>
-    /// <remarks>
-    /// ItemFinder unlock bits are not presence. They light up for outfits the character has unlocked
-    /// somewhere, including ones that are not in this dresser's set list, and that is what pushed
-    /// "sets in dresser" from 264 to 276.
-    /// </remarks>
-    private SetDresserState ResolveDresserState(uint setId, bool anyGlamourPieceInDresser)
+    private SetDresserState ResolveDresserState(uint setId, bool hasOwnDresserPresence)
     {
-        if (this.ownershipIndex.IsOutfitSetComplete(setId))
+        if (this.ownershipIndex.IsOutfitSetInDresser(setId)
+            && this.ownershipIndex.IsOutfitSetComplete(setId))
             return SetDresserState.Complete;
 
-        var present = anyGlamourPieceInDresser
-                      || this.ownershipIndex.IsOutfitSetInDresser(setId);
+        if (this.ownershipIndex.IsOutfitSetInDresser(setId) || hasOwnDresserPresence)
+            return SetDresserState.Partial;
 
-        return present ? SetDresserState.Partial : SetDresserState.None;
+        return SetDresserState.None;
     }
 
-    private static void Tally(
+    /// <summary>
+    /// Whether this outfit itself accounts for the piece in the dresser — not merely that the same
+    /// appearance sits inside some other stored outfit (that is what inflated 264 to 276).
+    /// </summary>
+    private bool IsOwnDresserPresence(uint itemId, uint setRowId, int slotIndex)
+    {
+        if (this.ownershipIndex.IsOutfitSlotUnlocked(setRowId, slotIndex))
+            return true;
+
+        // Loose dresser row only — pieces held inside outfits are attributed to those outfits.
+        return this.ownershipIndex.IsInDresserItemList(itemId)
+               && !this.ownershipIndex.IsDresserOutfitPiece(itemId);
+    }
+
+    private void Tally(
         ref OverviewTally tally,
         OutfitSetTemplate template,
-        SetDresserState dresserState,
         int armoireStored,
         bool armoireComplete)
     {
@@ -134,10 +143,12 @@ internal sealed class OutfitSetCatalog
         if (template.ArmoirePieceCount > 0)
             tally.ArmoireEligible++;
 
-        if (dresserState != SetDresserState.None)
+        // Overview denominators are the outfits stored as set rows in the dresser (264), not every
+        // sheet row that happens to share a piece with one of those outfits (that was the 276).
+        if (this.ownershipIndex.IsOutfitSetInDresser(template.SetId))
         {
             tally.SetsInDresser++;
-            if (dresserState == SetDresserState.Complete)
+            if (this.ownershipIndex.IsOutfitSetComplete(template.SetId))
                 tally.CompletedInDresser++;
         }
 

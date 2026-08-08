@@ -163,10 +163,12 @@ internal sealed class GlamourOwnershipIndex
             var dresserChanged = false;
             if (dresser.FoundAnything)
             {
+                // Without ItemFinder the read cannot name the pieces inside stored outfits, so it
+                // sees roughly a third of the dresser and must not be allowed to forget the rest.
                 var (ids, mayPrune) = ConfirmRemovals(
                     liveDresser,
                     ref this.previousLiveDresser,
-                    dresser.SpeaksForWholeDresser && liveDresser.Count > 0);
+                    dresser.SpeaksForWholeDresser && dresser.ReadItemFinder && liveDresser.Count > 0);
 
                 dresserChanged = this.snapshot.MergeDresserItems(ids, mayPrune);
                 dresserChanged |= this.snapshot.SetDresserSlotsUsed(dresser.SlotsUsed);

@@ -567,3 +567,13 @@
 - Files changed: OutfitSetCatalog.cs, OwnershipGameReader.cs, GlamourOwnershipIndex.cs, SetCompletionRules.cs, CabinetCatalog.cs, ItemIdHelper.cs, GlamourPlateStore.cs, GearSlotMaps.cs (new), GlamourPlateCatalog.cs + OutfitSetSlots.cs + GlamourPlateSlotMap.cs (deleted), csproj
 - Outcome: Debug + Release build clean, both stamped 0.1.127
 - Next: verify in game — Overview set counts unchanged, Outfit sets tab storage filter still lists dresser sets, set detail still right, and the numbers survive a reboot before opening the dresser
+- Outcome: user reports the UI is correct; no ERROR or WARN in app.log for the whole day
+
+[2026-08-08] Dresser item list flip-flopped 1494 <-> 564 every minute (0.1.128)
+- Found by reading app.log after the Phase 3 check, not from a symptom. Nothing user-facing was wrong, which is why it survived three verification rounds: DresserTotalCount is the union with the 930 outfit pieces, and 564 + 930 happens to be the same 1494, so every count on screen stayed right through the flip.
+- Symptom in the log: ownership.refresh alternating dresser=1494 and dresser=564 roughly once a minute, each flip a real snapshot change and therefore a config.Save() to disk.
+- Cause: 0.1.120 added a finderRead term to the prune gate for exactly this, and the Phase 2 rewrite dropped it. ItemFinder is the only source that names the pieces inside stored outfits, so a read without it sees 564 of 1494 ids. Two of those in a row satisfied the two-strike rule and pruned, then the next warm read put them all back. DresserRead.ReadItemFinder was left computed, documented and unused, which is the tell.
+- Attempt: prune gate is SpeaksForWholeDresser && ReadItemFinder && count > 0 again. A read without ItemFinder can still add, never remove.
+- Files changed: GlamourOwnershipIndex.cs, csproj
+- Outcome: Debug + Release build clean, both stamped 0.1.128
+- Next: watch app.log — ownership.refresh should settle at dresser=1494 and stop logging every minute, since an unchanged snapshot writes nothing

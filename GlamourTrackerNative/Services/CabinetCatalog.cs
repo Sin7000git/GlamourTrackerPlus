@@ -29,10 +29,10 @@ internal sealed class CabinetCatalog
     }
 
     public bool TryGetCabinetRow(uint itemId, out uint cabinetRowId) =>
-        this.itemToCabinetRow.TryGetValue(ItemIdHelper.Normalize(itemId), out cabinetRowId);
+        this.itemToCabinetRow.TryGetValue(ItemIdHelper.GlamourBaseId(itemId), out cabinetRowId);
 
     public bool IsArmoireEligible(uint itemId) =>
-        this.itemToCabinetRow.ContainsKey(ItemIdHelper.Normalize(itemId));
+        this.itemToCabinetRow.ContainsKey(ItemIdHelper.GlamourBaseId(itemId));
 
     public IReadOnlyDictionary<uint, uint> CabinetToItem => this.cabinetToItem;
 }

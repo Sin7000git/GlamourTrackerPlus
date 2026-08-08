@@ -119,17 +119,21 @@ Work:
 
 # Phase 3 — Outfit set catalog and shared domain helpers
 
-**Status:** not started
+**Status:** done (0.1.127), not yet verified in game
 
-- [ ] Split `OutfitSetCatalog` into static metadata (built once: name, pieces, eligibility) and dynamic flags read from the ownership snapshot. Today the full `MirageStoreSetItem` sheet is rescanned and re-sorted on every invalidate.
-- [ ] Introduce a single `SetDresserState` (None / Partial / Complete) and use it for both Overview counting and the Outfit sets tab, so they can never disagree again.
-- [ ] Memoize "is this a glamour piece" by item id and hold the `Item` sheet once — `IsGlamourPiece` currently calls `GetExcelSheet<Item>()` per piece, per set, per rebuild.
-- [ ] Precompute overview stats during refresh instead of scanning all sets per frame.
-- [ ] Merge the three slot maps (`GlamourOwnershipIndex` set slots, `OutfitSetCatalog` slot readers, `GlamourPlateSlotMap`) into one file, documenting why sets have 11 slots and plates have 12.
-- [ ] Merge the duplicate unlock-bit readers (`IsFinderSetUnlockBitSet` and `OutfitSetCatalog.IsOutfitSetUnlocked`).
-- [ ] Collapse `ItemIdHelper.GlamourBaseId` and `Normalize` (identical) into one name.
-- [ ] Delete `GlamourPlateCatalog.cs` (unused; `GlamourPlateStore` does the job) or make the store delegate to it — not both.
-- [ ] Index set row id → Prism Box index once per Mirage load instead of scanning `PrismBoxItemIds` per lookup.
+- [x] Split `OutfitSetCatalog` into static metadata (built once: name, pieces, eligibility) and dynamic flags read from the ownership snapshot. `OutfitSetTemplate` holds the sheet-derived part, so an invalidate no longer rescans and re-sorts `MirageStoreSetItem`.
+- [x] Introduce a single `SetDresserState` (None / Partial / Complete) and use it for both Overview counting and the Outfit sets tab. `InDresser` is now derived from it rather than being a second answer to the same question.
+- [x] Memoize "is this a glamour piece" by item id and hold the `Item` sheet once. Memoizing came forward into Phase 2; the sheet is now held too, and the catalog asks per template instead of per rebuild.
+- [x] Precompute overview stats during refresh instead of scanning all sets per frame. Tallied while the sets are built and returned as a cached struct, which matters because the Overview signature asks for them every frame.
+- [x] Merge the three slot maps into one file — `GearSlotMaps.cs`, documenting why sets have 11 slots and plates have 12.
+- [x] Merge the duplicate unlock-bit readers (done in Phase 2).
+- [x] Collapse `ItemIdHelper.GlamourBaseId` and `Normalize` (identical) into one name.
+- [x] Delete `GlamourPlateCatalog.cs`. The two record types it declared were the ones `GlamourPlateStore` returns, so they moved there with it.
+- [x] Index set row id → Prism Box index once per Mirage load instead of scanning `PrismBoxItemIds` per lookup. Dropped on every refresh and rebuilt lazily; published by one reference assignment so a UI-thread reader never sees a half-built map.
+
+**Deliberately not done:** gating `OutfitSetCatalog.Invalidate()` on the ownership revision. The rebuild also picks up live Mirage slot flags and finder unlock bits, which can move without the snapshot version moving, and with the slot map cached the rebuild is cheap enough that the staleness risk is not worth it.
+
+**Blast radius to check:** Overview set counts, Outfit sets list + storage filter + detail, the old ImGui `TrackerWindow` (also reads `SetStorage` / `MissingPieces`).
 
 ---
 

@@ -113,6 +113,7 @@ internal sealed class GlamourOwnershipIndex
 
     public void ClearRuntimeCache()
     {
+        OwnershipGameReader.ForgetSlotMap();
         this.snapshot.Clear();
         this.lastRefresh = DateTime.MinValue;
         this.previousLiveDresser = null;
@@ -146,6 +147,8 @@ internal sealed class GlamourOwnershipIndex
 
         try
         {
+            OwnershipGameReader.ForgetSlotMap();
+
             var liveDresser = new HashSet<uint>();
             var liveArmoire = new HashSet<uint>();
 

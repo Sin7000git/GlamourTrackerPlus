@@ -2,6 +2,32 @@ using Lumina.Excel.Sheets;
 
 namespace GlamourTracker.Services;
 
+// Two slot orders, kept side by side because they are nearly the same and constantly confused.
+//
+// An outfit set has eleven slots and a glamour plate has twelve. The difference is the ring: a set
+// stores one ring because that is all the game lets an outfit carry, while a plate has a right and
+// a left. Everything up to slot 9 lines up, so an index from one map reads plausibly in the other
+// and will be wrong only at the end.
+
+/// <summary>The eleven gear slots an outfit set can fill, in the order the game stores them.</summary>
+internal static class OutfitSetSlots
+{
+    public static readonly (string Label, int Index, Func<MirageStoreSetItem, uint> ItemId)[] All =
+    [
+        ("Main hand", 0, s => s.MainHand.RowId),
+        ("Off-hand", 1, s => s.OffHand.RowId),
+        ("Head", 2, s => s.Head.RowId),
+        ("Body", 3, s => s.Body.RowId),
+        ("Hands", 4, s => s.Hands.RowId),
+        ("Legs", 5, s => s.Legs.RowId),
+        ("Feet", 6, s => s.Feet.RowId),
+        ("Earrings", 7, s => s.Earrings.RowId),
+        ("Necklace", 8, s => s.Necklace.RowId),
+        ("Bracelets", 9, s => s.Bracelets.RowId),
+        ("Ring", 10, s => s.Ring.RowId),
+    ];
+}
+
 /// <summary>Fixed glamour plate slot order used by MirageManager / plate editor (12 slots).</summary>
 internal enum GlamourPlateSlot : byte
 {

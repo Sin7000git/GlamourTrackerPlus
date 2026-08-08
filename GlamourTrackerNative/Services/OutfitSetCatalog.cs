@@ -1,16 +1,26 @@
 using Dalamud.Plugin.Services;
-using FFXIVClientStructs.FFXIV.Client.UI.Misc;
+using Lumina.Excel;
 using Lumina.Excel.Sheets;
 
 namespace GlamourTracker.Services;
 
+/// <summary>
+/// The outfit sets in the game and where each of their pieces currently lives.
+/// </summary>
+/// <remarks>
+/// What an outfit is made of never changes, so the sheets are read once into templates. Only the
+/// storage answers are rebuilt when ownership moves, and the Overview totals fall out of that same
+/// pass — the tab and the Overview therefore count from one set of numbers and cannot disagree.
+/// </remarks>
 internal sealed class OutfitSetCatalog
 {
     private readonly IDataManager dataManager;
     private readonly GlamourOwnershipIndex ownershipIndex;
     private readonly CabinetCatalog cabinetCatalog;
 
+    private List<OutfitSetTemplate>? templates;
     private List<OutfitSetInfo>? sets;
+    private OutfitSetOverviewStats overview;
 
     public OutfitSetCatalog(
         IDataManager dataManager,
@@ -28,142 +38,170 @@ internal sealed class OutfitSetCatalog
         return this.sets;
     }
 
+    /// <summary>Drops the storage answers. The set metadata behind them is kept.</summary>
     public void Invalidate() => this.sets = null;
 
-    public int CountSetsInArmoire() =>
-        GetSets().Count(set => set.SetStorage is OutfitSetStorageLocation.Armoire or OutfitSetStorageLocation.Both);
-
-    /// <summary>One-pass outfit-set totals for the Overview tab.</summary>
+    /// <summary>Outfit-set totals for the Overview tab, tallied while the sets were built.</summary>
     public OutfitSetOverviewStats GetOverviewStats()
     {
-        var sets = GetSets();
-        var dresserEligible = 0;
-        var armoireEligible = 0;
-        var setsInDresser = 0;
-        var setsInArmoire = 0;
-        var completedInDresser = 0;
-        var completedInArmoire = 0;
-
-        foreach (var set in sets)
-        {
-            var glamourPieces = set.Pieces.Where(p => this.IsGlamourPiece(p.ItemId)).ToList();
-            var armoirePieces = set.Pieces.Where(p => this.cabinetCatalog.IsArmoireEligible(p.ItemId)).ToList();
-
-            var canDresser = glamourPieces.Count > 0;
-            var canArmoire = armoirePieces.Count > 0;
-            if (canDresser)
-                dresserEligible++;
-            if (canArmoire)
-                armoireEligible++;
-
-            // Completed / sets-in-dresser (e.g. 73/262), not / all sets in the game.
-            // Complete = all glam pieces in dresser OR every glam Mirage slot unlocked for the set.
-            // Never treat presence alone as complete (that was the false 262/262 bug).
-            if (set.InDresser)
-            {
-                setsInDresser++;
-                if (this.ownershipIndex.IsOutfitSetComplete(set.SetId))
-                    completedInDresser++;
-            }
-
-            // "In armoire" = at least one armoire-eligible piece stored there; complete = all of them.
-            var armoireStoredCount = armoirePieces.Count(p => this.ownershipIndex.IsInArmoire(p.ItemId));
-            var allArmoireInArmoire = canArmoire && armoireStoredCount == armoirePieces.Count;
-            if (canArmoire && armoireStoredCount > 0)
-            {
-                setsInArmoire++;
-                if (allArmoireInArmoire)
-                    completedInArmoire++;
-            }
-        }
-
-        // Incomplete counts are derived when needed: owned − completed.
-        return new OutfitSetOverviewStats(
-            DresserEligible: dresserEligible,
-            ArmoireEligible: armoireEligible,
-            SetsInDresser: setsInDresser,
-            SetsInArmoire: setsInArmoire,
-            CompletedInDresser: completedInDresser,
-            CompletedInArmoire: completedInArmoire);
+        GetSets();
+        return this.overview;
     }
+
+    public int CountSetsInArmoire() => GetOverviewStats().SetsInArmoire;
 
     private List<OutfitSetInfo> BuildSets()
     {
+        var built = new List<OutfitSetInfo>(Templates.Count);
+        var tally = default(OverviewTally);
+
+        foreach (var template in Templates)
+            built.Add(BuildSet(template, ref tally));
+
+        this.overview = tally.ToStats();
+        return built;
+    }
+
+    private OutfitSetInfo BuildSet(OutfitSetTemplate template, ref OverviewTally tally)
+    {
+        var pieces = new List<OutfitPieceInfo>(template.Pieces.Length);
+        var owned = 0;
+        var armoireStored = 0;
+        var anyGlamourPieceInDresser = false;
+
+        foreach (var piece in template.Pieces)
+        {
+            var storage = this.ownershipIndex.GetStorage(piece.ItemId, template.SetId, piece.SlotIndex);
+            pieces.Add(new OutfitPieceInfo(template.SetId, piece.ItemId, piece.SlotIndex, piece.SlotLabel, storage));
+
+            if (storage != GlamourStorageLocation.None)
+                owned++;
+
+            if (piece.IsArmoireEligible && storage.HasFlag(GlamourStorageLocation.Armoire))
+                armoireStored++;
+
+            if (piece.IsGlamourPiece && storage.HasFlag(GlamourStorageLocation.Dresser))
+                anyGlamourPieceInDresser = true;
+        }
+
+        var dresserState = ResolveDresserState(template.SetId, anyGlamourPieceInDresser);
+        var armoireComplete = template.ArmoirePieceCount > 0 && armoireStored == template.ArmoirePieceCount;
+
+        Tally(ref tally, template, dresserState, armoireStored, armoireComplete);
+
+        return new OutfitSetInfo
+        {
+            SetId = template.SetId,
+            Name = template.Name,
+            IsUnlocked = this.ownershipIndex.IsOutfitSetUnlockedLive(template.SetId),
+            DresserState = dresserState,
+            SetStorage = ResolveSetStorage(dresserState == SetDresserState.Complete, armoireComplete),
+            Pieces = pieces,
+            OwnedPieceCount = owned,
+        };
+    }
+
+    /// <summary>
+    /// Presence in the dresser is not the same as being finished: the game stores an outfit either as
+    /// a set row or as loose pieces, so both count as present.
+    /// </summary>
+    private SetDresserState ResolveDresserState(uint setId, bool anyGlamourPieceInDresser)
+    {
+        if (this.ownershipIndex.IsOutfitSetComplete(setId))
+            return SetDresserState.Complete;
+
+        var present = anyGlamourPieceInDresser
+                      || this.ownershipIndex.IsOutfitSetUnlockedLive(setId)
+                      || this.ownershipIndex.IsOutfitSetInDresser(setId);
+
+        return present ? SetDresserState.Partial : SetDresserState.None;
+    }
+
+    private static void Tally(
+        ref OverviewTally tally,
+        OutfitSetTemplate template,
+        SetDresserState dresserState,
+        int armoireStored,
+        bool armoireComplete)
+    {
+        if (template.GlamourPieceCount > 0)
+            tally.DresserEligible++;
+
+        if (template.ArmoirePieceCount > 0)
+            tally.ArmoireEligible++;
+
+        if (dresserState != SetDresserState.None)
+        {
+            tally.SetsInDresser++;
+            if (dresserState == SetDresserState.Complete)
+                tally.CompletedInDresser++;
+        }
+
+        // "In armoire" = at least one armoire-eligible piece stored there; complete = all of them.
+        if (template.ArmoirePieceCount > 0 && armoireStored > 0)
+        {
+            tally.SetsInArmoire++;
+            if (armoireComplete)
+                tally.CompletedInArmoire++;
+        }
+    }
+
+    private static OutfitSetStorageLocation ResolveSetStorage(bool dresserComplete, bool armoireComplete) =>
+        (dresserComplete, armoireComplete) switch
+        {
+            (true, true) => OutfitSetStorageLocation.Both,
+            (true, false) => OutfitSetStorageLocation.Dresser,
+            (false, true) => OutfitSetStorageLocation.Armoire,
+            _ => OutfitSetStorageLocation.None,
+        };
+
+    private List<OutfitSetTemplate> Templates => this.templates ??= BuildTemplates();
+
+    private List<OutfitSetTemplate> BuildTemplates()
+    {
         var itemSheet = this.dataManager.GetExcelSheet<Item>();
-        var sets = new List<OutfitSetInfo>();
+        var built = new List<OutfitSetTemplate>();
 
         foreach (var row in this.dataManager.GetExcelSheet<MirageStoreSetItem>())
         {
             if (row.RowId == 0)
                 continue;
 
-            var pieces = new List<OutfitPieceInfo>();
+            var pieces = new List<OutfitPieceTemplate>();
+            var glamourPieces = 0;
+            var armoirePieces = 0;
+
             foreach (var (label, slotIndex, readItemId) in OutfitSetSlots.All)
             {
                 var itemId = readItemId(row);
                 if (itemId == 0)
                     continue;
 
-                var storage = this.ownershipIndex.GetStorage(itemId, row.RowId, slotIndex);
-                pieces.Add(new OutfitPieceInfo(row.RowId, itemId, slotIndex, label, storage));
+                var isGlamourPiece = this.ownershipIndex.Sets.IsGlamourPiece(itemId);
+                var isArmoireEligible = this.cabinetCatalog.IsArmoireEligible(itemId);
+                if (isGlamourPiece)
+                    glamourPieces++;
+                if (isArmoireEligible)
+                    armoirePieces++;
+
+                pieces.Add(new OutfitPieceTemplate(itemId, slotIndex, label, isGlamourPiece, isArmoireEligible));
             }
 
             if (pieces.Count == 0)
                 continue;
 
-            var set = new OutfitSetInfo(row.RowId, ResolveSetName(row, itemSheet))
-            {
-                IsUnlocked = this.ownershipIndex.IsOutfitSetUnlockedLive(row.RowId),
-                InDresser = ResolveInDresser(row.RowId, pieces),
-                SetStorage = ResolveSetStorage(row, pieces),
-                Pieces = pieces,
-            };
-
-            set.OwnedPieceCount = pieces.Count(p => p.Storage != GlamourStorageLocation.None);
-            sets.Add(set);
+            built.Add(new OutfitSetTemplate(
+                row.RowId,
+                ResolveSetName(row, itemSheet),
+                pieces.ToArray(),
+                glamourPieces,
+                armoirePieces));
         }
 
-        return sets.OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase).ToList();
+        return built.OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
-    /// <summary>
-    /// Presence in the dresser, which is not the same as being finished: the game stores an outfit
-    /// either as a set row or as loose pieces, so both count.
-    /// </summary>
-    private bool ResolveInDresser(uint setId, List<OutfitPieceInfo> pieces) =>
-        this.ownershipIndex.IsOutfitSetUnlockedLive(setId)
-        || this.ownershipIndex.IsOutfitSetInDresser(setId)
-        || pieces.Any(p => this.IsGlamourPiece(p.ItemId) && this.ownershipIndex.IsInDresser(p.ItemId));
-
-    private OutfitSetStorageLocation ResolveSetStorage(MirageStoreSetItem row, List<OutfitPieceInfo> pieces)
-    {
-        var dresserComplete = this.ownershipIndex.IsOutfitSetComplete(row.RowId);
-        var armoireComplete = IsArmoireSetComplete(pieces);
-
-        if (dresserComplete && armoireComplete)
-            return OutfitSetStorageLocation.Both;
-
-        if (dresserComplete)
-            return OutfitSetStorageLocation.Dresser;
-
-        if (armoireComplete)
-            return OutfitSetStorageLocation.Armoire;
-
-        return OutfitSetStorageLocation.None;
-    }
-
-    private bool IsArmoireSetComplete(List<OutfitPieceInfo> pieces)
-    {
-        var armoirePieces = pieces.Where(p => this.cabinetCatalog.IsArmoireEligible(p.ItemId)).ToList();
-        if (armoirePieces.Count == 0)
-            return false;
-
-        return armoirePieces.All(p => p.Storage.HasFlag(GlamourStorageLocation.Armoire));
-    }
-
-    private bool IsGlamourPiece(uint itemId) => this.ownershipIndex.Sets.IsGlamourPiece(itemId);
-
-    private static string ResolveSetName(MirageStoreSetItem row, Lumina.Excel.ExcelSheet<Item> itemSheet)
+    private static string ResolveSetName(MirageStoreSetItem row, ExcelSheet<Item> itemSheet)
     {
         if (itemSheet.TryGetRow(row.RowId, out var setItem))
         {
@@ -193,7 +231,42 @@ internal sealed class OutfitSetCatalog
 
         return $"Outfit set #{row.RowId}";
     }
+
+    private struct OverviewTally
+    {
+        public int DresserEligible;
+        public int ArmoireEligible;
+        public int SetsInDresser;
+        public int SetsInArmoire;
+        public int CompletedInDresser;
+        public int CompletedInArmoire;
+
+        // Incomplete counts are derived when needed: owned − completed.
+        public readonly OutfitSetOverviewStats ToStats() =>
+            new(
+                DresserEligible: this.DresserEligible,
+                ArmoireEligible: this.ArmoireEligible,
+                SetsInDresser: this.SetsInDresser,
+                SetsInArmoire: this.SetsInArmoire,
+                CompletedInDresser: this.CompletedInDresser,
+                CompletedInArmoire: this.CompletedInArmoire);
+    }
 }
+
+/// <summary>What an outfit is made of. Read from the sheets once and then reused.</summary>
+internal sealed record OutfitSetTemplate(
+    uint SetId,
+    string Name,
+    OutfitPieceTemplate[] Pieces,
+    int GlamourPieceCount,
+    int ArmoirePieceCount);
+
+internal readonly record struct OutfitPieceTemplate(
+    uint ItemId,
+    int SlotIndex,
+    string SlotLabel,
+    bool IsGlamourPiece,
+    bool IsArmoireEligible);
 
 internal readonly record struct OutfitSetOverviewStats(
     int DresserEligible,
@@ -203,30 +276,34 @@ internal readonly record struct OutfitSetOverviewStats(
     int CompletedInDresser,
     int CompletedInArmoire);
 
+/// <summary>How much of an outfit the dresser holds. One answer for the Overview and the tab.</summary>
+internal enum SetDresserState
+{
+    /// <summary>Nothing of this outfit is in the dresser.</summary>
+    None = 0,
+
+    /// <summary>The dresser holds the outfit or some of its pieces, but not all of them.</summary>
+    Partial = 1,
+
+    /// <summary>Every glamour slot of the outfit is accounted for.</summary>
+    Complete = 2,
+}
+
 internal sealed class OutfitSetInfo
 {
-    public OutfitSetInfo(uint setId, string name)
-    {
-        this.SetId = setId;
-        this.Name = name;
-    }
+    public required uint SetId { get; init; }
+    public required string Name { get; init; }
+    public bool IsUnlocked { get; init; }
+    public SetDresserState DresserState { get; init; }
+    public OutfitSetStorageLocation SetStorage { get; init; }
+    public int OwnedPieceCount { get; init; }
+    public required List<OutfitPieceInfo> Pieces { get; init; }
 
-    public uint SetId { get; }
-    public string Name { get; }
-    public bool IsUnlocked { get; set; }
-
-    /// <summary>
-    /// The set is in the dresser in any form — on the stored set list, unlocked, or with at least one
-    /// glam piece stored. One rule for the Overview counts and the Outfit sets filter.
-    /// </summary>
-    public bool InDresser { get; set; }
-
-    public OutfitSetStorageLocation SetStorage { get; set; }
-    public int OwnedPieceCount { get; set; }
-    public List<OutfitPieceInfo> Pieces { get; set; } = [];
+    /// <summary>The dresser holds this outfit in some form. Used by the Overview and the tab filter.</summary>
+    public bool InDresser => this.DresserState != SetDresserState.None;
 
     public int TotalPieces => this.Pieces.Count;
-    public int MissingPieces => this.Pieces.Count(p => p.Storage == GlamourStorageLocation.None);
+    public int MissingPieces => this.TotalPieces - this.OwnedPieceCount;
 }
 
 internal readonly record struct OutfitPieceInfo(uint SetRowId, uint ItemId, int SlotIndex, string SlotLabel, GlamourStorageLocation Storage);

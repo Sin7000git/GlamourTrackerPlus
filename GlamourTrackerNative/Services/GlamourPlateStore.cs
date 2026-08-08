@@ -147,3 +147,7 @@ internal static unsafe class GlamourPlateStore
         return plates;
     }
 }
+
+internal sealed record GlamourPlateInfo(int PlateIndex, IReadOnlyList<GlamourPlatePieceInfo> Pieces);
+
+internal readonly record struct GlamourPlatePieceInfo(int Slot, uint ItemId, GlamourStorageLocation Storage);

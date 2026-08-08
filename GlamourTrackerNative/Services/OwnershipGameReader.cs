@@ -43,6 +43,8 @@ internal static unsafe class OwnershipGameReader
 
     private static readonly string[] ArmoireAddonNames = ["Cabinet", "CabinetWithdraw"];
 
+    private static volatile Dictionary<uint, uint>? slotByItemId;
+
     public static DresserRead ReadDresser(HashSet<uint> into)
     {
         var speaksForWholeDresser = false;
@@ -189,23 +191,40 @@ internal static unsafe class OwnershipGameReader
     /// <see cref="MirageManager.IsSetSlotUnlocked"/> wants a Prism Box slot index rather than a set
     /// row id, so this finds the dresser slot holding the outfit first.
     /// </summary>
+    /// <remarks>
+    /// Asked once per slot per set while the outfit list is built, which used to mean a walk of all
+    /// 800 dresser slots each time, so the slot of every stored item is mapped once and kept until
+    /// <see cref="ForgetSlotMap"/>.
+    /// </remarks>
     public static bool IsSetSlotUnlocked(uint setRowId, int slotIndex)
     {
         var mirage = MirageManager.Instance();
         if (mirage == null || !mirage->PrismBoxLoaded)
             return false;
 
-        var baseId = ItemIdHelper.GlamourBaseId(setRowId);
+        var slots = slotByItemId ?? BuildSlotMap(mirage);
+        return slots.TryGetValue(ItemIdHelper.GlamourBaseId(setRowId), out var slot)
+               && mirage->IsSetSlotUnlocked(slot, slotIndex);
+    }
+
+    /// <summary>Drops the slot map, which only moves when something enters or leaves the dresser.</summary>
+    public static void ForgetSlotMap() => slotByItemId = null;
+
+    private static Dictionary<uint, uint> BuildSlotMap(MirageManager* mirage)
+    {
+        var map = new Dictionary<uint, uint>();
         var ids = mirage->PrismBoxItemIds;
         for (var i = 0; i < ids.Length; i++)
         {
-            if (ItemIdHelper.GlamourBaseId(ids[i]) != baseId)
-                continue;
-
-            return mirage->IsSetSlotUnlocked((uint)i, slotIndex);
+            var baseId = ItemIdHelper.GlamourBaseId(ids[i]);
+            if (baseId != 0)
+                map.TryAdd(baseId, (uint)i);
         }
 
-        return false;
+        // Published in one assignment: readers on the UI thread take the old map or the new one,
+        // never a half-built one.
+        slotByItemId = map;
+        return map;
     }
 
     /// <summary>

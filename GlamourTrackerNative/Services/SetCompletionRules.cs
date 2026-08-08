@@ -1,4 +1,5 @@
 using Dalamud.Plugin.Services;
+using Lumina.Excel;
 using Lumina.Excel.Sheets;
 
 namespace GlamourTracker.Services;
@@ -18,6 +19,7 @@ internal sealed class SetCompletionRules
     private readonly IDataManager dataManager;
     private readonly Dictionary<uint, bool> isGlamourPiece = [];
 
+    private ExcelSheet<Item>? itemSheet;
     private HashSet<uint>? allSetRowIds;
     private Dictionary<uint, SetPiece[]>? glamourPiecesBySet;
     private Dictionary<uint, uint[]>? setsByPieceItemId;
@@ -42,8 +44,8 @@ internal sealed class SetCompletionRules
         if (this.isGlamourPiece.TryGetValue(itemId, out var known))
             return known;
 
-        var sheet = this.dataManager.GetExcelSheet<Item>();
-        var result = sheet.TryGetRow(itemId, out var item) && GlamourOwnershipIndex.IsGlamourGear(item);
+        this.itemSheet ??= this.dataManager.GetExcelSheet<Item>();
+        var result = this.itemSheet.TryGetRow(itemId, out var item) && GlamourOwnershipIndex.IsGlamourGear(item);
         this.isGlamourPiece[itemId] = result;
         return result;
     }

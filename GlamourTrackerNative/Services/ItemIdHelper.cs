@@ -23,6 +23,4 @@ internal static class ItemIdHelper
         if (baseId != itemId)
             yield return baseId + ItemModifierMod;
     }
-
-    public static uint Normalize(uint itemId) => GlamourBaseId(itemId);
 }

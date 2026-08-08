@@ -556,4 +556,14 @@
 - Files changed: GlamourCandidatePool.cs, GlamourCandidate.cs, GlamourPlateRandomizer.cs, csproj
 - Outcome: Debug + Release build clean, both stamped 0.1.126
 - Verified in game 18:56: pool 1230 before filters / 1224 after, seven runs, every slot applied on the first pass with no retry lines. So the game does accept an outfit piece addressed by the outfit's Prism Box slot plus the piece item id, which had only been inferred from the struct layout.
-- Known and accepted: repeat full randomizes report "no pool 1" for the off-hand. Only one shield is stored, and a full run excludes each slot's current item so it cannot be re-picked. Targeted rerolls exempt their own slot and work.
+- Known and accepted: repeat full randomizes report "no pool 1" for the off-hand. Only one shield is stored, and a full run excludes each slot's current item so it cannot be re-picked. Targeted rerolls exempt their own slot and work. Confirmed by the user.
+
+[2026-08-08] Phase 3 — outfit set catalog and shared domain helpers (0.1.127)
+- OutfitSetCatalog split in two: OutfitSetTemplate holds what an outfit is made of (name, pieces, glamour/armoire eligibility) and is read from the sheets once, while an invalidate now only redoes the storage answers. Before this, every invalidate rescanned and re-sorted the whole MirageStoreSetItem sheet.
+- SetDresserState (None/Partial/Complete) is the one answer for "how much of this outfit is in the dresser". InDresser derives from it, so the Overview and the tab can no longer disagree the way they did in 0.1.118.
+- Overview totals are tallied in that same pass and cached. They were being recomputed with per-set LINQ every frame, because BuildOverviewSignature asks for them on each OnUpdate.
+- OwnershipGameReader now maps item id -> Prism Box slot once instead of walking all 800 slots per IsSetSlotUnlocked call. That call sits under the per-piece storage lookup, so building the outfit list was doing it thousands of times. Dropped at the start of each refresh; the map is published by a single reference assignment, so a UI-thread reader gets either the old map or the new one (same rule that fixed the 0.1.123 crash).
+- Tidying: ItemIdHelper.Normalize (identical to GlamourBaseId) gone; unused GlamourPlateCatalog gone with its two record types moved into GlamourPlateStore; OutfitSetSlots + GlamourPlateSlotMap merged into GearSlotMaps.cs with a note on why sets have 11 slots and plates have 12; SetCompletionRules holds the Item sheet instead of fetching it per miss.
+- Files changed: OutfitSetCatalog.cs, OwnershipGameReader.cs, GlamourOwnershipIndex.cs, SetCompletionRules.cs, CabinetCatalog.cs, ItemIdHelper.cs, GlamourPlateStore.cs, GearSlotMaps.cs (new), GlamourPlateCatalog.cs + OutfitSetSlots.cs + GlamourPlateSlotMap.cs (deleted), csproj
+- Outcome: Debug + Release build clean, both stamped 0.1.127
+- Next: verify in game — Overview set counts unchanged, Outfit sets tab storage filter still lists dresser sets, set detail still right, and the numbers survive a reboot before opening the dresser

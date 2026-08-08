@@ -44,9 +44,15 @@ internal sealed class OwnershipSnapshot
     }
 
     /// <summary>
-    /// Everything the dresser can hand back: its item list plus the pieces held inside stored outfits.
-    /// The game reports those separately, but to anyone reading a total they are the same thing.
+    /// Distinct appearances the dresser can hand back: its item list plus the pieces held inside
+    /// stored outfits. The game reports those separately, but to anyone reading a total they are the
+    /// same thing.
     /// </summary>
+    /// <remarks>
+    /// The outfits themselves are not appearances and are left out. An outfit occupies a row in the
+    /// item list the way a folder occupies a row, and counting it alongside the pieces it contains
+    /// inflated the total by one per stored outfit.
+    /// </remarks>
     public int DresserTotalCount
     {
         get
@@ -56,10 +62,16 @@ internal sealed class OwnershipSnapshot
                 if (this.totalCountVersion == this.version)
                     return this.totalCount;
 
-                var total = this.dresserItems.Count;
+                var total = 0;
+                foreach (var id in this.dresserItems)
+                {
+                    if (!this.setsInDresser.Contains(id))
+                        total++;
+                }
+
                 foreach (var id in this.dresserOutfitPieces)
                 {
-                    if (!this.dresserItems.Contains(id))
+                    if (!this.dresserItems.Contains(id) && !this.setsInDresser.Contains(id))
                         total++;
                 }
 

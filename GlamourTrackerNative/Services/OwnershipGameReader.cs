@@ -33,10 +33,15 @@ internal readonly record struct DresserRead(
 /// <param name="Evaluated">Outfits the box listed, and so the only ones this scan may speak for.</param>
 /// <param name="Complete">Of those, the ones with every slot filled.</param>
 /// <param name="UnlockedPieces">Item ids held inside those outfits, whole or partial.</param>
+/// <param name="UnlockedSlotCount">
+/// Filled slots across all of them, counting an appearance once per outfit that holds it. Higher
+/// than <paramref name="UnlockedPieces"/> when outfits share a piece.
+/// </param>
 internal readonly record struct StoredOutfitScan(
     HashSet<uint> Evaluated,
     HashSet<uint> Complete,
     HashSet<uint> UnlockedPieces,
+    int UnlockedSlotCount,
     int PrismBoxLength);
 
 /// <summary>
@@ -252,7 +257,7 @@ internal static unsafe class OwnershipGameReader
         HashSet<uint> knownSetRowIds,
         out StoredOutfitScan scan)
     {
-        scan = new StoredOutfitScan([], [], [], 0);
+        scan = new StoredOutfitScan([], [], [], 0, 0);
 
         var mirage = MirageManager.Instance();
         if (mirage == null || !mirage->PrismBoxLoaded)
@@ -261,6 +266,7 @@ internal static unsafe class OwnershipGameReader
         var evaluated = new HashSet<uint>();
         var complete = new HashSet<uint>();
         var pieces = new HashSet<uint>();
+        var filledSlots = 0;
 
         var ids = mirage->PrismBoxItemIds;
         for (var i = 0; i < ids.Length; i++)
@@ -286,6 +292,7 @@ internal static unsafe class OwnershipGameReader
                     continue;
 
                 unlocked++;
+                filledSlots++;
                 pieces.Add(ItemIdHelper.GlamourBaseId(itemId));
             }
 
@@ -293,7 +300,7 @@ internal static unsafe class OwnershipGameReader
                 complete.Add(setRowId);
         }
 
-        scan = new StoredOutfitScan(evaluated, complete, pieces, ids.Length);
+        scan = new StoredOutfitScan(evaluated, complete, pieces, filledSlots, ids.Length);
         return true;
     }
 

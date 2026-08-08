@@ -68,7 +68,10 @@ internal sealed class GlamourOwnershipIndex
     /// <summary>Moves whenever stored ownership changes, so views can tell if a rebuild is needed.</summary>
     public int Revision => this.snapshot.Version;
 
-    /// <summary>Distinct appearances in the dresser, counting the pieces inside stored outfits.</summary>
+    /// <summary>
+    /// Distinct appearances in the dresser: loose items plus the pieces inside stored outfits, and
+    /// not the outfits themselves, which are containers rather than things you can wear.
+    /// </summary>
     public int DresserUniqueCount => this.snapshot.DresserTotalCount;
     public int DresserSlotsUsed => this.snapshot.DresserSlotsUsed;
     public int ArmoireCount => this.snapshot.ArmoireItemCount;
@@ -424,10 +427,24 @@ internal sealed class GlamourOwnershipIndex
             PluginFileLog.Info(
                 "ownership.mirage-sets",
                 $"Stored outfits: {scan.Evaluated.Count} scanned, {completes.Count} complete (was {before}), " +
-                $"{this.snapshot.DresserOutfitPieceCount} pieces held inside them");
+                $"{this.snapshot.DresserOutfitPieceCount} distinct pieces held inside them " +
+                $"across {scan.UnlockedSlotCount} filled slots");
+
+            PluginFileLog.Info(
+                "ownership.complete-sets",
+                $"Complete in dresser ({completes.Count}): {string.Join(", ", DescribeSets(completes))}");
         }
 
         return changed;
+    }
+
+    /// <summary>Set names for the log, so a count can be checked against the outfits behind it.</summary>
+    private IEnumerable<string> DescribeSets(IEnumerable<uint> setRowIds)
+    {
+        var itemSheet = this.dataManager.GetExcelSheet<Item>();
+        return setRowIds
+            .Select(id => itemSheet.TryGetRow(id, out var item) ? item.Name.ExtractText() : $"#{id}")
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase);
     }
 
     private bool TryHydrateCompleteSetsFromConfig(ulong contentId)

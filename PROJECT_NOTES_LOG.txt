@@ -585,3 +585,12 @@
 - No behaviour change in this build. The flip and its config write continue until the cause is known.
 - Files changed: OwnershipGameReader.cs, GlamourOwnershipIndex.cs, csproj
 - Outcome: Debug + Release build clean, both stamped 0.1.129
+
+[2026-08-08] Outfits were counted as items in the dresser total (0.1.130)
+- User counted by hand and did not believe 1494. They were right: 1494 = 264 outfits + 300 loose items + 930 pieces inside outfits. An outfit is a container, not an appearance, so counting it next to the pieces it holds added one per stored outfit.
+- Fix: DresserTotalCount skips ids that are on the set-presence list. Expect 1230 = 300 + 930. The dresser slot row (564 / 800) already shows the container count, so nothing is lost from the Overview.
+- Their other two numbers are not settled yet, so 0.1.130 measures instead of assuming:
+  - They counted 976 pieces inside outfits against our 930. Likely the same appearance in more than one outfit, since ours is a set of distinct ids. ownership.mirage-sets now logs distinct pieces and filled slots side by side; if it reads "930 distinct across 976 filled slots" the difference is shared pieces and our number is the right one for a line labelled "unique".
+  - They counted 70 complete outfits against our 71. Ours comes straight from the game's per-slot unlock flags with all 264 outfits scanned, so a fallback rule is not involved. ownership.complete-sets now logs the names, alphabetically, so the extra one can be identified by eye rather than argued about.
+- Files changed: OwnershipSnapshot.cs, OwnershipGameReader.cs, GlamourOwnershipIndex.cs, csproj
+- Outcome: Debug + Release build clean, both stamped 0.1.130

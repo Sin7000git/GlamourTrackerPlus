@@ -618,23 +618,13 @@ internal sealed class TrackerNativeAddon : NativeAddon
 
         list.AddNode(new HorizontalLineNode { Size = new Vector2(width, 2f) });
 
-        // —— Actions ——
+        // Ownership resyncs when the dresser or armoire is opened — no manual refresh control.
         var buttons = new HorizontalListNode
         {
             Size = new Vector2(width, RowH),
             ItemSpacing = 8f,
             X = TrackerNativeHelpers.Indent,
         };
-        buttons.AddNode(new TextButtonNode
-        {
-            Size = new Vector2(120f, RowH),
-            String = "Refresh now",
-            OnClick = () =>
-            {
-                plugin.RefreshAll(true);
-                ScheduleRebuildForm();
-            },
-        });
         buttons.AddNode(new TextButtonNode
         {
             Size = new Vector2(140f, RowH),

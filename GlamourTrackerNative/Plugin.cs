@@ -277,7 +277,7 @@ public sealed class Plugin : IDalamudPlugin
 
         fashionReport.RebindOwnership();
 
-        // Dresser UI events / Refresh now update ownership without going through OnShow —
+        // Dresser/armoire UI events update ownership without going through OnShow —
         // Overview must rebuild or it stays stuck on stale 0/N after Clear + resync.
         trackerNativeAddon?.RequestFormRebuild();
     }

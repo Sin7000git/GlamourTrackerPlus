@@ -645,3 +645,9 @@
 - Fix: Overview SetsInDresser / CompletedInDresser tally only rows on the set-presence list (IsOutfitSetInDresser). Tab InDresser still allows own loose pieces or this outfit's Mirage slot unlocks, but no longer treats "piece exists inside somebody else's outfit" as presence.
 - Files changed: OutfitSetCatalog.cs, GlamourOwnershipIndex.cs, csproj
 - Outcome: Debug + Release build clean, both stamped 0.1.136
+- Outcome: user confirms Overview numbers look right
+
+[2026-08-08] Remove Overview "Refresh now" (0.1.137)
+- A forced refresh without opening the dresser only re-reads whatever the game already has cached, so the button looked like a sync control when the real sync is opening the dresser/armoire. Removed from native Overview and the ImGui window; Clear saved data stays. /glamplus refresh and dresser UI hooks are unchanged for now.
+- Files changed: TrackerNativeAddon.cs, TrackerWindow.cs, csproj
+- Outcome: Debug + Release build clean, both stamped 0.1.137

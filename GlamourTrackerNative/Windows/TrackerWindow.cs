@@ -108,10 +108,6 @@ internal sealed class TrackerWindow : Window
         ImGui.Text($"Armoire pieces: {index.ArmoireCount}");
         ImGui.TextDisabled($"Last refresh: {index.LastRefresh.ToLocalTime():T}");
 
-        if (ImGui.Button("Refresh now"))
-            this.plugin.RefreshAll(true);
-
-        ImGui.SameLine();
         if (ImGui.Button("Clear saved data"))
             this.plugin.ClearSavedOwnership();
     }

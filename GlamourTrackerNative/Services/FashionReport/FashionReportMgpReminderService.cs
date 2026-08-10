@@ -46,6 +46,7 @@ internal sealed unsafe class FashionReportMgpReminderService : IDisposable
     private VipAssistPhase vipPhase = VipAssistPhase.Idle;
     private int vipTicksLeft;
     private int vipCardCountBefore;
+    private int vipUiGoneTicks;
     private int vipFreeStableTicks;
     private int vipRetalkCooldown;
     private bool vipUseSent;
@@ -274,18 +275,20 @@ internal sealed unsafe class FashionReportMgpReminderService : IDisposable
         pendingOptionIndex = -1;
         promptOpen = false;
         vipCardCountBefore = mgpBuff.GetVipCardCount();
+        vipUiGoneTicks = 0;
         vipFreeStableTicks = 0;
         vipRetalkCooldown = 0;
         vipUseSent = false;
         vipSecondUseAttempted = false;
         vipConfirmed = false;
-        vipTicksLeft = 240;
+        vipTicksLeft = 180;
         vipPhase = VipAssistPhase.WaitClear;
         PluginFileLog.Info("fashion.mgp", $"Closing Masked Rose to use VIP Card (have={vipCardCountBefore})");
         _ = framework.RunOnFrameworkThread(() =>
         {
             DismissMaskedRoseDialogue();
-            _ = framework.RunOnTick(TickVipAssist, delayTicks: 15);
+            // Start polling immediately — use fires ~0.5s after Talk/SelectString disappear.
+            _ = framework.RunOnTick(TickVipAssist, delayTicks: 2);
         });
     }
 
@@ -299,16 +302,17 @@ internal sealed unsafe class FashionReportMgpReminderService : IDisposable
             switch (vipPhase)
             {
                 case VipAssistPhase.WaitClear:
-                    if (IsPlayerFreeForItemUse())
-                        vipFreeStableTicks++;
+                    // Don't wait on Occupied* flags here — that added multi-second lag.
+                    // Fire ~0.5s after the dialogue UI is gone.
+                    if (!IsDialogueAddonVisible("SelectString") && !IsDialogueAddonVisible("Talk"))
+                        vipUiGoneTicks++;
                     else
-                        vipFreeStableTicks = 0;
+                        vipUiGoneTicks = 0;
 
-                    // ~1s fully free before touching inventory.
-                    if (vipFreeStableTicks >= 60)
+                    if (vipUiGoneTicks >= 30) // ~0.5s at 60fps
                     {
                         vipPhase = VipAssistPhase.SendUse;
-                        PluginFileLog.Info("fashion.mgp", "Dialogue clear; sending VIP Card use once");
+                        PluginFileLog.Info("fashion.mgp", "Dialogue UI closed; sending VIP Card use");
                     }
                     else if (--vipTicksLeft <= 0)
                     {
@@ -319,23 +323,23 @@ internal sealed unsafe class FashionReportMgpReminderService : IDisposable
                     break;
 
                 case VipAssistPhase.SendUse:
-                    if (!IsPlayerFreeForItemUse())
-                    {
-                        vipFreeStableTicks = 0;
-                        vipPhase = VipAssistPhase.WaitClear;
-                        vipTicksLeft = 180;
-                        break;
-                    }
-
                     if (!mgpBuff.TrySendVipCardUse(out var sendDetail, printErrors: false))
                     {
+                        // First attempt can fail if Leave. hasn't fully released the event yet.
+                        if (!vipSecondUseAttempted && --vipTicksLeft > 0)
+                        {
+                            vipSecondUseAttempted = true;
+                            PluginFileLog.Info("fashion.mgp", $"VIP Card send deferred ({sendDetail}); retry next ticks");
+                            break;
+                        }
+
                         FailVipAssist($"could not use VIP Card ({sendDetail})");
                         return;
                     }
 
                     vipUseSent = true;
                     vipPhase = VipAssistPhase.WaitConfirm;
-                    vipTicksLeft = 360; // ~6s for the item to resolve
+                    vipTicksLeft = 240; // ~4s to see count/buff
                     chatGui.Print("[Glamour Tracker+] Using Gold Saucer VIP Card…");
                     break;
 
@@ -348,14 +352,14 @@ internal sealed unsafe class FashionReportMgpReminderService : IDisposable
                             $"VIP Card confirmed; remaining={mgpBuff.GetVipCardCount()} buff={mgpBuff.HasActiveFashionMgpBonus()}");
                         vipPhase = VipAssistPhase.WaitIdleAfterUse;
                         vipFreeStableTicks = 0;
-                        vipTicksLeft = 180;
+                        vipTicksLeft = 120;
                         break;
                     }
 
-                    // One delayed second chance only — never spam.
+                    // One retry only, once the player is clearly free (not a spam loop).
                     if (!vipSecondUseAttempted
                         && vipUseSent
-                        && vipTicksLeft is > 0 and < 180
+                        && vipTicksLeft < 180
                         && IsPlayerFreeForItemUse()
                         && mgpBuff.GetView().CanUse)
                     {
@@ -374,26 +378,18 @@ internal sealed unsafe class FashionReportMgpReminderService : IDisposable
                     break;
 
                 case VipAssistPhase.WaitIdleAfterUse:
-                    // Don't poke the NPC mid item-use animation.
+                    // Short settle after the card applies before poking the NPC.
                     if (IsPlayerFreeForItemUse())
                         vipFreeStableTicks++;
                     else
                         vipFreeStableTicks = 0;
 
-                    if (vipFreeStableTicks >= 45)
+                    if (vipFreeStableTicks >= 20 || --vipTicksLeft <= 0)
                     {
                         vipPhase = VipAssistPhase.Retalk;
                         vipTicksLeft = 180;
                         vipRetalkCooldown = 0;
                         PluginFileLog.Info("fashion.mgp", "Re-talking to Masked Rose");
-                    }
-                    else if (--vipTicksLeft <= 0)
-                    {
-                        // Still try — player may be idle even if a condition flag lingers.
-                        vipPhase = VipAssistPhase.Retalk;
-                        vipTicksLeft = 180;
-                        vipRetalkCooldown = 0;
-                        PluginFileLog.Info("fashion.mgp", "Re-talking to Masked Rose (idle wait timed out)");
                     }
 
                     break;

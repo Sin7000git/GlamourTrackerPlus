@@ -44,37 +44,37 @@ internal sealed class FashionInventorySnapshot
 /// <summary>Scans character bags, armoury chest, and saddlebags (framework thread).</summary>
 internal sealed class FashionInventoryIndex
 {
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(2);
+
     private static readonly GameInventoryType[] ExcludedTypes =
     [
         GameInventoryType.Cosmopouch1,
         GameInventoryType.Cosmopouch2,
     ];
 
+    private static readonly GameInventoryType[] ScanTypes = BuildScanTypes();
+
     private readonly IGameInventory gameInventory;
+    private FashionInventorySnapshot? cached;
+    private DateTime cachedAtUtc = DateTime.MinValue;
 
     public FashionInventoryIndex(IGameInventory gameInventory)
     {
         this.gameInventory = gameInventory;
     }
 
-    public FashionInventorySnapshot Scan()
+    public FashionInventorySnapshot Scan(bool force = false)
     {
+        if (!force
+            && this.cached != null
+            && DateTime.UtcNow - this.cachedAtUtc < CacheTtl)
+            return this.cached;
+
         var counts = new Dictionary<uint, long>();
         var locations = new Dictionary<uint, FashionGearLocation>();
 
-        foreach (GameInventoryType type in Enum.GetValues<GameInventoryType>())
+        foreach (var type in ScanTypes)
         {
-            if (ExcludedTypes.Contains(type))
-                continue;
-
-            var name = type.ToString();
-            if (!ShouldScan(name))
-                continue;
-
-            var bucket = Classify(name);
-            if (bucket == FashionGearLocation.None)
-                continue;
-
             ReadOnlySpan<GameInventoryItem> items;
             try
             {
@@ -86,6 +86,10 @@ internal sealed class FashionInventoryIndex
             }
 
             if (items.IsEmpty)
+                continue;
+
+            var bucket = Classify(type.ToString());
+            if (bucket == FashionGearLocation.None)
                 continue;
 
             foreach (ref readonly var item in items)
@@ -105,12 +109,35 @@ internal sealed class FashionInventoryIndex
             }
         }
 
-        return new FashionInventorySnapshot
+        var snapshot = new FashionInventorySnapshot
         {
             CountsByItemId = counts,
             LocationsByItemId = locations,
             ScannedAtUtc = DateTime.UtcNow,
         };
+        this.cached = snapshot;
+        this.cachedAtUtc = snapshot.ScannedAtUtc;
+        return snapshot;
+    }
+
+    private static GameInventoryType[] BuildScanTypes()
+    {
+        var list = new List<GameInventoryType>();
+        foreach (GameInventoryType type in Enum.GetValues<GameInventoryType>())
+        {
+            if (ExcludedTypes.Contains(type))
+                continue;
+
+            var name = type.ToString();
+            if (!ShouldScan(name))
+                continue;
+            if (Classify(name) == FashionGearLocation.None)
+                continue;
+
+            list.Add(type);
+        }
+
+        return list.ToArray();
     }
 
     private static bool ShouldScan(string name)

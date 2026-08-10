@@ -58,6 +58,8 @@ internal sealed partial class FashionReportNativeAddon : NativeAddon
     private bool lastVipEnabled = true;
     private byte lastStatusFontSize;
     private FashionResolvedItem? selectedItem;
+    private DateTime nextChromeRefreshUtc = DateTime.MinValue;
+    private bool lastChromeRefreshing;
 
     public FashionReportNativeAddon(Plugin plugin)
     {
@@ -244,7 +246,17 @@ internal sealed partial class FashionReportNativeAddon : NativeAddon
     protected override unsafe void OnUpdate(AtkUnitBase* addon)
     {
         base.OnUpdate(addon);
-        RefreshChrome();
+
+        // Progress + MGP buff scan inventory/status — throttle unless refresh state flips.
+        var refreshing = plugin.FashionReport.IsRefreshing;
+        var now = DateTime.UtcNow;
+        if (refreshing != lastChromeRefreshing || now >= nextChromeRefreshUtc)
+        {
+            lastChromeRefreshing = refreshing;
+            nextChromeRefreshUtc = now.AddSeconds(1);
+            RefreshChrome();
+        }
+
         RebuildTabsIfNeeded();
         RefreshList(force: false);
     }

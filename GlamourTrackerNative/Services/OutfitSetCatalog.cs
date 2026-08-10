@@ -21,6 +21,7 @@ internal sealed class OutfitSetCatalog
     private List<OutfitSetTemplate>? templates;
     private List<OutfitSetInfo>? sets;
     private OutfitSetOverviewStats overview;
+    private int catalogEpoch;
 
     public OutfitSetCatalog(
         IDataManager dataManager,
@@ -39,7 +40,14 @@ internal sealed class OutfitSetCatalog
     }
 
     /// <summary>Drops the storage answers. The set metadata behind them is kept.</summary>
-    public void Invalidate() => this.sets = null;
+    public void Invalidate()
+    {
+        this.sets = null;
+        this.catalogEpoch++;
+    }
+
+    /// <summary>Bumps whenever storage answers are dropped — cheap dirty check for UI rebuilds.</summary>
+    public int CatalogEpoch => this.catalogEpoch;
 
     /// <summary>Outfit-set totals for the Overview tab, tallied while the sets were built.</summary>
     public OutfitSetOverviewStats GetOverviewStats()

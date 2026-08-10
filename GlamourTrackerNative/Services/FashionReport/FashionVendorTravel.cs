@@ -18,6 +18,8 @@ internal sealed partial class FashionVendorTravel
 {
     private static readonly Regex CoordRegex = CoordPattern();
 
+    private List<(string PlaceName, uint TerritoryId, uint MapId)>? territoryPlaceIndex;
+
     /// <summary>Places that have no public aetheryte — send the player to the access hub instead.</summary>
     private static readonly (string Needle, string TeleportName)[] SpecialDestinations =
     [
@@ -365,11 +367,46 @@ internal sealed partial class FashionVendorTravel
         resolvedY = mapY;
         placeLabel = place;
 
-        var sheet = dataManager.GetExcelSheet<TerritoryType>();
-        TerritoryType? best = null;
+        EnsureTerritoryPlaceIndex();
+        string? bestName = null;
         var bestScore = -1;
+        uint bestTerritoryId = 0;
+        uint bestMapId = 0;
 
-        foreach (var territory in sheet)
+        foreach (var entry in territoryPlaceIndex!)
+        {
+            var score = PlaceMatchScore(place, entry.PlaceName);
+            if (score <= bestScore)
+                continue;
+
+            bestScore = score;
+            bestName = entry.PlaceName;
+            bestTerritoryId = entry.TerritoryId;
+            bestMapId = entry.MapId;
+        }
+
+        if (bestName is null || bestScore < 0)
+            return false;
+
+        territoryId = bestTerritoryId;
+        mapId = bestMapId;
+        placeLabel = bestName;
+        if (resolvedX <= 0 || resolvedY <= 0)
+        {
+            resolvedX = 11f;
+            resolvedY = 11f;
+        }
+
+        return mapId != 0;
+    }
+
+    private void EnsureTerritoryPlaceIndex()
+    {
+        if (territoryPlaceIndex != null)
+            return;
+
+        var list = new List<(string PlaceName, uint TerritoryId, uint MapId)>();
+        foreach (var territory in dataManager.GetExcelSheet<TerritoryType>())
         {
             if (territory.RowId == 0)
                 continue;
@@ -378,27 +415,11 @@ internal sealed partial class FashionVendorTravel
             if (string.IsNullOrWhiteSpace(name))
                 continue;
 
-            var score = PlaceMatchScore(place, name);
-            if (score <= bestScore)
-                continue;
-
-            bestScore = score;
-            best = territory;
+            list.Add((name, territory.RowId, territory.Map.RowId));
         }
 
-        if (best is null || bestScore < 0)
-            return false;
-
-        territoryId = best.Value.RowId;
-        mapId = best.Value.Map.RowId;
-        placeLabel = best.Value.PlaceName.Value.Name.ExtractText();
-        if (resolvedX <= 0 || resolvedY <= 0)
-        {
-            resolvedX = 11f;
-            resolvedY = 11f;
-        }
-
-        return mapId != 0;
+        territoryPlaceIndex = list;
+        PluginFileLog.Info("fashion.travel", $"territory place index built ({list.Count} entries)");
     }
 
     private static string ExtractLocation(string vendorOrLocation)

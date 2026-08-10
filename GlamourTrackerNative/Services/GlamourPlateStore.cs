@@ -24,9 +24,37 @@ internal static unsafe class GlamourPlateStore
             config.CharacterCaches[contentId] = cache;
         }
 
+        if (PlatesEqual(cache.GlamourPlates, plates))
+            return;
+
         cache.GlamourPlates = plates;
         cache.LastSavedUtc = DateTime.UtcNow;
         config.Save();
+    }
+
+    private static bool PlatesEqual(List<StoredGlamourPlate> a, List<StoredGlamourPlate> b)
+    {
+        if (ReferenceEquals(a, b))
+            return true;
+        if (a.Count != b.Count)
+            return false;
+
+        for (var i = 0; i < a.Count; i++)
+        {
+            var left = a[i];
+            var right = b[i];
+            if (left.PlateIndex != right.PlateIndex || left.Pieces.Count != right.Pieces.Count)
+                return false;
+
+            for (var p = 0; p < left.Pieces.Count; p++)
+            {
+                if (left.Pieces[p].Slot != right.Pieces[p].Slot
+                    || left.Pieces[p].ItemId != right.Pieces[p].ItemId)
+                    return false;
+            }
+        }
+
+        return true;
     }
 
     public static IReadOnlyList<GlamourPlateInfo> GetPlates(

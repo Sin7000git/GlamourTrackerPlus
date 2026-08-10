@@ -26,27 +26,27 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer
             return 0;
         }
 
-        this.iconCache.EnsureBakedTexturePath();
-
         var config = this.getConfiguration();
         var list = addon->ExpertDeliveryList;
-        var dresserSlice = this.iconCache.GetResolvedDresserSlice();
-        var armoireSlice = this.iconCache.GetResolvedArmoireSlice();
         var supplyAddress = (nint)supplyUnit;
-        var atlasSig = AtlasSignature(config, dresserSlice, armoireSlice);
         var uiScale = Math.Max(supplyUnit->Scale, 0.01f);
         var ownershipRevision = this.ownershipIndex.Revision;
 
-        var needsRebuild = list->ScrollOffset != this.lastScrollOffset
+        // Cheap dirty check first — atlas slice resolution is relatively expensive.
+        var cheapDirty = list->ScrollOffset != this.lastScrollOffset
             || list->FirstVisibleItemIndex != this.lastFirstVisible
             || list->ListLength != this.lastListLength
             || supplyAddress != this.lastSupplyAddonAddress
-            || atlasSig != this.lastAtlasSignature
             || ownershipRevision != this.lastOwnershipRevision
             || Math.Abs(uiScale - this.lastAddonScale) > 0.001f
             || this.markerNodes.Count == 0;
 
-        if (!needsRebuild)
+        this.iconCache.EnsureBakedTexturePath();
+        var dresserSlice = this.iconCache.GetResolvedDresserSlice();
+        var armoireSlice = this.iconCache.GetResolvedArmoireSlice();
+        var atlasSig = AtlasSignature(config, dresserSlice, armoireSlice);
+
+        if (!cheapDirty && atlasSig == this.lastAtlasSignature)
             return this.markerNodes.Count;
 
         // Rebuild on scroll / list / atlas / scale / ownership change — not while dragging with unchanged list.

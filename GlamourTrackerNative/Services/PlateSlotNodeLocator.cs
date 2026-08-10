@@ -14,8 +14,18 @@ internal static unsafe class PlateSlotNodeLocator
 {
     private static readonly int[] LeftColumnSlots = [0, 2, 3, 4, 5, 6]; // MH, Head, Body, Hands, Legs, Feet
     private static readonly int[] RightColumnSlots = [1, 7, 8, 9, 10, 11]; // OH, Ears, Neck, Wrists, RR, LR
+    private static readonly bool[] LeftColumnLookup = BuildLeftColumnLookup();
 
-    public static bool IsLeftColumnSlot(int slot) => LeftColumnSlots.Contains(slot);
+    public static bool IsLeftColumnSlot(int slot) =>
+        (uint)slot < LeftColumnLookup.Length && LeftColumnLookup[slot];
+
+    private static bool[] BuildLeftColumnLookup()
+    {
+        var lookup = new bool[GlamourPlateSlotMap.SlotCount];
+        foreach (var slot in LeftColumnSlots)
+            lookup[slot] = true;
+        return lookup;
+    }
 
     public static void ClearCache()
     {

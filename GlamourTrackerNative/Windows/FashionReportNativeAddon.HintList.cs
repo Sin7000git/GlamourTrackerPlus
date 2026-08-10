@@ -1,6 +1,5 @@
 using GlamourTracker.Services.FashionReport;
 using GlamourTracker.Windows.Native;
-using Lumina.Excel.Sheets;
 
 namespace GlamourTracker.Windows;
 
@@ -184,25 +183,7 @@ internal sealed partial class FashionReportNativeAddon
         if (dyeIconCache.TryGetValue(dyeName, out var cached))
             return cached;
 
-        var sheet = Plugin.DataManager.GetExcelSheet<Item>();
-        var withDyeSuffix = dyeName.EndsWith(" Dye", StringComparison.OrdinalIgnoreCase)
-            ? dyeName
-            : dyeName + " Dye";
-
-        ushort icon = 0;
-        foreach (var item in sheet)
-        {
-            if (item.RowId == 0)
-                continue;
-            var name = item.Name.ExtractText();
-            if (string.Equals(name, dyeName, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(name, withDyeSuffix, StringComparison.OrdinalIgnoreCase))
-            {
-                icon = item.Icon;
-                break;
-            }
-        }
-
+        var icon = DyeIconIndex.Resolve(Plugin.DataManager, dyeName);
         dyeIconCache[dyeName] = icon;
         return icon;
     }

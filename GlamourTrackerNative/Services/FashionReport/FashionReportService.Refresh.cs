@@ -60,7 +60,7 @@ internal sealed partial class FashionReportService
         {
             EnsureItemNameIndex();
             var (playerContext, inventory) = await framework
-                .RunOnFrameworkThread(() => (vendorLocator.CapturePlayerContext(), inventoryIndex.Scan()))
+                .RunOnFrameworkThread(() => (vendorLocator.CapturePlayerContext(), inventoryIndex.Scan(force: true)))
                 .ConfigureAwait(false);
 
             var state = await client.GetReportStateAsync(ct).ConfigureAwait(false);

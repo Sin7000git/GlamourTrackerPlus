@@ -659,4 +659,12 @@
 [2026-08-10] Phase 4 — split giant UI / service files (0.1.138)
 - Mechanical partial-class splits only. TrackerNativeAddon (+ NodeFactory), FashionReportNativeAddon (+ NodeFactory), GcExpertDeliveryEnhancer (5 partials; unused cabinetCatalog removed from ctor/Plugin), FashionReportService (6 partials).
 - MakeStatLine deleted (unused). Debug + Release build clean aside from the two existing RowTemplateNodeCount obsolete warnings (Phase 7).
-- Next: smoke-test in game — Overview, Outfit sets, Fashion Report window, GC delivery markers.
+- Outcome: worked (user confirmed nothing broke in game)
+- Next: Phase 5 hot-path work
+
+[2026-08-10] Phase 5 — stop doing work every frame (0.1.139)
+- Attempt: gate Overview/browser rebuilds; cache outfit rows; scratch SplitPieces; throttle FR chrome; GC Tick + cheap dirty; one plate overlay window; indexes (dye/territory/duty); inventory TTL; plate compare-before-save; config save debounce; drop duplicate RebindOwnership
+- Files changed: TrackerNativeAddon (+ Overview/OutfitBrowser/AcquireLoading), TrackerNativeHelpers, OutfitSetCatalog, FashionReportNativeAddon (+ HintList), GcExpertDelivery*, PlateEditorOverlay, PlateSlotNodeLocator, FashionInventoryIndex, DyeIconIndex (new), OutfitDutyTravel, FashionVendorTravel, GlamourPlateStore, Plugin, csproj, plan/notes
+- Backup: .cursor/backups/2026-08-10_161119_pre-phase5
+- Outcome: Debug + Release build clean (same two RowTemplateNodeCount warnings). Pending in-game smoke-test.
+- Next: reload 0.1.139 — Overview idle, Outfit sets filters, Fashion Report VIP/chrome, GC markers, plate slot rerolls

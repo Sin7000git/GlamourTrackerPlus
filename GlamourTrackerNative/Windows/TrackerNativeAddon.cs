@@ -66,6 +66,15 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
     private string lastFormSignature = string.Empty;
     private string lastBrowserListSignature = string.Empty;
     private string lastBrowserDetailKey = string.Empty;
+    private List<TrackerNativeListRow>? cachedOutfitRows;
+    private string cachedOutfitRowsInputSig = string.Empty;
+    private int categoryCacheEpoch;
+    private readonly List<OutfitPieceInfo> splitStoredScratch = [];
+    private readonly List<OutfitPieceInfo> splitMissingScratch = [];
+    private int lastOverviewCatalogEpoch = int.MinValue;
+    private int lastOverviewOwnershipRevision = int.MinValue;
+    private string lastOverviewWeek = "\0";
+    private int lastOverviewProgressPacked = int.MinValue;
 
     private Vector2 bodyOrigin;
     private Vector2 bodySize;
@@ -216,6 +225,8 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
         lastFormSignature = string.Empty;
         lastBrowserListSignature = string.Empty;
         lastBrowserDetailKey = string.Empty;
+        cachedOutfitRows = null;
+        cachedOutfitRowsInputSig = string.Empty;
     }
 
     private void ApplyPendingTab()
@@ -322,6 +333,10 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
     private void RebuildForm(bool force)
     {
         if (formScroll == null)
+            return;
+
+        // Overview: skip string-building when ownership / catalog / Fashion Report inputs are unchanged.
+        if (!force && selectedTab == TabOverview && OverviewInputsUnchanged())
             return;
 
         var signature = BuildFormSignature();

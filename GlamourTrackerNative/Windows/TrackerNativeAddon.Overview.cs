@@ -10,6 +10,28 @@ namespace GlamourTracker.Windows;
 
 internal sealed partial class TrackerNativeAddon
 {
+    private bool OverviewInputsUnchanged()
+    {
+        var index = plugin.OwnershipIndex;
+        var progress = plugin.FashionProgress.GetProgress();
+        var week = plugin.FashionReport.Snapshot?.Week ?? string.Empty;
+        var packed = ((int)progress.Kind << 16) ^ progress.HighestScore;
+        var catalogEpoch = plugin.OutfitSets.CatalogEpoch;
+
+        if (lastFormSignature.Length > 0
+            && index.Revision == lastOverviewOwnershipRevision
+            && catalogEpoch == lastOverviewCatalogEpoch
+            && week == lastOverviewWeek
+            && packed == lastOverviewProgressPacked)
+            return true;
+
+        lastOverviewOwnershipRevision = index.Revision;
+        lastOverviewCatalogEpoch = catalogEpoch;
+        lastOverviewWeek = week;
+        lastOverviewProgressPacked = packed;
+        return false;
+    }
+
     private string BuildOverviewSignature(GlamourOwnershipIndex index)
     {
         var sets = plugin.OutfitSets.GetOverviewStats();
@@ -18,7 +40,7 @@ internal sealed partial class TrackerNativeAddon
 
         // Deliberately omit LastRefresh: background ownership ticks update that clock even when
         // every count is unchanged, and putting it here rebuilt the whole Overview every 30s.
-        return $"ov|{index.Revision}|{index.DresserSlotsUsed}|{index.DresserUniqueCount}|{index.ArmoireCount}|{index.HasPersistedData}|{sets.DresserEligible}|{sets.ArmoireEligible}|{sets.SetsInDresser}|{sets.SetsInArmoire}|{sets.CompletedInDresser}|{sets.CompletedInArmoire}|{week}|{(int)progress.Kind}|{progress.HighestScore}";
+        return $"ov|{index.Revision}|{plugin.OutfitSets.CatalogEpoch}|{index.DresserSlotsUsed}|{index.DresserUniqueCount}|{index.ArmoireCount}|{index.HasPersistedData}|{sets.DresserEligible}|{sets.ArmoireEligible}|{sets.SetsInDresser}|{sets.SetsInArmoire}|{sets.CompletedInDresser}|{sets.CompletedInArmoire}|{week}|{(int)progress.Kind}|{progress.HighestScore}";
     }
 
     private void BuildOverview(VerticalListNode list, float width)

@@ -66,6 +66,9 @@ internal sealed class PlateEditorOverlay
     private readonly Action refreshAll;
     private readonly IFramework framework;
     private bool wasPlateEditorVisible;
+    private bool? plateVisibleCached;
+    private bool? dresserVisibleCached;
+    private bool? armoireVisibleCached;
 
     public PlateEditorOverlay(
         IGameGui gameGui,
@@ -87,6 +90,11 @@ internal sealed class PlateEditorOverlay
 
     public void Draw()
     {
+        // Fresh visibility lookups once per draw — IsPlateEditorVisible used to hit GetAddonByName ×3.
+        this.plateVisibleCached = null;
+        this.dresserVisibleCached = null;
+        this.armoireVisibleCached = null;
+
         var config = this.getConfiguration();
         if (!config.Enabled)
             return;
@@ -206,8 +214,17 @@ internal sealed class PlateEditorOverlay
         var nudgeX = config.SlotRerollNudgeX * (plateH / 700f);
         var nudgeY = config.SlotRerollNudgeY * (plateH / 700f);
 
+        Span<Vector2> buttonPositions = stackalloc Vector2[GlamourPlateSlotMap.SlotCount];
+        Span<bool> buttonActive = stackalloc bool[GlamourPlateSlotMap.SlotCount];
+        var minX = float.MaxValue;
+        var minY = float.MaxValue;
+        var maxX = float.MinValue;
+        var maxY = float.MinValue;
+        var any = false;
+
         for (var slot = 0; slot < GlamourPlateSlotMap.SlotCount; slot++)
         {
+            buttonActive[slot] = false;
             var slotPos = slots[slot];
             if (slotPos.X <= 1f || slotPos.Y <= 1f)
                 continue;
@@ -224,24 +241,45 @@ internal sealed class PlateEditorOverlay
                 slotCenter.X + sideSign * (iconW * 0.5f + gap + buttonSize.X * 0.5f) + towardCenter * nudgeX,
                 slotCenter.Y + nudgeY);
             var pos = buttonCenter - buttonSize * 0.5f;
+            buttonPositions[slot] = pos;
+            buttonActive[slot] = true;
+            any = true;
+            minX = MathF.Min(minX, pos.X);
+            minY = MathF.Min(minY, pos.Y);
+            maxX = MathF.Max(maxX, pos.X + buttonSize.X);
+            maxY = MathF.Max(maxY, pos.Y + buttonSize.Y);
+        }
 
-            ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
-            ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0);
-            ImGui.PushStyleVar(ImGuiStyleVar.WindowMinSize, Vector2.Zero);
-            ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, Vector2.Zero);
-            ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 0);
+        if (!any)
+            return;
 
-            // Glamaholic lock: Appearing + SetWindowPos after draw (tracks plate while dragging).
-            ImGui.SetNextWindowPos(pos, ImGuiCond.Appearing);
-            ImGui.SetNextWindowSize(buttonSize, ImGuiCond.Always);
-            var began = ImGui.Begin($"##{SlotOverlayId}-{slot}", SlotHelperWindowFlags);
-            ImGui.PopStyleVar(5);
+        var windowPos = new Vector2(minX, minY);
+        var windowSize = new Vector2(MathF.Max(1f, maxX - minX), MathF.Max(1f, maxY - minY));
 
-            if (!began)
-            {
-                ImGui.End();
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, Vector2.Zero);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowMinSize, Vector2.Zero);
+        ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, Vector2.Zero);
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 0);
+
+        ImGui.SetNextWindowPos(windowPos, ImGuiCond.Appearing);
+        ImGui.SetNextWindowSize(windowSize, ImGuiCond.Always);
+        var began = ImGui.Begin($"##{SlotOverlayId}", SlotHelperWindowFlags);
+        ImGui.PopStyleVar(5);
+
+        if (!began)
+        {
+            ImGui.End();
+            return;
+        }
+
+        for (var slot = 0; slot < GlamourPlateSlotMap.SlotCount; slot++)
+        {
+            if (!buttonActive[slot])
                 continue;
-            }
+
+            var pos = buttonPositions[slot];
+            ImGui.SetCursorScreenPos(pos);
 
             // Invisible hit-target + manual icon draw — Button() leaves FA glyphs optically left of center.
             ImGui.BeginDisabled(!sourcesOk);
@@ -259,12 +297,10 @@ internal sealed class PlateEditorOverlay
             draw.AddRectFilled(min, max, ImGui.GetColorU32(bgCol), rounding);
             draw.AddRect(min, max, ImGui.GetColorU32(ImGuiCol.Border), rounding, ImDrawFlags.None, 2f);
 
-            // RenderChar/RenderText take an explicit pixel size — IconFont ignores Scale/SetWindowFontScale.
             using (Plugin.PluginInterface.UiBuilder.IconFontHandle.Push())
             {
                 var font = ImGui.GetFont();
                 var clip = new Vector4(min.X, min.Y, max.X, max.Y);
-                // FA glyphs sit optically left of the em-box; nudge +X for visual center.
                 var textPos = new Vector2(
                     min.X + (buttonSize.X - iconPx) * 0.5f + iconPx * 0.12f,
                     min.Y + (buttonSize.Y - iconPx) * 0.5f);
@@ -282,10 +318,10 @@ internal sealed class PlateEditorOverlay
             ImGui.EndDisabled();
             if (hovered)
                 ImGui.SetTooltip($"Randomize {GlamourPlateSlotMap.Labels[slot]}");
-
-            ImGui.SetWindowPos(pos);
-            ImGui.End();
         }
+
+        ImGui.SetWindowPos(windowPos);
+        ImGui.End();
     }
 
     private void DrawControls(Configuration config)
@@ -500,10 +536,16 @@ internal sealed class PlateEditorOverlay
 
     private bool IsPlateEditorVisible()
     {
-        if (!IsAddonVisible(PlateAddonName))
+        this.plateVisibleCached ??= IsAddonVisible(PlateAddonName);
+        if (!this.plateVisibleCached.Value)
             return false;
 
-        return IsAddonVisible(DresserAddonName) || IsAddonVisible(ArmoireAddonName);
+        this.dresserVisibleCached ??= IsAddonVisible(DresserAddonName);
+        if (this.dresserVisibleCached.Value)
+            return true;
+
+        this.armoireVisibleCached ??= IsAddonVisible(ArmoireAddonName);
+        return this.armoireVisibleCached.Value;
     }
 
     private bool IsAddonVisible(string name)

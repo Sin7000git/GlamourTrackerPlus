@@ -110,7 +110,8 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer : IDisposable
         this.lastOwnershipRevision = -1;
     }
 
-    public void DrawOverlays()
+    /// <summary>Framework-thread marker sync — preferred over the ImGui draw path.</summary>
+    public void Tick()
     {
         var config = this.getConfiguration();
         if (!config.Enabled || !config.ShowGcExpertDeliveryStatus)
@@ -136,10 +137,6 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer : IDisposable
             return;
         }
 
-#if GLAMOUR_DEV
-        DrawSheetPicker(addonPtr);
-#endif
-
         try
         {
             _ = SyncNativeMarkers((AddonGrandCompanySupplyList*)addonPtr.Address, supplyUnit);
@@ -148,6 +145,23 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer : IDisposable
         {
             DisposeNativeMarkers();
         }
+    }
+
+    public void DrawOverlays()
+    {
+#if GLAMOUR_DEV
+        var config = this.getConfiguration();
+        if (!config.Enabled || !config.ShowGcExpertDeliveryStatus)
+            return;
+
+        var addonPtr = this.gameGui.GetAddonByName(SupplyAddonName, 1);
+        if (addonPtr.Address == nint.Zero)
+            return;
+
+        DrawSheetPicker(addonPtr);
+#else
+        // Markers sync from Framework.Update (Tick).
+#endif
     }
 
     private bool IsInDresserForItem(uint itemId)

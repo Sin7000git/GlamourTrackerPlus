@@ -69,6 +69,7 @@ internal sealed partial class TrackerNativeAddon
                 var kinds = set.Pieces
                     .Select(p => itemAcquireCache.TryGetValue(p.ItemId, out var r) ? r.AcquireKind : FashionItemAcquireKind.Unknown);
                 setCategoryCache[set.SetId] = TrackerNativeHelpers.AggregateSetCategory(kinds);
+                categoryCacheEpoch++;
                 setAcquireLoaded[set.SetId] = 1;
                 setAcquireRetryAfter.TryRemove(set.SetId, out _);
             }
@@ -106,7 +107,9 @@ internal sealed partial class TrackerNativeAddon
             detailRebuildEpoch++;
             suppressDetailScrollTop = true;
             lastBrowserDetailKey = string.Empty;
-            var select = BuildOutfitRows().FirstOrDefault(r => r.Key == selectedBrowserKey);
+            // Prefer cached browser rows; rebuild only when the cache is cold.
+            var rows = cachedOutfitRows ?? BuildOutfitRows();
+            var select = rows.FirstOrDefault(r => r.Key == selectedBrowserKey);
             if (select != null)
                 RebuildBrowserDetail(select, force: true);
         });

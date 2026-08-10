@@ -163,14 +163,28 @@ internal sealed partial class TrackerNativeAddon
         if (browserList == null)
             return;
 
-        var rows = BuildOutfitRows();
-        // Do not include growing category-cache counts — that forced rebuilds every frame during scans.
-        var signature =
-            $"{outfitFilter}|{showMissingOnly}|{showOwnedOnly}|{(int)sortMode}|{(int)categoryFilter}|{(int)storageFilter}|"
-            + string.Join('|', rows.Select(r => $"{r.Key}:{r.Badge}:{r.Subtitle}"));
-        if (!force && signature == lastBrowserListSignature)
+        var inputSig = BuildOutfitRowsInputSignature();
+        if (force || cachedOutfitRows == null || inputSig != cachedOutfitRowsInputSig)
+        {
+            cachedOutfitRows = BuildOutfitRows();
+            cachedOutfitRowsInputSig = inputSig;
+        }
+
+        var rows = cachedOutfitRows;
+        // Input signature already covers ownership, filters, and category-cache epoch — no per-row Join.
+        if (!force && inputSig == lastBrowserListSignature)
+        {
+            if (rebuildDetail && !string.IsNullOrEmpty(selectedBrowserKey))
+            {
+                var selected = rows.FirstOrDefault(r => r.Key == selectedBrowserKey);
+                if (selected != null)
+                    RebuildBrowserDetail(selected, force: true);
+            }
+
             return;
-        lastBrowserListSignature = signature;
+        }
+
+        lastBrowserListSignature = inputSig;
 
         browserList.OptionsList = rows;
         browserList.Update();
@@ -197,67 +211,98 @@ internal sealed partial class TrackerNativeAddon
         }
     }
 
+    private string BuildOutfitRowsInputSignature() =>
+        $"{plugin.OwnershipIndex.Revision}|{plugin.OutfitSets.CatalogEpoch}|{categoryCacheEpoch}|"
+        + $"{outfitFilter}|{showMissingOnly}|{showOwnedOnly}|{(int)sortMode}|{(int)categoryFilter}|{(int)storageFilter}";
+
     private List<TrackerNativeListRow> BuildOutfitRows()
     {
-        IEnumerable<OutfitSetInfo> sets = plugin.OutfitSets.GetSets();
+        var isArmoireEligible = plugin.CabinetCatalog.IsArmoireEligible;
+        var matched = new List<OutfitSetInfo>();
 
-        if (!string.IsNullOrWhiteSpace(outfitFilter))
-            sets = sets.Where(s => s.Name.Contains(outfitFilter, StringComparison.OrdinalIgnoreCase));
-
-        // Missing = incomplete sets. Owned = any stored pieces (includes partial sets).
-        if (showMissingOnly)
-            sets = sets.Where(s => s.MissingPieces > 0);
-        else if (showOwnedOnly)
-            sets = sets.Where(s => s.OwnedPieceCount > 0);
-
-        if (categoryFilter != OutfitCategoryFilter.All)
+        foreach (var set in plugin.OutfitSets.GetSets())
         {
-            sets = sets.Where(s =>
-                setCategoryCache.TryGetValue(s.SetId, out var cat) && cat == categoryFilter);
+            if (!string.IsNullOrWhiteSpace(outfitFilter)
+                && !set.Name.Contains(outfitFilter, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            // Missing = incomplete sets. Owned = any stored pieces (includes partial sets).
+            if (showMissingOnly)
+            {
+                if (set.MissingPieces <= 0)
+                    continue;
+            }
+            else if (showOwnedOnly && set.OwnedPieceCount <= 0)
+            {
+                continue;
+            }
+
+            if (categoryFilter != OutfitCategoryFilter.All
+                && (!setCategoryCache.TryGetValue(set.SetId, out var cat) || cat != categoryFilter))
+                continue;
+
+            if (storageFilter != OutfitStorageFilter.All
+                && !TrackerNativeHelpers.SetMatchesStorage(set, storageFilter))
+                continue;
+
+            matched.Add(set);
         }
 
-        if (storageFilter != OutfitStorageFilter.All)
-            sets = sets.Where(s => TrackerNativeHelpers.SetMatchesStorage(s, storageFilter));
-
-        sets = sortMode switch
+        switch (sortMode)
         {
-            OutfitSortMode.Progress => sets
-                .OrderByDescending(s => s.TotalPieces == 0 ? 0f : s.OwnedPieceCount / (float)s.TotalPieces)
-                .ThenBy(s => s.Name, StringComparer.OrdinalIgnoreCase),
-            OutfitSortMode.MissingFirst => sets
-                .OrderByDescending(s => s.MissingPieces)
-                .ThenBy(s => s.Name, StringComparer.OrdinalIgnoreCase),
-            _ => sets.OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase),
-        };
+            case OutfitSortMode.Progress:
+                matched.Sort(static (a, b) =>
+                {
+                    var ap = a.TotalPieces == 0 ? 0f : a.OwnedPieceCount / (float)a.TotalPieces;
+                    var bp = b.TotalPieces == 0 ? 0f : b.OwnedPieceCount / (float)b.TotalPieces;
+                    var c = bp.CompareTo(ap);
+                    return c != 0 ? c : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                });
+                break;
+            case OutfitSortMode.MissingFirst:
+                matched.Sort(static (a, b) =>
+                {
+                    var c = b.MissingPieces.CompareTo(a.MissingPieces);
+                    return c != 0 ? c : string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+                });
+                break;
+            default:
+                matched.Sort(static (a, b) =>
+                    string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+                break;
+        }
 
-        var rows = new List<TrackerNativeListRow>();
-        foreach (var set in sets)
+        var rows = new List<TrackerNativeListRow>(matched.Count);
+        foreach (var set in matched)
         {
-            var (stored, missing, _) = TrackerNativeHelpers.SplitPiecesForFilter(
+            var (storedCount, missingCount, total) = TrackerNativeHelpers.SplitPiecesForFilter(
                 set,
                 storageFilter,
                 IsGlamourPiece,
-                plugin.CabinetCatalog.IsArmoireEligible);
+                isArmoireEligible,
+                splitStoredScratch,
+                splitMissingScratch);
 
-            var iconPiece = missing.FirstOrDefault();
-            if (iconPiece.ItemId == 0)
-                iconPiece = stored.FirstOrDefault();
-            if (iconPiece.ItemId == 0)
-                iconPiece = set.Pieces.FirstOrDefault();
+            var iconPiece = splitMissingScratch.Count > 0
+                ? splitMissingScratch[0]
+                : splitStoredScratch.Count > 0
+                    ? splitStoredScratch[0]
+                    : set.Pieces.Count > 0 ? set.Pieces[0] : default;
 
             var status = TrackerNativeHelpers.FormatSetCollectionStatus(
                 set,
                 storageFilter,
-                IsGlamourPiece,
-                plugin.CabinetCatalog.IsArmoireEligible);
+                storedCount,
+                missingCount,
+                total);
             rows.Add(new TrackerNativeListRow
             {
                 Key = $"set|{set.SetId}",
                 Title = set.Name,
                 Subtitle = status,
                 IconId = TrackerNativeHelpers.ResolveItemIcon(iconPiece.ItemId),
-                Badge = missing.Count == 0 ? "Complete" : $"{missing.Count} missing",
-                BadgeColor = TrackerNativeHelpers.GetSetStatusColor(stored.Count, missing.Count),
+                Badge = missingCount == 0 ? "Complete" : $"{missingCount} missing",
+                BadgeColor = TrackerNativeHelpers.GetSetStatusColor(storedCount, missingCount),
                 OutfitSet = set,
             });
         }

@@ -167,20 +167,22 @@ Splits are mechanical: move code, do not rewrite behaviour in the same commit.
 
 # Phase 5 — Stop doing work every frame
 
-**Status:** not started
+**Status:** done (0.1.139) — smoke-test in game recommended
 
-- [ ] `TrackerNativeAddon.OnUpdate` builds a signature string every frame; on Overview that calls `GetOverviewStats()` (full set scan + LINQ allocations), and on Outfit sets it runs the whole filter/sort pipeline plus a `string.Join` over all rows. Gate both behind a cheap dirty check (ownership version + filter values + counts).
-- [ ] Cache the filtered/sorted outfit row list until inputs change; build it in a single pass instead of layered LINQ.
-- [ ] `SplitPiecesForFilter` allocates two lists per call and is called twice per set. Reuse scratch buffers or return a struct enumerator.
-- [ ] `FashionReportNativeAddon.OnUpdate` calls `GetProgress()` + MGP buff view every frame (inventory and status scans). Throttle to ~1s or drive from events.
-- [ ] `GcExpertDeliveryEnhancer` does marker sync from the draw path and computes atlas paths/slices before checking whether a rebuild is needed. Move to framework update + dirty flag, compute the signature first.
-- [ ] `PlateEditorOverlay` opens up to 12 ImGui windows per frame and calls `GetAddonByName` three times per frame for visibility. Use one overlay window and cache visibility off lifecycle events.
-- [ ] Replace full-sheet scans with prebuilt indexes: dye names (`FashionReportNativeAddon.ResolveDyeIcon`), territories (`FashionVendorTravel`), duties (`OutfitDutyTravel`), item icons (Fashion Report refresh).
-- [ ] `FashionInventoryIndex.Scan()` runs fully on every refresh and every debounced rebind — make it incremental or TTL-cached.
-- [ ] `PlateSlotNodeLocator` does an O(n) `Contains` inside a 12-slot loop; use a lookup table.
-- [ ] `GlamourPlateStore` saves unconditionally; compare before writing.
-- [ ] `Configuration.Save()` has no coalescing — add a dirty flag with a short debounce.
-- [ ] Drop the duplicate `RebindOwnership()` call in `Plugin.RefreshAll`.
+- [x] `TrackerNativeAddon.OnUpdate` builds a signature string every frame; on Overview that calls `GetOverviewStats()` (full set scan + LINQ allocations), and on Outfit sets it runs the whole filter/sort pipeline plus a `string.Join` over all rows. Gate both behind a cheap dirty check (ownership version + filter values + counts).
+- [x] Cache the filtered/sorted outfit row list until inputs change; build it in a single pass instead of layered LINQ.
+- [x] `SplitPiecesForFilter` allocates two lists per call and is called twice per set. Reuse scratch buffers or return a struct enumerator.
+- [x] `FashionReportNativeAddon.OnUpdate` calls `GetProgress()` + MGP buff view every frame (inventory and status scans). Throttle to ~1s or drive from events.
+- [x] `GcExpertDeliveryEnhancer` does marker sync from the draw path and computes atlas paths/slices before checking whether a rebuild is needed. Move to framework update + dirty flag, compute the signature first.
+- [x] `PlateEditorOverlay` opens up to 12 ImGui windows per frame and calls `GetAddonByName` three times per frame for visibility. Use one overlay window and cache visibility off lifecycle events.
+- [x] Replace full-sheet scans with prebuilt indexes: dye names (`FashionReportNativeAddon.ResolveDyeIcon`), territories (`FashionVendorTravel`), duties (`OutfitDutyTravel`), item icons (Fashion Report refresh).
+- [x] `FashionInventoryIndex.Scan()` runs fully on every refresh and every debounced rebind — make it incremental or TTL-cached.
+- [x] `PlateSlotNodeLocator` does an O(n) `Contains` inside a 12-slot loop; use a lookup table.
+- [x] `GlamourPlateStore` saves unconditionally; compare before writing.
+- [x] `Configuration.Save()` has no coalescing — add a dirty flag with a short debounce.
+- [x] Drop the duplicate `RebindOwnership()` call in `Plugin.RefreshAll`.
+
+**Notes:** Fashion Report item icons already used the one-time name index from Phase 3/4; dye/territory/duty indexes were the remaining full-sheet scans. Plate overlay visibility is cached per ImGui draw (not AddonLifecycle). Inventory scan uses a 2s TTL (force on week refresh).
 
 ---
 
@@ -436,3 +438,13 @@ Append one entry per phase. Keep it short and factual.
   FashionReportService → 6 partials. Behaviour unchanged by design.
 - Version: 0.1.138
 - In-game: smoke-test Overview / Outfit sets / Fashion Report / GC delivery after reload.
+
+[2026-08-10] Phase 5 — stop doing work every frame
+- Done: Overview/browser dirty gates + cached outfit rows (single-pass build, scratch SplitPieces);
+  Fashion Report chrome throttled ~1s; GC markers on Framework.Update with cheap dirty before atlas;
+  one plate reroll ImGui window + per-draw addon visibility cache; dye/territory/duty indexes;
+  inventory Scan TTL; plate store compare-before-save; config Save debounce; drop duplicate
+  RebindOwnership in RefreshAll.
+- Version: 0.1.139
+- In-game: smoke-test Overview / Outfit sets filter/sort / Fashion Report chrome / GC markers /
+  plate slot rerolls after reload.

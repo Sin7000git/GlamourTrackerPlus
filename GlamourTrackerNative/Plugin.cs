@@ -20,6 +20,7 @@ public sealed class Plugin : IDalamudPlugin
     public const string CommandName = "/glamplus";
     private const double BackgroundRefreshSeconds = 30;
     private const double UiEventRefreshDebounceSeconds = 1.5;
+    private const int ConfigSaveDebounceMs = 400;
 
     [PluginService] internal static IDalamudPluginInterface PluginInterface { get; private set; } = null!;
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
@@ -63,14 +64,17 @@ public sealed class Plugin : IDalamudPlugin
     private DateTime lastBackgroundRefresh = DateTime.MinValue;
     private DateTime lastUiEventRefresh = DateTime.MinValue;
     private bool wasEnabled = true;
+    private bool configSaveDirty;
+    private DateTime configSaveAfterUtc = DateTime.MinValue;
 
     public Plugin()
     {
         KamiToolKitLibrary.Initialize(PluginInterface, "Glamour Tracker+");
 
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
-        Configuration.AssignSave(() => PluginInterface.SavePluginConfig(Configuration));
+        Configuration.AssignSave(ScheduleConfigSave);
         MigrateIconSliceConfig(Configuration);
+        FlushConfigSave(force: true);
 
         cabinetCatalog = new CabinetCatalog();
         cabinetCatalog.Build(DataManager);
@@ -182,6 +186,7 @@ public sealed class Plugin : IDalamudPlugin
     public void Dispose()
     {
         ownershipIndex.OnCharacterLogout();
+        FlushConfigSave(force: true);
 
         trackerNativeAddon?.Dispose();
         trackerNativeAddon = null;
@@ -259,6 +264,7 @@ public sealed class Plugin : IDalamudPlugin
         ownershipIndex.ClearSaved();
         Configuration.CharacterCaches.Clear();
         Configuration.Save();
+        FlushConfigSave(force: true);
         outfitSetCatalog.Invalidate();
         fashionReport.RebindOwnership();
         ChatGui.Print(
@@ -269,16 +275,32 @@ public sealed class Plugin : IDalamudPlugin
     /// <summary>Also persists glamour plates from the client.</summary>
     public void RefreshAll(bool force = false)
     {
+        // RefreshOwnership already rebinds Fashion Report when ownership (or force) warrants it.
         RefreshOwnership(force);
 
         if (ClientState.IsLoggedIn)
             GlamourPlateStore.SyncFromGame(Configuration, GetLocalContentId());
 
-        fashionReport.RebindOwnership();
-
         // Dresser/armoire UI events update ownership without going through OnShow —
         // Overview must rebuild or it stays stuck on stale 0/N after Clear + resync.
         trackerNativeAddon?.RequestFormRebuild();
+    }
+
+    private void ScheduleConfigSave()
+    {
+        this.configSaveDirty = true;
+        this.configSaveAfterUtc = DateTime.UtcNow.AddMilliseconds(ConfigSaveDebounceMs);
+    }
+
+    private void FlushConfigSave(bool force)
+    {
+        if (!this.configSaveDirty)
+            return;
+        if (!force && DateTime.UtcNow < this.configSaveAfterUtc)
+            return;
+
+        this.configSaveDirty = false;
+        PluginInterface.SavePluginConfig(Configuration);
     }
 
     internal ulong GetLocalContentId() => GetLocalContentIdStatic();
@@ -325,6 +347,9 @@ public sealed class Plugin : IDalamudPlugin
 
     private void OnFrameworkUpdate(IFramework framework)
     {
+        FlushConfigSave(force: false);
+        gcExpertDeliveryEnhancer.Tick();
+
         if (!ClientState.IsLoggedIn)
             return;
 
@@ -374,6 +399,7 @@ public sealed class Plugin : IDalamudPlugin
             GlamourPlateStore.SyncFromGame(Configuration, GetLocalContentId());
 
         ownershipIndex.OnCharacterLogout();
+        FlushConfigSave(force: true);
         itemDetailEnhancer.RestoreVisibleTooltip();
         gcExpertDeliveryEnhancer.ResetCaches();
     }

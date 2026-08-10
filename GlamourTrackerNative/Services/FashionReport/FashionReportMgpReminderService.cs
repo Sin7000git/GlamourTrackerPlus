@@ -5,7 +5,6 @@ using Dalamud.Game.ClientState.Objects.Types;
 using Dalamud.Hooking;
 using Dalamud.Memory;
 using Dalamud.Plugin.Services;
-using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Control;
 using FFXIVClientStructs.FFXIV.Client.Game.Object;
 using FFXIVClientStructs.FFXIV.Client.UI;
@@ -40,8 +39,6 @@ internal sealed unsafe class FashionReportMgpReminderService : IDisposable
     private bool allowNextSelect;
     private int pendingOptionIndex = -1;
     private bool loggedMenuOnce;
-
-    private static readonly uint[] InteractGeneralActionIds = [4, 7, 9, 10];
 
     private VipAssistPhase vipPhase = VipAssistPhase.Idle;
     private int vipTicksLeft;
@@ -470,6 +467,7 @@ internal sealed unsafe class FashionReportMgpReminderService : IDisposable
     /// <summary>
     /// Starts an interact attempt. Caller must wait for <see cref="IsMaskedRoseDialogueOpen"/> —
     /// InteractWithObject can return non-zero without opening Talk/SelectString.
+    /// Do not fall back to General Actions — IDs like 4/7/9/10 can open Contact List etc.
     /// </summary>
     private void TryInteractMaskedRose()
     {
@@ -483,27 +481,14 @@ internal sealed unsafe class FashionReportMgpReminderService : IDisposable
         targetManager.Target = rose;
         var go = (GameObject*)rose.Address;
         var ts = TargetSystem.Instance();
-        if (ts != null)
-        {
-            _ = ts->InteractWithObject(go, false);
-            if (IsMaskedRoseDialogueOpen())
-                return;
-            _ = ts->InteractWithObject(go, true);
-            if (IsMaskedRoseDialogueOpen())
-                return;
-        }
-
-        var am = ActionManager.Instance();
-        if (am == null)
+        if (ts == null)
             return;
 
-        foreach (var actionId in InteractGeneralActionIds)
-        {
-            if (am->GetActionStatus(ActionType.GeneralAction, actionId) != 0)
-                continue;
-            if (am->UseAction(ActionType.GeneralAction, actionId))
-                break;
-        }
+        _ = ts->InteractWithObject(go, checkLineOfSight: false);
+        if (IsMaskedRoseDialogueOpen())
+            return;
+
+        _ = ts->InteractWithObject(go, checkLineOfSight: true);
     }
 
     private IGameObject? FindMaskedRose()

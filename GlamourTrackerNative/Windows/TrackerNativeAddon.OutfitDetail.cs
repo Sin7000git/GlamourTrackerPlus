@@ -262,10 +262,13 @@ internal sealed partial class TrackerNativeAddon
             foreach (var duty in duties.Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 var dutyName = duty;
+                // Use the detail pane width; only ellipsize when the label won't fit the button.
+                var buttonWidth = MathF.Min(width, 360f);
+                var label = FitTravelLabel(dutyName, buttonWidth);
                 list.AddNode(new TextButtonNode
                 {
-                    Size = new Vector2(MathF.Min(width, 260f), RowH),
-                    String = $"Travel to {Truncate(dutyName, 28)}",
+                    Size = new Vector2(buttonWidth, RowH),
+                    String = label,
                     TextTooltip = dutyName,
                     OnClick = () => _ = Plugin.Framework.RunOnFrameworkThread(() =>
                         OutfitDutyTravel.TryOpenDuty(dutyName, Plugin.DataManager, Plugin.ChatGui)),
@@ -350,6 +353,19 @@ internal sealed partial class TrackerNativeAddon
                 }
             }
         });
+    }
+
+    /// <summary>
+    /// Fit "Travel to …" into the button width. Character estimate matches ATK button text better
+    /// than a fixed 28-char duty-name cut that left empty space in the button.
+    /// </summary>
+    private static string FitTravelLabel(string dutyName, float buttonWidth)
+    {
+        const string prefix = "Travel to ";
+        const float avgCharWidth = 6f;
+        const float horizontalPad = 24f;
+        var maxChars = Math.Max(prefix.Length + 12, (int)((buttonWidth - horizontalPad) / avgCharWidth));
+        return Truncate(prefix + dutyName, maxChars);
     }
 
 }

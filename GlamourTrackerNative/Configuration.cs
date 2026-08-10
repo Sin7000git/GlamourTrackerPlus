@@ -26,6 +26,12 @@ public sealed partial class Configuration : IPluginConfiguration
     public bool ShowTooltipIcons { get; set; } = true;
     public bool ShowGcExpertDeliveryStatus { get; set; } = true;
 
+    /// <summary>
+    /// When talking to the Masked Rose for Fashion Report judging, warn if no VIP Card / Jackpot III
+    /// MGP bonus is active yet (default on).
+    /// </summary>
+    public bool RemindFashionReportMgpBuff { get; set; } = true;
+
     /// <summary>Include glamour dresser (Prism Box) items when randomizing plates.</summary>
     public bool RandomizeIncludeDresser { get; set; } = true;
 

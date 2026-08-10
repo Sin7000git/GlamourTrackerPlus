@@ -244,20 +244,22 @@ Splits are mechanical: move code, do not rewrite behaviour in the same commit.
 
 # Phase 9 — Masked Rose MGP buff reminder
 
-**Status:** not started
+**Status:** done (0.1.147) — in-game verify: buff on / buff off / Cancel / Continue / setting off
 
 When the player talks to the Masked Rose to turn in Fashion Report, prompt if no MGP bonus is active yet, so they do not burn an allowance without VIP Card / Jackpot III.
 
-- [ ] Hook the Masked Rose Fashion Report turn-in path (same scene / event stream `FashionReportProgressTracker` already watches) early enough to intercept before the turn-in consumes an allowance.
-- [ ] If `FashionMgpBuffService` reports neither VIP Card nor Jackpot III active, show a Yes/No dialogue: remind that no MGP buff is applied, ask whether to continue with Fashion Report anyway.
-- [ ] Yes → allow the normal turn-in to proceed. No → cancel / close without spending the allowance.
-- [ ] Skip the prompt when a buff is already active (or when judging is closed / no allowances — no false alarms).
-- [ ] Setting to disable the reminder (default on), stored in config.
-- [ ] Plain UI copy (see Phase 8 wording rules): short, player-facing, no jargon like "status ID".
-- [ ] Log the decision at INFO (`fashion.mgp` or `fashion.progress`) without spamming every talk.
-- [ ] Blast radius: progress tracker hooks, MGP buff view, Fashion Report native UI, any existing Masked Rose chat tips.
+- [x] Hook the Masked Rose Fashion Report turn-in path early enough to intercept before the turn-in consumes an allowance (`SelectString` FireCallback while targeting Masked Rose — EventPlay scenes are post-commit and cannot cancel).
+- [x] If `FashionMgpBuffService` reports neither VIP Card nor Jackpot III active, show a Yes/No dialogue: remind that no MGP buff is applied, ask whether to continue with Fashion Report anyway.
+- [x] Yes → allow the normal turn-in to proceed. No → cancel / close without spending the allowance.
+- [x] Skip the prompt when a buff is already active (or when judging is closed / no allowances — no false alarms).
+- [x] Setting to disable the reminder (default on), stored in config (`RemindFashionReportMgpBuff`).
+- [x] Plain UI copy (see Phase 8 wording rules): short, player-facing, no jargon like "status ID".
+- [x] Log the decision at INFO (`fashion.mgp`) without spamming every talk.
+- [x] Blast radius: progress tracker hooks, MGP buff view, Fashion Report native UI, any existing Masked Rose chat tips.
 
 **Behaviour change** (user-requested): this phase intentionally adds a confirmation, unlike earlier cleanup phases.
+
+**Notes:** First Masked Rose menu open logs option labels once (`fashion.mgp`) so judging-option matching can be tightened if a client language differs. Theme-only options (e.g. “confirm this week’s … challenge”) are excluded.
 
 ---
 
@@ -478,4 +480,11 @@ Append one entry per phase. Keep it short and factual.
 - Done: OpenFashionReportWindow; plain-English FR/Overview/Outfit strings; sort dropdown without
   "Sort:"; ImGui FR helpers dedupe; assembly rename skipped; comments already constraint-focused.
 - Version: 0.1.145
-- In-game: smoke Overview score row, Outfit sets sort/filter, duty Travel button.
+- In-game: OK; Travel to truncation tightened in 0.1.147 with Phase 9.
+
+[2026-08-10] Phase 9 — Masked Rose MGP buff reminder (+ Travel to fit)
+- Done: SelectString FireCallback intercept; confirm Continue/Cancel; setting default on;
+  skip when buff active / judging closed / no allowances; fashion.mgp INFO logs.
+  Also fit Outfit sets “Travel to” labels to button width (was cutting mid-word).
+- Version: 0.1.147
+- In-game: verify buff on/off, Cancel, Continue, setting off; Travel to full duty names.

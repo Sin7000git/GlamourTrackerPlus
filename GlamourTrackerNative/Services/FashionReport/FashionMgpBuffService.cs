@@ -53,6 +53,13 @@ internal sealed class FashionMgpBuffService
         this.log = log;
     }
 
+    /// <summary>True when VIP Card or Jackpot III is already giving +15% MGP.</summary>
+    public bool HasActiveFashionMgpBonus()
+    {
+        EnsureCompanyActionsResolved();
+        return DetectActiveMgpBonus() is FashionMgpBuffState.VipActive or FashionMgpBuffState.JackpotIiiActive;
+    }
+
     public FashionMgpBuffView GetView()
     {
         EnsureCompanyActionsResolved();

@@ -18,7 +18,7 @@ Browse official Outfit sets and see which pieces you already have in the dresser
 
 ### Fashion Report
 
-Weekly Fashion Report helpers in a dedicated window: slot themes, recommended items, ownership from your dresser/armoire, materials, and links out when you want more detail. Also available via `/glamplus fashion` (or `fr` / `report`).
+Weekly Fashion Report helpers in a dedicated window: slot themes, recommended items, ownership from your dresser/armoire, materials, and links out when you want more detail. Also available via `/glamplus fashion` (or `fr` / `report`). When you talk to the Masked Rose for judging, the plugin can warn you if no VIP Card / Jackpot III MGP bonus is active yet (Settings → Fashion Report).
 
 ### Plate randomize
 
@@ -30,7 +30,7 @@ Optional markers on item tooltips and Grand Company expert delivery lists show w
 
 ### Settings
 
-Toggle tooltip icons, GC markers, the plate-editor overlay, and other preferences from the Settings tab.
+Toggle tooltip icons, GC markers, the Fashion Report MGP-buff reminder, the plate-editor overlay, and other preferences from the Settings tab.
 
 ---
 

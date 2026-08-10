@@ -36,6 +36,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IGameInventory GameInventory { get; private set; } = null!;
     [PluginService] internal static IGameInteropProvider GameInterop { get; private set; } = null!;
     [PluginService] internal static IAetheryteList AetheryteList { get; private set; } = null!;
+    [PluginService] internal static ITargetManager TargetManager { get; private set; } = null!;
     public Configuration Configuration { get; }
 
 #if GLAMOUR_DEV
@@ -57,6 +58,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly FashionMgpBuffService fashionMgpBuff;
     private readonly FashionVendorTravel vendorTravel;
     private readonly FashionReportProgressTracker fashionProgress;
+    private readonly FashionReportMgpReminderService fashionMgpReminder;
     private readonly ArtisanIpcClient artisanIpc;
     private readonly FashionRecipeLookup recipeLookup;
     private readonly PluginCommands pluginCommands;
@@ -141,6 +143,16 @@ public sealed class Plugin : IDalamudPlugin
             GetLocalContentId,
             Framework,
             Log);
+        fashionMgpReminder = new FashionReportMgpReminderService(
+            () => Configuration,
+            fashionMgpBuff,
+            fashionProgress,
+            AddonLifecycle,
+            GameGui,
+            TargetManager,
+            Framework,
+            GameInterop,
+            Log);
         pluginCommands = new PluginCommands(CommandManager, ChatGui, this);
 
 #if GLAMOUR_DEV
@@ -195,6 +207,7 @@ public sealed class Plugin : IDalamudPlugin
 
         pluginCommands.Dispose();
         fashionReport.Dispose();
+        fashionMgpReminder.Dispose();
         fashionProgress.Dispose();
         artisanIpc.Dispose();
         itemDetailEnhancer.Dispose();

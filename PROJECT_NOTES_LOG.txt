@@ -707,5 +707,11 @@
 [2026-08-10] Phase 8 — naming and readability (0.1.145)
 - Attempt: OpenFashionReportTab→OpenFashionReportWindow; UI copy (This week's score, Try on shows a preview, Travel to {duty}, sort labels without Sort:, storage filter empty text); FR ImGui panel shares FashionReportNativeHelpers; skip assembly rename; comment sweep already clean
 - Backup: .cursor/backups/2026-08-10_173936_pre-phase8
-- Outcome: pending in-game smoke (Overview FR row, Outfit sets sort/filter empty, duty Travel button)
-- Next: Phase 9 Masked Rose MGP buff reminder
+- Outcome: worked (user OK); Travel to truncated too early → 0.1.146
+- Next: Phase 9
+
+[2026-08-10] Phase 9 — Masked Rose MGP buff reminder + Travel to fit (0.1.147)
+- Attempt: FashionReportMgpReminderService hooks SelectString FireCallback (EventPlay cannot cancel spend); HasActiveFashionMgpBonus; FashionMgpReminderAddon Continue/Cancel; RemindFashionReportMgpBuff setting; skip closed/no allowances/buff on; log fashion.mgp. Also FitTravelLabel from button width (~6px/char).
+- Backup: .cursor/backups/2026-08-10_173936_pre-phase8 (+ travel-truncate-phase9)
+- Outcome: pending in-game (buff on/off, Cancel, Continue, setting off; Travel to full duty names). First Masked Rose menu logs option labels once for match tuning.
+- Next: Phase 10 wrap-up after verify

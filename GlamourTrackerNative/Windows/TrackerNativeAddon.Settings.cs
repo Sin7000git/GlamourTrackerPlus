@@ -35,6 +35,19 @@ internal sealed partial class TrackerNativeAddon
             config.Save();
         }));
 
+        list.AddNode(MakeSection("Fashion Report"));
+        list.AddNode(MakeCheckbox(
+            "Remind me when no MGP bonus is active",
+            config.RemindFashionReportMgpBuff,
+            v =>
+            {
+                config.RemindFashionReportMgpBuff = v;
+                config.Save();
+            }));
+        list.AddNode(MakeMuted(
+            "When talking to the Masked Rose for judging, ask before continuing if VIP Card or Jackpot III is not active.",
+            width));
+
         list.AddNode(MakeSection("Plate editor"));
         list.AddNode(MakeCheckbox("Show controls above plate editor", config.ShowPlateEditorOverlay, v =>
         {

@@ -723,5 +723,10 @@
 
 [2026-08-10] VIP Card: dismiss Masked Rose then use (0.1.149)
 - Attempt: Use VIP closes SelectString/Talk, waits until gone, then TryUseVipCard; compact left-packed buttons
+- Outcome: closed dialogue but card not consumed — UseItem returned 0 while OccupiedInEvent (false success; count stayed 80)
+- Next: wait OccupiedInEvent clear + verify count/buff + retalk (0.1.150)
+
+[2026-08-10] VIP Card wait-for-free + re-talk Masked Rose (0.1.150)
+- Attempt: Leave. dismiss; wait !Talk/SelectString + !Occupied*; TrySendVipCardUse + IsVipUseConfirmed; TargetSystem.InteractWithObject Masked Rose (no menu pick)
 - Outcome: pending reload
 - Next: Phase 10 after verify

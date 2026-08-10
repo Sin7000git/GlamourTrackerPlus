@@ -97,7 +97,6 @@ public sealed class Plugin : IDalamudPlugin
             GameGui,
             DataManager,
             TextureProvider,
-            cabinetCatalog,
             () => Configuration,
             ownershipIndex);
         itemDetailEnhancer = new ItemDetailEnhancer(

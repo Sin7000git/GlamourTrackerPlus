@@ -24,7 +24,7 @@
 
 Verify these in game after every phase:
 
-- Overview: "Completed in dresser" ≈ 74/264, "Completed in armoire" ≈ 31/84, dresser slots, unique item counts.
+- Overview: "Completed in dresser" ≈ 71/264, "Completed in armoire" ≈ 31/84, dresser slots ≈ 564/800, unique dresser ≈ 1230.
 - Overview counts survive a logout/login **without** opening the dresser.
 - Clear saved data resets to zeros and does **not** instantly refill.
 - Outfit sets tab: dresser pieces show, "In dresser" filter returns sets, detail piece rows show correct storage.
@@ -119,7 +119,7 @@ Work:
 
 # Phase 3 — Outfit set catalog and shared domain helpers
 
-**Status:** done (0.1.127), not yet verified in game
+**Status:** done and verified (through 0.1.137 follow-ups)
 
 - [x] Split `OutfitSetCatalog` into static metadata (built once: name, pieces, eligibility) and dynamic flags read from the ownership snapshot. `OutfitSetTemplate` holds the sheet-derived part, so an invalidate no longer rescans and re-sorts `MirageStoreSetItem`.
 - [x] Introduce a single `SetDresserState` (None / Partial / Complete) and use it for both Overview counting and the Outfit sets tab. `InDresser` is now derived from it rather than being a second answer to the same question.
@@ -139,36 +139,27 @@ Work:
 
 # Phase 4 — Split the two giant UI files
 
-**Status:** not started
+**Status:** done (0.1.138), mechanical splits only — smoke-test in game recommended
 
-### 4.1 `TrackerNativeAddon.cs` (1470 lines) → partials
-- [ ] `TrackerNativeAddon.cs` — shell only: fields, `OnSetup`/`OnShow`/`OnUpdate`/`OnFinalize`, tab routing, layout, rebuild scheduling.
-- [ ] `TrackerNativeAddon.Overview.cs`
-- [ ] `TrackerNativeAddon.Settings.cs`
-- [ ] `TrackerNativeAddon.OutfitBrowser.cs` — toolbar, filters, row building, selection.
-- [ ] `TrackerNativeAddon.OutfitDetail.cs` — detail pane, piece rows, acquire sections, try-on.
-- [ ] `TrackerNativeAddon.AcquireLoading.cs` — caches, async loads, background category scan.
-- [ ] `TrackerNativeNodeFactory.cs` — static node builders (`MakeText`, `MakeMuted`, `MakeSection`, `MakeCheckbox`, indenting, truncation).
-- [ ] Delete unused `MakeStatLine`.
+### 4.1 `TrackerNativeAddon.cs` → partials
+- [x] `TrackerNativeAddon.cs` — shell only: fields, lifecycle, tab routing, layout, rebuild scheduling.
+- [x] `TrackerNativeAddon.Overview.cs`
+- [x] `TrackerNativeAddon.Settings.cs`
+- [x] `TrackerNativeAddon.OutfitBrowser.cs`
+- [x] `TrackerNativeAddon.OutfitDetail.cs`
+- [x] `TrackerNativeAddon.AcquireLoading.cs`
+- [x] `TrackerNativeNodeFactory.cs`
+- [x] Delete unused `MakeStatLine`.
 
-### 4.2 `FashionReportNativeAddon.cs` (1055 lines)
-- [ ] Split along the same lines: shell, chrome/progress header, hint list, item detail, node factory.
+### 4.2 `FashionReportNativeAddon.cs`
+- [x] Split: shell, Chrome, HintList, ItemDetail, `FashionReportNativeNodeFactory`.
 
-### 4.3 `GcExpertDeliveryEnhancer.cs` (818 lines)
-- [ ] `GcSupplyAddonLifecycle` — listeners, marker disposal, cache reset.
-- [ ] `GcExpertDeliveryMarkerSync` — marker build/attach and rebuild caching.
-- [ ] `GcExpertDeliveryRowMatcher` — row lookup, label/icon resolution.
-- [ ] `GcExpertDeliveryAgentAccess` — agent reads, expert tab detection.
-- [ ] `GcExpertDeliveryDevTools` — everything under `GLAMOUR_DEV`.
-- [ ] Drop the unused `cabinetCatalog` constructor dependency.
+### 4.3 `GcExpertDeliveryEnhancer.cs`
+- [x] Partial class split: lifecycle shell, MarkerSync, RowMatcher, AgentAccess, DevTools (kept public type name for Plugin).
+- [x] Drop the unused `cabinetCatalog` constructor dependency.
 
-### 4.4 `FashionReportService.cs` (739 lines)
-- [ ] `FashionReportCoordinator` — public API, snapshot/error state.
-- [ ] `FashionReportRefreshPipeline` — refresh, cancellation, HTTP fan-out.
-- [ ] `FashionReportItemResolver` — resolve, rebind, rank, craft enrichment.
-- [ ] `FashionReportItemNameIndex` — name/icon/dye lookup index.
-- [ ] `FashionReportOwnershipSync` — inventory events, debounce, rebuild.
-- [ ] `FashionReportSnapshotFactory` — dye views, easy outfit, hint assembly.
+### 4.4 `FashionReportService.cs`
+- [x] Partial class split: coordinator, Refresh, ItemResolver, NameIndex, OwnershipSync, SnapshotFactory (names kept as `FashionReportService.*` for stable call sites).
 
 Splits are mechanical: move code, do not rewrite behaviour in the same commit.
 
@@ -243,7 +234,26 @@ Splits are mechanical: move code, do not rewrite behaviour in the same commit.
 
 ---
 
-# Phase 9 — Wrap up
+# Phase 9 — Masked Rose MGP buff reminder
+
+**Status:** not started
+
+When the player talks to the Masked Rose to turn in Fashion Report, prompt if no MGP bonus is active yet, so they do not burn an allowance without VIP Card / Jackpot III.
+
+- [ ] Hook the Masked Rose Fashion Report turn-in path (same scene / event stream `FashionReportProgressTracker` already watches) early enough to intercept before the turn-in consumes an allowance.
+- [ ] If `FashionMgpBuffService` reports neither VIP Card nor Jackpot III active, show a Yes/No dialogue: remind that no MGP buff is applied, ask whether to continue with Fashion Report anyway.
+- [ ] Yes → allow the normal turn-in to proceed. No → cancel / close without spending the allowance.
+- [ ] Skip the prompt when a buff is already active (or when judging is closed / no allowances — no false alarms).
+- [ ] Setting to disable the reminder (default on), stored in config.
+- [ ] Plain UI copy (see Phase 8 wording rules): short, player-facing, no jargon like "status ID".
+- [ ] Log the decision at INFO (`fashion.mgp` or `fashion.progress`) without spamming every talk.
+- [ ] Blast radius: progress tracker hooks, MGP buff view, Fashion Report native UI, any existing Masked Rose chat tips.
+
+**Behaviour change** (user-requested): this phase intentionally adds a confirmation, unlike earlier cleanup phases.
+
+---
+
+# Phase 10 — Wrap up
 
 **Status:** not started
 
@@ -252,6 +262,7 @@ Splits are mechanical: move code, do not rewrite behaviour in the same commit.
 - [ ] `PROJECT_NOTES_LOG.txt` updated with the outcome of each phase.
 - [ ] README updated if any user-visible wording changed.
 - [ ] Merge `code-cleanup` into `main` only after a full in-game session with no regressions.
+- [ ] Confirm Phase 9 Masked Rose prompt in game (buff on / buff off / dismiss / continue).
 
 ---
 
@@ -409,5 +420,19 @@ Append one entry per phase. Keep it short and factual.
   persisted, so every consumer sees them without needing set context. Removal requires two consecutive
   reads to agree, and the first read of a session may not remove anything. The completeness fallback
   leaves outfits the scan already ruled on alone.
-- In-game result: pending.
+- In-game result: pending at the time; later verified across 0.1.122–0.1.137.
 - Version: 0.1.122
+
+[2026-08-08 … 2026-08-10] Phase 3 + ownership follow-ups (0.1.127–0.1.137)
+- Phase 3 catalog split landed in 0.1.127; follow-ups fixed prune gating, unique counts, Clear
+  behaviour, 71/276 → 71/264 Overview tally, Overview flicker, and removed "Refresh now".
+- Watchlist (2026-08-10): logs clean for the session — no ERROR/WARN since 2026-08-08. Ownership
+  holds dresser=1494 / sets=264 / completeSets=71 / armoire=470. Masked Rose progress sync OK.
+- Plan change: inserted Phase 9 (Masked Rose MGP buff reminder); former Wrap up is now Phase 10.
+
+[2026-08-10] Phase 4 — split giant UI / service files
+- Done: TrackerNativeAddon → 6 partials + node factory; FashionReportNativeAddon → 4 partials +
+  node factory; GcExpertDeliveryEnhancer → 5 partials (cabinetCatalog ctor arg removed);
+  FashionReportService → 6 partials. Behaviour unchanged by design.
+- Version: 0.1.138
+- In-game: smoke-test Overview / Outfit sets / Fashion Report / GC delivery after reload.

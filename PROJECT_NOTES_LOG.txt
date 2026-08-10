@@ -651,3 +651,12 @@
 - A forced refresh without opening the dresser only re-reads whatever the game already has cached, so the button looked like a sync control when the real sync is opening the dresser/armoire. Removed from native Overview and the ImGui window; Clear saved data stays. /glamplus refresh and dresser UI hooks are unchanged for now.
 - Files changed: TrackerNativeAddon.cs, TrackerWindow.cs, csproj
 - Outcome: Debug + Release build clean, both stamped 0.1.137
+
+[2026-08-10] Pre-Phase-4 log check + plan update
+- app.log since 2026-08-08: no new ERROR/WARN. Session 2026-08-10 shows fashion sync, MGP Jackpot III resolve, Masked Rose progress (score 0→80, allowances 4→3). Ownership last left at sets=264 completeSets=71 with prune gate holding.
+- CODE_CLEANUP_PLAN: new Phase 9 — Masked Rose MGP buff reminder dialogue; former Wrap up renumbered to Phase 10. Watchlist numbers updated to 71/264 and ~1230 unique.
+
+[2026-08-10] Phase 4 — split giant UI / service files (0.1.138)
+- Mechanical partial-class splits only. TrackerNativeAddon (+ NodeFactory), FashionReportNativeAddon (+ NodeFactory), GcExpertDeliveryEnhancer (5 partials; unused cabinetCatalog removed from ctor/Plugin), FashionReportService (6 partials).
+- MakeStatLine deleted (unused). Debug + Release build clean aside from the two existing RowTemplateNodeCount obsolete warnings (Phase 7).
+- Next: smoke-test in game — Overview, Outfit sets, Fashion Report window, GC delivery markers.

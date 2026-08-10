@@ -3,6 +3,7 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.Textures;
 using GlamourTracker.Services;
 using GlamourTracker.Services.FashionReport;
+using GlamourTracker.Windows.Native;
 using Lumina.Excel.Sheets;
 
 namespace GlamourTracker.Windows;
@@ -13,15 +14,6 @@ internal sealed class FashionReportPanel
     private const float DyeIconSize = 33f;
     private const float EasyDyeIconSize = 27f;
     private const float ColumnGap = 8f;
-
-    private static readonly Vector4 ColorOwned = new(0.45f, 0.95f, 0.55f, 1f);
-    private static readonly Vector4 ColorMatsReady = new(0.45f, 0.7f, 1f, 1f);
-    private static readonly Vector4 ColorMatsMissing = new(1f, 0.45f, 0.4f, 1f);
-    private static readonly Vector4 ColorComplete = new(0.45f, 0.95f, 0.55f, 1f);
-    private static readonly Vector4 ColorIncomplete = new(1f, 0.55f, 0.4f, 1f);
-    private static readonly Vector4 ColorUnknown = new(0.95f, 0.8f, 0.4f, 1f);
-    private static readonly Vector4 ColorUnavailable = new(0.65f, 0.65f, 0.7f, 1f);
-    private static readonly Vector4 ColorMgpReminder = new(0.45f, 0.75f, 1f, 1f);
 
     private readonly Plugin plugin;
     private readonly Dictionary<string, ushort> dyeIconCache = new(StringComparer.OrdinalIgnoreCase);
@@ -46,7 +38,7 @@ internal sealed class FashionReportPanel
                 ImGuiSelectableFlags.DontClosePopups,
                 new Vector2(ImGui.CalcTextSize("FashionReportXIV.com").X, 0)))
         {
-            OpenUrl("https://fashionreportxiv.com/");
+            FashionReportNativeHelpers.OpenUrl("https://fashionreportxiv.com/");
         }
 
         ImGui.PopStyleColor();
@@ -88,13 +80,13 @@ internal sealed class FashionReportPanel
         if (!string.IsNullOrWhiteSpace(snap.TheorycraftUrl) || !string.IsNullOrWhiteSpace(snap.ResultsUrl))
         {
             if (!string.IsNullOrWhiteSpace(snap.TheorycraftUrl) && ImGui.SmallButton("Open theorycraft"))
-                OpenUrl(snap.TheorycraftUrl);
+                FashionReportNativeHelpers.OpenUrl(snap.TheorycraftUrl);
             if (!string.IsNullOrWhiteSpace(snap.ResultsUrl))
             {
                 if (!string.IsNullOrWhiteSpace(snap.TheorycraftUrl))
                     ImGui.SameLine();
                 if (ImGui.SmallButton("Open results"))
-                    OpenUrl(snap.ResultsUrl);
+                    FashionReportNativeHelpers.OpenUrl(snap.ResultsUrl);
             }
         }
 
@@ -128,7 +120,7 @@ internal sealed class FashionReportPanel
         const float statusScale = 1.35f;
         const string reminder = "Remember to use MGP bonus buffs";
         var progress = this.plugin.FashionProgress.GetProgress();
-        var (statusColor, statusLabel) = FormatProgress(progress);
+        var (statusColor, statusLabel, _) = FashionReportNativeHelpers.FormatProgress(progress);
 
         var lineY = ImGui.GetCursorPosY();
         ImGui.Text($"Week {snap.Week} — {snap.Title}");
@@ -147,7 +139,7 @@ internal sealed class FashionReportPanel
 
         // Keep reminder at normal size, vertically centered against the larger status text.
         ImGui.SetCursorPosY(lineY + Math.Max(0f, (statusSize.Y - reminderSize.Y) * 0.5f));
-        ImGui.TextColored(ColorMgpReminder, reminder);
+        ImGui.TextColored(FashionReportNativeHelpers.ColorMgpReminder, reminder);
 
         ImGui.SameLine(0, gap);
         ImGui.SetCursorPosY(lineY);
@@ -156,29 +148,8 @@ internal sealed class FashionReportPanel
         ImGui.SetWindowFontScale(1f);
 
         if (ImGui.IsItemHovered())
-            ImGui.SetTooltip(ProgressTooltip(progress));
+            ImGui.SetTooltip(FashionReportNativeHelpers.ProgressTooltip(progress));
     }
-
-    private static (Vector4 Color, string Label) FormatProgress(FashionReportProgressView progress) =>
-        progress.Kind switch
-        {
-            FashionReportProgressKind.Complete => (ColorComplete, $"Complete · Score {progress.HighestScore}"),
-            FashionReportProgressKind.Incomplete => (ColorIncomplete, $"Incomplete · Score {progress.HighestScore}"),
-            FashionReportProgressKind.Unknown => (ColorUnknown, "Not synced yet"),
-            _ => (ColorUnavailable, "Judging opens Friday"),
-        };
-
-    private static string ProgressTooltip(FashionReportProgressView progress) =>
-        progress.Kind switch
-        {
-            FashionReportProgressKind.Complete =>
-                "You scored 80 or higher this week.",
-            FashionReportProgressKind.Incomplete =>
-                $"Best score this week: {progress.HighestScore}. Attempts left: {progress.AllowancesRemaining}.",
-            FashionReportProgressKind.Unknown =>
-                "Talk to Masked Rose at the Gold Saucer to sync your score.",
-            _ => "Fashion Report judging runs Friday through Tuesday reset.",
-        };
 
     private void DrawHintColumns(FashionReportSnapshot snap, float height)
     {
@@ -328,7 +299,7 @@ internal sealed class FashionReportPanel
             foreach (var section in item.Sections)
             {
                 ImGui.Spacing();
-                ImGui.TextColored(TagColor(section.Type), section.Label);
+                ImGui.TextColored(FashionReportNativeHelpers.TagColor(section.Type), section.Label);
                 if (!string.IsNullOrWhiteSpace(section.Headline))
                     ImGui.TextWrapped(section.Headline);
 
@@ -356,8 +327,10 @@ internal sealed class FashionReportPanel
                     foreach (var ing in section.Ingredients)
                     {
                         ImGui.TextColored(
-                            ing.HasEnough ? ColorOwned : ColorMatsMissing,
-                            FormatIngredientLine(ing));
+                            ing.HasEnough
+                                ? FashionReportNativeHelpers.ColorOwned
+                                : FashionReportNativeHelpers.ColorMatsMissing,
+                            FashionReportNativeHelpers.FormatIngredientLine(ing));
                     }
                 }
                 else
@@ -383,13 +356,13 @@ internal sealed class FashionReportPanel
             {
                 ImGui.Spacing();
                 if (!string.IsNullOrWhiteSpace(item.GarlandUrl) && ImGui.SmallButton("Garland Tools"))
-                    OpenUrl(item.GarlandUrl!);
+                    FashionReportNativeHelpers.OpenUrl(item.GarlandUrl!);
                 if (!string.IsNullOrWhiteSpace(item.LodestoneUrl))
                 {
                     if (!string.IsNullOrWhiteSpace(item.GarlandUrl))
                         ImGui.SameLine();
                     if (ImGui.SmallButton("Lodestone"))
-                        OpenUrl(item.LodestoneUrl!);
+                        FashionReportNativeHelpers.OpenUrl(item.LodestoneUrl!);
                 }
             }
 
@@ -409,7 +382,7 @@ internal sealed class FashionReportPanel
         if (item.Owned)
         {
             ImGui.SameLine();
-            ImGui.TextColored(ColorOwned, "owned");
+            ImGui.TextColored(FashionReportNativeHelpers.ColorOwned, "owned");
             return;
         }
 
@@ -418,7 +391,9 @@ internal sealed class FashionReportPanel
 
         ImGui.SameLine();
         ImGui.TextColored(
-            item.CraftMatsReady == item.CraftMatsTotal ? ColorMatsReady : ColorMatsMissing,
+            item.CraftMatsReady == item.CraftMatsTotal
+                ? FashionReportNativeHelpers.ColorMatsReady
+                : FashionReportNativeHelpers.ColorMatsMissing,
             $"Materials {item.CraftMatsReady}/{item.CraftMatsTotal}");
     }
 
@@ -513,43 +488,5 @@ internal sealed class FashionReportPanel
 
         this.dyeIconCache[dyeName] = icon;
         return icon;
-    }
-
-    private static Vector4 TagColor(string type)
-    {
-        // Avoid ToLowerInvariant alloc on hot path — compare case-insensitively.
-        if (type.Equals("vendor", StringComparison.OrdinalIgnoreCase))
-            return new Vector4(0.55f, 0.9f, 0.65f, 1f);
-        if (type.Equals("market", StringComparison.OrdinalIgnoreCase))
-            return new Vector4(0.45f, 0.75f, 0.55f, 1f);
-        if (type.Equals("craft", StringComparison.OrdinalIgnoreCase))
-            return new Vector4(0.45f, 0.85f, 0.9f, 1f);
-        if (type.Equals("quest", StringComparison.OrdinalIgnoreCase))
-            return new Vector4(0.9f, 0.45f, 0.45f, 1f);
-        if (type.Equals("barter", StringComparison.OrdinalIgnoreCase))
-            return new Vector4(0.85f, 0.65f, 0.95f, 1f);
-        if (type.Equals("gc", StringComparison.OrdinalIgnoreCase))
-            return new Vector4(0.95f, 0.8f, 0.4f, 1f);
-        return new Vector4(0.8f, 0.8f, 0.8f, 1f);
-    }
-
-    private static string FormatIngredientLine(FashionCraftIngredient ing) =>
-        $"{ing.Required}× {ing.Name} — {ing.OwnedCount}/{ing.Required}";
-
-    private static void OpenUrl(string url)
-    {
-        try
-        {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = url,
-                UseShellExecute = true,
-            });
-        }
-        catch (Exception ex)
-        {
-            PluginFileLog.Error("fashion.ui", $"Failed to open URL {url}", ex);
-            Plugin.ChatGui.PrintError("Could not open the link in your browser.");
-        }
     }
 }

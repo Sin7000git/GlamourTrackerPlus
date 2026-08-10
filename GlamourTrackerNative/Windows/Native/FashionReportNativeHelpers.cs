@@ -26,7 +26,7 @@ internal static class FashionReportNativeHelpers
             FashionReportProgressKind.Complete => (ColorComplete, $"Complete · Score {progress.HighestScore}", 22),
             FashionReportProgressKind.Incomplete => (ColorIncomplete, $"Incomplete · Score {progress.HighestScore}", 16),
             FashionReportProgressKind.Unknown => (ColorUnknown, "Not synced yet", 16),
-            _ => (ColorUnavailable, "Judging opens Friday", 16),
+            _ => (ColorUnavailable, "Opens Friday", 16),
         };
 
     public static string ProgressTooltip(FashionReportProgressView progress) =>
@@ -38,7 +38,7 @@ internal static class FashionReportNativeHelpers
                 $"Best score this week: {progress.HighestScore}. Attempts left: {progress.AllowancesRemaining}.",
             FashionReportProgressKind.Unknown =>
                 "Talk to Masked Rose at the Gold Saucer to sync your score.",
-            _ => "Fashion Report judging runs Friday through Tuesday reset.",
+            _ => "Fashion Report scoring runs Friday through Tuesday reset.",
         };
 
     /// <summary>Left-list badge — ownership only (materials live in the detail pane).</summary>

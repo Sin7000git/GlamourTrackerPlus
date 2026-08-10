@@ -34,7 +34,7 @@ internal sealed partial class TrackerNativeAddon
             return;
         }
 
-        list.AddNode(MakeMuted("Expand a piece for sources. Try on previews it.", width));
+        list.AddNode(MakeMuted("Expand a piece for sources. Try on shows a preview.", width));
 
         list.AddNode(MakeText(
             $"{storedPieces.Count}/{total} stored",
@@ -265,7 +265,7 @@ internal sealed partial class TrackerNativeAddon
                 list.AddNode(new TextButtonNode
                 {
                     Size = new Vector2(MathF.Min(width, 260f), RowH),
-                    String = $"Open: {Truncate(dutyName, 28)}",
+                    String = $"Travel to {Truncate(dutyName, 28)}",
                     TextTooltip = dutyName,
                     OnClick = () => _ = Plugin.Framework.RunOnFrameworkThread(() =>
                         OutfitDutyTravel.TryOpenDuty(dutyName, Plugin.DataManager, Plugin.ChatGui)),

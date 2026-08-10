@@ -55,7 +55,7 @@ internal sealed partial class TrackerNativeAddon
         var weekLine = snap != null ? $"Week {snap.Week}" : "Not loaded yet";
         list.AddNode(MakeOverviewStatRow("This week", weekLine, width));
         var (progressColor, progressText) = FormatOverviewFashionProgress(progress);
-        list.AddNode(MakeOverviewStatRow("Judging", progressText, width, progressColor));
+        list.AddNode(MakeOverviewStatRow("This week's score", progressText, width, progressColor));
 
         var frActions = new HorizontalListNode
         {
@@ -68,7 +68,7 @@ internal sealed partial class TrackerNativeAddon
             Size = new Vector2(180f, RowH),
             String = "Open Fashion Report",
             TextTooltip = "Same as /glamplus report.",
-            OnClick = () => plugin.OpenFashionReportTab(),
+            OnClick = () => plugin.OpenFashionReportWindow(),
         });
         list.AddNode(frActions);
 
@@ -153,7 +153,7 @@ internal sealed partial class TrackerNativeAddon
             FashionReportProgressKind.Unknown =>
                 (TrackerNativeHelpers.ColorMuted, "Talk to the Masked Rose to sync"),
             _ =>
-                (TrackerNativeHelpers.ColorMuted, "Judging closed"),
+                (TrackerNativeHelpers.ColorMuted, "Closed until Friday"),
         };
 
 }

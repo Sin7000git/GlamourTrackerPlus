@@ -701,5 +701,11 @@
 - Cause: ProcessEventPlay hook did EnsureWeekReset/Save/PluginFileLog on the native thread. Sync File.AppendAllText under Wine is very slow; multiple scenes per dialogue stacked it.
 - Fix: hook only copies scene payload and queues Apply on Framework; one Save after apply; PluginFileLog writes via ThreadPool queue.
 - Files changed: FashionReportProgressTracker.cs, PluginFileLog.cs, csproj
-- Outcome: pending user reload + Masked Rose talk
-- Next: confirm no freeze; then Phase 8
+- Outcome: worked (user: nice and instant)
+- Next: Phase 8
+
+[2026-08-10] Phase 8 — naming and readability (0.1.145)
+- Attempt: OpenFashionReportTab→OpenFashionReportWindow; UI copy (This week's score, Try on shows a preview, Travel to {duty}, sort labels without Sort:, storage filter empty text); FR ImGui panel shares FashionReportNativeHelpers; skip assembly rename; comment sweep already clean
+- Backup: .cursor/backups/2026-08-10_173936_pre-phase8
+- Outcome: pending in-game smoke (Overview FR row, Outfit sets sort/filter empty, duty Travel button)
+- Next: Phase 9 Masked Rose MGP buff reminder

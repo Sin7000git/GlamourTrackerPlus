@@ -44,9 +44,9 @@ internal static class TrackerNativeHelpers
 
     public static readonly string[] SortModeLabels =
     [
-        "Sort: Name",
-        "Sort: Progress",
-        "Sort: Missing first",
+        "Name",
+        "Progress",
+        "Missing first",
     ];
 
     public static readonly string[] CategoryFilterLabels =
@@ -181,7 +181,7 @@ internal static class TrackerNativeHelpers
         int total)
     {
         if (total == 0)
-            return "No pieces for this filter";
+            return "No pieces match this storage filter.";
 
         if (missingCount == 0)
         {

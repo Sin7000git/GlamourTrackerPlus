@@ -230,13 +230,15 @@ Splits are mechanical: move code, do not rewrite behaviour in the same commit.
 
 # Phase 8 — Naming and readability pass
 
-**Status:** not started
+**Status:** done (0.1.145)
 
-- [ ] Rename members whose names no longer match behaviour (see Phase 6/7 items, plus `OpenFashionReportTab` which opens a window, not a tab).
-- [ ] Comment policy sweep: keep comments that explain a constraint or a hard-won gotcha (Prism Box index vs set RowId, add-only vs replace, SD-space UVs). Delete comments that narrate the code.
-- [ ] Plain-English UI text: "Judging" → "This week's score"; fix "Try on previews it."; "Open: {duty}" → "Travel to {duty}"; drop the redundant "Sort:" prefix inside the sort dropdown; "No pieces for this filter" → "No pieces match this storage filter."
-- [ ] Consistent terminology everywhere: dresser / armoire / outfit set / piece / stored / complete.
-- [ ] Consider renaming the assembly and folder from `GlamourTrackerNative` to match "Glamour Tracker+" — **breaking**: changes the Dalamud InternalName and config file name, needs a migration and a new dev-plugin path. Decide explicitly; skip if not worth it.
+- [x] Rename members whose names no longer match behaviour (see Phase 6/7 items, plus `OpenFashionReportTab` → `OpenFashionReportWindow`).
+- [x] Comment policy sweep: keep comments that explain a constraint or a hard-won gotcha (Prism Box index vs set RowId, add-only vs replace, SD-space UVs). Delete comments that narrate the code.
+- [x] Plain-English UI text: "Judging" → "This week's score"; fix "Try on previews it."; "Open: {duty}" → "Travel to {duty}"; drop the redundant "Sort:" prefix inside the sort dropdown; "No pieces for this filter" → "No pieces match this storage filter."
+- [x] Consistent terminology everywhere: dresser / armoire / outfit set / piece / stored / complete.
+- [x] Consider renaming the assembly and folder from `GlamourTrackerNative` to match "Glamour Tracker+" — **skipped**: Dalamud InternalName / config path migration is not worth the break for a display-name polish.
+
+**Notes:** ImGui Fashion Report panel now shares progress/tag/URL helpers with the native window. Closed-week copy is "Closed until Friday" / "Opens Friday". Comment sweep found no narrating leftovers worth deleting.
 
 ---
 
@@ -466,3 +468,14 @@ Append one entry per phase. Keep it short and factual.
   marker offset rename; User-Agent from assembly; single GetLocalContentId; FormatStorage shared.
 - Version: 0.1.143
 - In-game: smoke GC markers + Fashion Report refresh after reload.
+
+[2026-08-10] Masked Rose freeze fix
+- Done: defer progress apply + Save to Framework; async PluginFileLog.
+- Version: 0.1.144
+- In-game: OK (instant).
+
+[2026-08-10] Phase 8 — naming and readability
+- Done: OpenFashionReportWindow; plain-English FR/Overview/Outfit strings; sort dropdown without
+  "Sort:"; ImGui FR helpers dedupe; assembly rename skipped; comments already constraint-focused.
+- Version: 0.1.145
+- In-game: smoke Overview score row, Outfit sets sort/filter, duty Travel button.

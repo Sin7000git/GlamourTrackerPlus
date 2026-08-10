@@ -312,13 +312,14 @@ public sealed class Plugin : IDalamudPlugin
     public void ToggleImGuiMainUi() => TrackerWindow?.Toggle();
 #endif
 
-    public void OpenFashionReportTab()
+    /// <summary>Opens or closes the native Fashion Report window (not a main-window tab).</summary>
+    public void OpenFashionReportWindow()
     {
         ToggleNativeFashionReport();
         _ = fashionReport.RefreshAsync(force: false);
     }
 
-    /// <summary>Opens the KamiToolKit native Fashion Report shell (main-thread).</summary>
+    /// <summary>Toggles the KamiToolKit native Fashion Report shell (main-thread).</summary>
     public void ToggleNativeFashionReport()
     {
         _ = Framework.RunOnFrameworkThread(() => fashionNativeAddon?.Toggle());

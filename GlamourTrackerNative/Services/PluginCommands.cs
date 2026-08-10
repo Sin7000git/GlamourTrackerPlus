@@ -53,7 +53,7 @@ internal sealed class PluginCommands : IDisposable
             case "fashion":
             case "fr":
             case "report":
-                this.plugin.OpenFashionReportTab();
+                this.plugin.OpenFashionReportWindow();
                 return;
 
             case "refresh":

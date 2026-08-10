@@ -110,44 +110,26 @@ internal sealed unsafe class FashionReportProgressTracker : IDisposable
     {
         eventHook!.Original(thisPtr, gameObject, eventId, scene, sceneFlags, sceneData, sceneDataCount);
 
+        // Keep the native hook tiny: copy payload and leave. Config / disk / logging hitch the game
+        // if done here (Wine makes AppendAllText especially expensive).
         try
         {
             if (gameObject == null || gameObject->BaseId != MaskedRoseBaseId || sceneData == null)
                 return;
 
-            var cache = GetOrCreateCache();
-            if (cache == null)
+            if (scene is not (1 or 2 or 5))
                 return;
 
-            EnsureWeekReset();
-
-            var dirty = false;
-            switch (scene)
-            {
-                case 1 when sceneDataCount > 1:
-                    cache.FashionReportHighestScore = (int)sceneData[0];
-                    cache.FashionReportAllowancesRemaining = (int)sceneData[1];
-                    dirty = true;
-                    break;
-                case 2 when sceneDataCount > 0:
-                    cache.FashionReportHighestScore = Math.Max((int)sceneData[0], cache.FashionReportHighestScore);
-                    dirty = true;
-                    break;
-                case 5 when sceneDataCount > 0:
-                    cache.FashionReportAllowancesRemaining = (int)sceneData[0];
-                    dirty = true;
-                    break;
-            }
-
-            if (!dirty)
+            var count = sceneDataCount;
+            if (count == 0)
                 return;
 
-            cache.FashionReportSynced = true;
-            cache.FashionReportNextResetUtc = FashionReportWeek.ScoreExpiryUtc(DateTime.UtcNow);
-            SaveConfig();
-            PluginFileLog.Info(
-                "fashion.progress",
-                $"Masked Rose sync score={cache.FashionReportHighestScore} allowances={cache.FashionReportAllowancesRemaining} reset={cache.FashionReportNextResetUtc:o}");
+            var copied = new uint[count];
+            for (var i = 0; i < count; i++)
+                copied[i] = sceneData[i];
+
+            var sceneCopy = scene;
+            _ = framework.RunOnFrameworkThread(() => ApplyMaskedRoseScene(sceneCopy, copied));
         }
         catch (Exception ex)
         {
@@ -156,11 +138,67 @@ internal sealed unsafe class FashionReportProgressTracker : IDisposable
         }
     }
 
-    private void EnsureWeekReset()
+    private void ApplyMaskedRoseScene(short scene, uint[] sceneData)
+    {
+        try
+        {
+            var cache = GetOrCreateCache();
+            if (cache == null)
+                return;
+
+            // Week reset + scene apply share one Save at the end.
+            var weekDirty = EnsureWeekReset(save: false);
+            var sceneDirty = false;
+
+            switch (scene)
+            {
+                case 1 when sceneData.Length > 1:
+                    cache.FashionReportHighestScore = (int)sceneData[0];
+                    cache.FashionReportAllowancesRemaining = (int)sceneData[1];
+                    sceneDirty = true;
+                    break;
+                case 2 when sceneData.Length > 0:
+                    cache.FashionReportHighestScore = Math.Max((int)sceneData[0], cache.FashionReportHighestScore);
+                    sceneDirty = true;
+                    break;
+                case 5 when sceneData.Length > 0:
+                    cache.FashionReportAllowancesRemaining = (int)sceneData[0];
+                    sceneDirty = true;
+                    break;
+            }
+
+            if (!weekDirty && !sceneDirty)
+                return;
+
+            if (sceneDirty)
+            {
+                cache.FashionReportSynced = true;
+                cache.FashionReportNextResetUtc = FashionReportWeek.ScoreExpiryUtc(DateTime.UtcNow);
+            }
+
+            ScheduleSave();
+            if (sceneDirty)
+            {
+                PluginFileLog.Info(
+                    "fashion.progress",
+                    $"Masked Rose sync score={cache.FashionReportHighestScore} allowances={cache.FashionReportAllowancesRemaining} reset={cache.FashionReportNextResetUtc:o}");
+            }
+        }
+        catch (Exception ex)
+        {
+            log.Debug(ex, "Fashion Report progress apply failed.");
+            PluginFileLog.Warn("fashion.progress", $"NPC apply failed: {ex.Message}");
+        }
+    }
+
+    private void EnsureWeekReset() => EnsureWeekReset(save: true);
+
+    /// <returns>True when progress fields changed and still need a persist.</returns>
+    private bool EnsureWeekReset(bool save)
     {
         var cache = GetOrCreateCache();
         if (cache == null)
-            return;
+            return false;
 
         var now = DateTime.UtcNow;
         var expiry = FashionReportWeek.ScoreExpiryUtc(now);
@@ -170,26 +208,30 @@ internal sealed unsafe class FashionReportProgressTracker : IDisposable
             if (cache.FashionReportSynced || cache.FashionReportHighestScore > 0)
             {
                 ClearProgress(cache, expiry);
-                SaveConfig();
+                if (save)
+                    ScheduleSave();
                 PluginFileLog.Info("fashion.progress", "Cleared progress with missing expiry");
-                return;
+                return !save;
             }
 
             cache.FashionReportNextResetUtc = expiry;
-            SaveConfig();
-            return;
+            if (save)
+                ScheduleSave();
+            return !save;
         }
 
         if (now < cache.FashionReportNextResetUtc)
-            return;
+            return false;
 
         ClearProgress(cache, expiry);
-        SaveConfig();
+        if (save)
+            ScheduleSave();
         PluginFileLog.Info("fashion.progress", $"Week rolled over; score expires {expiry:o}");
+        return !save;
     }
 
-    /// <summary>Config writes must not happen on the NPC event hook thread.</summary>
-    private void SaveConfig() => _ = this.framework.RunOnFrameworkThread(() => getConfig().Save());
+    /// <summary>Debounced config persist — never write the plugin config from the NPC hook thread.</summary>
+    private void ScheduleSave() => getConfig().Save();
 
     private static void ClearProgress(CharacterTrackerCache cache, DateTime nextResetUtc)
     {

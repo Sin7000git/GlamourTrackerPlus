@@ -693,5 +693,13 @@
 [2026-08-10] Phase 7 — dead code, duplication, obsolete APIs (0.1.143)
 - Attempt: Release exclude EmptyGearSlotAtlas/DevTools/UiIconCache.Dev; delete GetItemIconDrawNode/StoredGreen/GetLongestRowText/ClearCache/InvalidateLock/RequestOpen/onTooltipIconsApplied; RowTemplateNodeCountByte; GameUldTexturePaths; GcExpertListMarkerXOffset; User-Agent from assembly version; GetLocalContentId static only; FormatStorage via helpers
 - Backup: .cursor/backups/2026-08-10_172111_pre-phase7
-- Outcome: Debug + Release build clean, 0 warnings (obsolete CS0618 gone)
-- Next: Phase 8 naming/readability, or smoke GC markers first
+- Outcome: worked (user confirmed general OK; Masked Rose freeze found next)
+- Next: fix Masked Rose freeze
+
+[2026-08-10] Masked Rose talk froze game ~3–10s (0.1.144)
+- Symptom: talking to Masked Rose froze XIV ~10s first time / ~3s after Clear; then Fashion Report synced.
+- Cause: ProcessEventPlay hook did EnsureWeekReset/Save/PluginFileLog on the native thread. Sync File.AppendAllText under Wine is very slow; multiple scenes per dialogue stacked it.
+- Fix: hook only copies scene payload and queues Apply on Framework; one Save after apply; PluginFileLog writes via ThreadPool queue.
+- Files changed: FashionReportProgressTracker.cs, PluginFileLog.cs, csproj
+- Outcome: pending user reload + Masked Rose talk
+- Next: confirm no freeze; then Phase 8

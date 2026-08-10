@@ -141,6 +141,16 @@ internal sealed class FashionMgpBuffService
                 return false;
             }
 
+            // Prefer ActionManager after NPC talk — AgentInventoryContext.UseItem often
+            // returns 0 without consuming the card while the event state is still settling.
+            var am = ActionManager.Instance();
+            if (am != null && am->UseAction(ActionType.Item, VipCardItemId, 0xE000_0000, ushort.MaxValue))
+            {
+                detail = "UseAction sent";
+                PluginFileLog.Info("fashion.mgp", "VIP Card UseAction sent");
+                return true;
+            }
+
             var agent = AgentInventoryContext.Instance();
             if (agent != null)
             {
@@ -152,15 +162,7 @@ internal sealed class FashionMgpBuffService
                     return true;
                 }
 
-                PluginFileLog.Info("fashion.mgp", $"UseItem result={result}; trying ActionManager");
-            }
-
-            var am = ActionManager.Instance();
-            if (am != null && am->UseAction(ActionType.Item, VipCardItemId, 0xE000_0000, ushort.MaxValue))
-            {
-                detail = "UseAction sent";
-                PluginFileLog.Info("fashion.mgp", "VIP Card UseAction sent");
-                return true;
+                PluginFileLog.Info("fashion.mgp", $"UseItem result={result}");
             }
 
             detail = "UseItem/UseAction rejected";

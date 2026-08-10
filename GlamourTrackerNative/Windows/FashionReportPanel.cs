@@ -33,11 +33,6 @@ internal sealed class FashionReportPanel
         this.plugin = plugin;
     }
 
-    public void RequestOpen()
-    {
-        // Hook for future focus/scroll behavior.
-    }
-
     public void Draw()
     {
         var service = this.plugin.FashionReport;

@@ -84,7 +84,7 @@ public sealed class Plugin : IDalamudPlugin
             cabinetCatalog,
             () => Configuration,
             ClientState,
-            GetLocalContentIdStatic);
+            GetLocalContentId);
         outfitSetCatalog = new OutfitSetCatalog(DataManager, ownershipIndex, cabinetCatalog);
         candidatePool = new GlamourCandidatePool(DataManager, cabinetCatalog);
         plateRandomizer = new GlamourPlateRandomizer(candidatePool, () => Configuration, ObjectTable, Log);
@@ -138,7 +138,7 @@ public sealed class Plugin : IDalamudPlugin
         fashionProgress = new FashionReportProgressTracker(
             GameInterop,
             () => Configuration,
-            GetLocalContentIdStatic,
+            GetLocalContentId,
             Framework,
             Log);
         pluginCommands = new PluginCommands(CommandManager, ChatGui, this);
@@ -303,8 +303,6 @@ public sealed class Plugin : IDalamudPlugin
         PluginInterface.SavePluginConfig(Configuration);
     }
 
-    internal ulong GetLocalContentId() => GetLocalContentIdStatic();
-
     public void ToggleMainUi()
     {
         _ = Framework.RunOnFrameworkThread(() => trackerNativeAddon?.Toggle());
@@ -404,17 +402,9 @@ public sealed class Plugin : IDalamudPlugin
         gcExpertDeliveryEnhancer.ResetCaches();
     }
 
-    private void OnDresserUiRefresh(AddonEvent type, AddonArgs args)
-    {
-        PlateSlotNodeLocator.InvalidateLock();
-        TryRefreshAllFromUiEvent();
-    }
+    private void OnDresserUiRefresh(AddonEvent type, AddonArgs args) => TryRefreshAllFromUiEvent();
 
-    private void OnPlateUiRefresh(AddonEvent type, AddonArgs args)
-    {
-        PlateSlotNodeLocator.InvalidateLock();
-        TryRefreshAllFromUiEvent();
-    }
+    private void OnPlateUiRefresh(AddonEvent type, AddonArgs args) => TryRefreshAllFromUiEvent();
 
     /// <summary>Debounce dresser/plate ATK churn so ownership sync + config Save are not per-tick.</summary>
     private void TryRefreshAllFromUiEvent()
@@ -428,7 +418,7 @@ public sealed class Plugin : IDalamudPlugin
         this.lastBackgroundRefresh = now;
     }
 
-    private static unsafe ulong GetLocalContentIdStatic()
+    internal static unsafe ulong GetLocalContentId()
     {
         var uiState = UIState.Instance();
         return uiState == null ? 0 : uiState->PlayerState.ContentId;

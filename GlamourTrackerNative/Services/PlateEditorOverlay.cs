@@ -100,20 +100,14 @@ internal sealed class PlateEditorOverlay
             return;
 
         var visible = IsPlateEditorVisible();
-        if (visible && !this.wasPlateEditorVisible)
-            PlateSlotNodeLocator.ClearCache(); // fresh open — don't keep a premature lock
         this.wasPlateEditorVisible = visible;
 
         if (!visible)
-        {
-            PlateSlotNodeLocator.ClearCache();
             return;
-        }
 
         var addon = this.gameGui.GetAddonByName(PlateAddonName, 1);
         if (addon == null || !addon.IsReady || !addon.IsVisible)
         {
-            PlateSlotNodeLocator.ClearCache();
             this.wasPlateEditorVisible = false;
             return;
         }
@@ -183,8 +177,7 @@ internal sealed class PlateEditorOverlay
                 slots,
                 widths,
                 heights,
-                buttonOnLeft,
-                Plugin.Log))
+                buttonOnLeft))
             return;
 
         var busy = this.plateRandomizer.IsBusy;

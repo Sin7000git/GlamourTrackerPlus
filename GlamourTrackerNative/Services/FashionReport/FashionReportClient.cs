@@ -27,7 +27,11 @@ internal sealed class FashionReportClient : IDisposable
             Timeout = TimeSpan.FromSeconds(25),
             BaseAddress = new Uri(BaseUrl),
         };
-        httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("GlamourTrackerPlus", "0.6"));
+        var version = typeof(Plugin).Assembly.GetName().Version;
+        var versionLabel = version == null
+            ? "0.0"
+            : $"{version.Major}.{version.Minor}.{version.Build}";
+        httpClient.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("GlamourTrackerPlus", versionLabel));
         httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
     }
 

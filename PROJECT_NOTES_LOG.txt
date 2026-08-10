@@ -687,5 +687,11 @@
 [2026-08-10] Settings clear-data UX (0.1.142)
 - Attempt: move Clear from Overview to Settings; rename Clear all data / Clear character data; side-by-side; confirm Yes/Cancel; drop Release slot-defaults muted line
 - Files changed: TrackerNativeAddon.Settings/Overview/cs, TrackerWindow, Plugin chat copy, csproj
-- Outcome: Debug + Release build clean. Pending brief Settings confirm smoke-test.
-- Next: Phase 7 dead code
+- Outcome: worked (shipped with Phase 7; user asked for this before Phase 7)
+- Next: Phase 7
+
+[2026-08-10] Phase 7 — dead code, duplication, obsolete APIs (0.1.143)
+- Attempt: Release exclude EmptyGearSlotAtlas/DevTools/UiIconCache.Dev; delete GetItemIconDrawNode/StoredGreen/GetLongestRowText/ClearCache/InvalidateLock/RequestOpen/onTooltipIconsApplied; RowTemplateNodeCountByte; GameUldTexturePaths; GcExpertListMarkerXOffset; User-Agent from assembly version; GetLocalContentId static only; FormatStorage via helpers
+- Backup: .cursor/backups/2026-08-10_172111_pre-phase7
+- Outcome: Debug + Release build clean, 0 warnings (obsolete CS0618 gone)
+- Next: Phase 8 naming/readability, or smoke GC markers first

@@ -50,36 +50,12 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer
                 return label;
         }
 
-        return GetLongestRowText(rowRoot);
-    }
-
-    private static string GetLongestRowText(AtkResNode* rowRoot)
-    {
-        if (rowRoot == null)
+        var textNode = AtkUiHelper.FindPrimaryRowLabelTextNode(rowRoot);
+        if (textNode == null)
             return string.Empty;
 
-        var best = string.Empty;
-
-        AtkUiHelper.WalkNodes(rowRoot, node =>
-        {
-            if (node->Type != NodeType.Text)
-                return;
-
-            var text = node->GetAsAtkTextNode();
-            if (text == null)
-                return;
-
-            var value = text->NodeText.ToString();
-            if (value.Length <= best.Length)
-                return;
-
-            if (!value.Any(char.IsLetter))
-                return;
-
-            best = value;
-        });
-
-        return best;
+        var text = textNode->GetAsAtkTextNode();
+        return text == null ? string.Empty : text->NodeText.ToString();
     }
 
     private static uint GetRowIconId(AtkResNode* rowRoot)
@@ -115,10 +91,10 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer
         if (renderer->OwnerNode != null)
             return (AtkResNode*)renderer->OwnerNode;
 
-        if (renderer->RowTemplateNodeCount == 1)
+        if (renderer->RowTemplateNodeCountByte == 1)
             return renderer->RowTemplateNode;
 
-        if (renderer->RowTemplateNodeList != null && renderer->RowTemplateNodeCount > 0)
+        if (renderer->RowTemplateNodeList != null && renderer->RowTemplateNodeCountByte > 0)
             return renderer->RowTemplateNodeList[0];
 
         return renderer->RowTemplateNode;

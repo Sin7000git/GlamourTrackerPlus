@@ -1,7 +1,6 @@
 using System.Numerics;
 using Dalamud.Game.NativeWrapper;
 using Dalamud.Interface.Utility;
-using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace GlamourTracker.Services;
@@ -27,16 +26,6 @@ internal static unsafe class PlateSlotNodeLocator
         return lookup;
     }
 
-    public static void ClearCache()
-    {
-        // Layout is fully driven by Configuration / defaults each frame.
-    }
-
-    public static void InvalidateLock()
-    {
-        // Kept for Plugin refresh hooks; no-op with manual layout.
-    }
-
 #if GLAMOUR_DEV
     public static void ResetSlotRerollDefaults(Configuration config)
     {
@@ -59,8 +48,7 @@ internal static unsafe class PlateSlotNodeLocator
         Span<Vector2> screenPositions,
         Span<float> widths,
         Span<float> heights,
-        Span<bool> buttonOnLeft,
-        IPluginLog? log = null)
+        Span<bool> buttonOnLeft)
     {
         if (unit == null || config == null
             || screenPositions.Length < GlamourPlateSlotMap.SlotCount
@@ -76,7 +64,6 @@ internal static unsafe class PlateSlotNodeLocator
             return false;
 
         ApplyPaperdollLayout(origin, addonW, addonH, config, screenPositions, widths, heights, buttonOnLeft);
-        _ = log;
         return true;
     }
 

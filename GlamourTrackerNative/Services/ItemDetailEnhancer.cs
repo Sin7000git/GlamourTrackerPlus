@@ -18,7 +18,6 @@ internal sealed class ItemDetailEnhancer : IDisposable
     private readonly CabinetCatalog cabinetCatalog;
     private readonly Func<Configuration> getConfiguration;
     private readonly GlamourOwnershipIndex ownershipIndex;
-    private readonly System.Action? onTooltipIconsApplied;
 
     private bool isEnhancing;
 
@@ -28,8 +27,7 @@ internal sealed class ItemDetailEnhancer : IDisposable
         IDataManager dataManager,
         CabinetCatalog cabinetCatalog,
         Func<Configuration> getConfiguration,
-        GlamourOwnershipIndex ownershipIndex,
-        System.Action? onTooltipIconsApplied = null)
+        GlamourOwnershipIndex ownershipIndex)
     {
         this.addonLifecycle = addonLifecycle;
         this.gameGui = gameGui;
@@ -37,7 +35,6 @@ internal sealed class ItemDetailEnhancer : IDisposable
         this.cabinetCatalog = cabinetCatalog;
         this.getConfiguration = getConfiguration;
         this.ownershipIndex = ownershipIndex;
-        this.onTooltipIconsApplied = onTooltipIconsApplied;
 
         this.addonLifecycle.RegisterListener(AddonEvent.PostRequestedUpdate, ItemDetailAddonName, OnItemDetailEvent);
         this.addonLifecycle.RegisterListener(AddonEvent.PostRefresh, ItemDetailAddonName, OnItemDetailEvent);
@@ -123,9 +120,6 @@ internal sealed class ItemDetailEnhancer : IDisposable
             var armoireOwned = canArmoire && this.ownershipIndex.IsInArmoire(itemId);
 
             ApplyStorageIcons(addon, canDresser, canArmoire, dresserOwned, armoireOwned);
-
-            if (canDresser || canArmoire)
-                this.onTooltipIconsApplied?.Invoke();
         }
         finally
         {

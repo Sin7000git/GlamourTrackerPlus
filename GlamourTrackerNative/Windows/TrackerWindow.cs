@@ -3,6 +3,7 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Windowing;
 using GlamourTracker.Services;
+using GlamourTracker.Windows.Native;
 using Lumina.Excel.Sheets;
 
 namespace GlamourTracker.Windows;
@@ -95,7 +96,7 @@ internal sealed class TrackerWindow : Window
         var index = this.plugin.OwnershipIndex;
 
         var plateCount = 0;
-        if (this.plugin.Configuration.CharacterCaches.TryGetValue(this.plugin.GetLocalContentId(), out var cache))
+        if (this.plugin.Configuration.CharacterCaches.TryGetValue(Plugin.GetLocalContentId(), out var cache))
             plateCount = cache.GlamourPlates.Count;
         if (plateCount > 0)
             ImGui.Text($"Saved glamour plates: {plateCount}");
@@ -197,7 +198,7 @@ internal sealed class TrackerWindow : Window
                     var name = string.IsNullOrWhiteSpace(item.Name.ExtractText())
                         ? $"Item #{piece.ItemId}"
                         : item.Name.ExtractText();
-                    var status = FormatStorage(piece.Storage);
+                    var status = TrackerNativeHelpers.FormatStorage(piece.Storage);
                     var color = status == "Missing"
                         ? new Vector4(1f, 0.45f, 0.45f, 1f)
                         : new Vector4(0.55f, 1f, 0.65f, 1f);
@@ -332,7 +333,7 @@ internal sealed class TrackerWindow : Window
         var itemSheet = Plugin.DataManager.GetExcelSheet<Item>();
         var plates = GlamourPlateStore.GetPlates(
             this.plugin.Configuration,
-            this.plugin.GetLocalContentId(),
+            Plugin.GetLocalContentId(),
             this.plugin.OwnershipIndex);
         if (plates.Count == 0)
         {
@@ -354,7 +355,7 @@ internal sealed class TrackerWindow : Window
                     var name = string.IsNullOrWhiteSpace(item.Name.ExtractText())
                         ? $"Item #{piece.ItemId}"
                         : item.Name.ExtractText();
-                    ImGui.BulletText($"{name} — {FormatStorage(piece.Storage)}");
+                    ImGui.BulletText($"{name} — {TrackerNativeHelpers.FormatStorage(piece.Storage)}");
                 }
             }
         }
@@ -602,13 +603,5 @@ internal sealed class TrackerWindow : Window
 
         return new Vector4(0.7f, 0.7f, 0.7f, 1f);
     }
-
-    private static string FormatStorage(GlamourStorageLocation storage) => storage switch
-    {
-        GlamourStorageLocation.Dresser => "Dresser",
-        GlamourStorageLocation.Armoire => "Armoire",
-        GlamourStorageLocation.Dresser | GlamourStorageLocation.Armoire => "Dresser + Armoire",
-        _ => "Missing",
-    };
 
 }

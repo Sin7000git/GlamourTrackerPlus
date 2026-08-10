@@ -183,11 +183,16 @@ internal static unsafe class AtkUiHelper
         return component->AtkResNode;
     }
 
-    /// <summary>Icon inset from row left in GC expert delivery list layout.</summary>
+    /// <summary>Icon inset from row left in GC expert delivery list layout (local units).</summary>
     private const float GcRowIconPadLeft = 8f;
-    /// <summary>Fine-tune after list-layout anchor (screen space).</summary>
-    public const float GcMarkerCalibrateX = 550f;
-    public const float GcMarkerCalibrateY = 0f;
+
+    /// <summary>
+    /// Measured X offset (local units) so markers sit just left of the GC supply list item icon.
+    /// Captured against GrandCompanySupplyList expert tab layout.
+    /// </summary>
+    public const float GcExpertListMarkerXOffset = 550f;
+
+    public const float GcExpertListMarkerYOffset = 0f;
 
     private static unsafe AtkResNode* GetRowLabelTextNode(AtkComponentListItemRenderer* renderer, AtkResNode* rowRoot)
     {
@@ -195,30 +200,6 @@ internal static unsafe class AtkUiHelper
             return (AtkResNode*)renderer->ButtonTextNode;
 
         return FindPrimaryRowLabelTextNode(rowRoot);
-    }
-
-    private static unsafe AtkResNode* GetItemIconDrawNode(AtkResNode* rowRoot)
-    {
-        var iconComponent = FindLeftmostItemGraphicNode(rowRoot);
-        if (iconComponent == null)
-            return null;
-
-        AtkResNode* bestImage = null;
-        var bestX = float.MaxValue;
-
-        WalkNodes(iconComponent, node =>
-        {
-            if (node->Type != NodeType.Image)
-                return;
-
-            if (node->X < bestX)
-            {
-                bestX = node->X;
-                bestImage = node;
-            }
-        });
-
-        return bestImage != null ? bestImage : iconComponent;
     }
 
     /// <summary>Primary item name line in a list row (longest alphabetic text).</summary>
@@ -300,7 +281,7 @@ internal static unsafe class AtkUiHelper
         var rowLeft = listX + (renderer->Left * scale);
 
         var x = rowLeft
-            + (GcRowIconPadLeft - gapBeforeIcon - markerWidth + GcMarkerCalibrateX) * scale;
+            + (GcRowIconPadLeft - gapBeforeIcon - markerWidth + GcExpertListMarkerXOffset) * scale;
 
         var y = rowTop + MathF.Max(0f, (itemHeight - markerHeight) * 0.5f * scale);
 
@@ -315,7 +296,7 @@ internal static unsafe class AtkUiHelper
             y = textTopLeft.Value.Y + MathF.Max(0f, (textHeight - markerHeight) * 0.5f * scale);
         }
 
-        y += GcMarkerCalibrateY * scale;
+        y += GcExpertListMarkerYOffset * scale;
 
         return new Vector2(x, y);
     }

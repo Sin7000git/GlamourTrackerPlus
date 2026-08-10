@@ -5,6 +5,7 @@ namespace GlamourTracker.Services;
 /// <summary>
 /// ItemDetail storage icon sheet layout (shared UI atlas) for GC markers / tooltips.
 /// Texture is <c>ui/uld/ItemDetailPutIn</c> (not a QoL Extra sheet id).
+/// U/V/W/H are SD atlas pixels; KamiToolKit HR loads still sample in that SD space.
 /// Tuned 2026-07-27 for ATK SimpleImageNode sampling (no ImGui flip remap).
 /// </summary>
 internal static class StorageIconAtlasDefaults
@@ -12,17 +13,20 @@ internal static class StorageIconAtlasDefaults
     /// <summary>ULD stem for dresser/armoire eligibility icons (no .tex / _hr1).</summary>
     public const string TextureStem = "ui/uld/ItemDetailPutIn";
 
+    /// <summary>SD-space atlas V of the dim row.</summary>
     public const ushort IconV = 0;
+
+    /// <summary>SD-space cell width/height for each storage glyph.</summary>
     public const ushort IconW = 18;
     public const ushort IconH = 18;
 
-    /// <summary>Dresser symbol atlas U (before V offset to bright row).</summary>
+    /// <summary>SD-space dresser glyph U (before bright-row V offset).</summary>
     public const ushort DresserU = 18;
 
-    /// <summary>Armoire symbol atlas U (before V offset to bright row).</summary>
+    /// <summary>SD-space armoire glyph U (before bright-row V offset).</summary>
     public const ushort ArmoireU = 36;
 
-    /// <summary>Shift V down to the bright row of the sheet.</summary>
+    /// <summary>SD-space V shift from dim row to bright row.</summary>
     public const int BrightRowVOffset = 18;
 
     /// <summary>On-screen draw size before display scale.</summary>
@@ -69,18 +73,8 @@ internal static class StorageIconAtlasDefaults
 #endif
 
     /// <summary>Resolves <see cref="TextureStem"/> preferring HR when present.</summary>
-    public static string ResolveTexturePath(IDataManager data)
-    {
-        var hr = TextureStem + "_hr1.tex";
-        if (data.FileExists(hr))
-            return hr;
-
-        var sd = TextureStem + ".tex";
-        if (data.FileExists(sd))
-            return sd;
-
-        return hr;
-    }
+    public static string ResolveTexturePath(IDataManager data) =>
+        GameUldTexturePaths.ResolvePreferHr(data, TextureStem);
 
     public static bool IsItemDetailPutInPath(string? path)
     {

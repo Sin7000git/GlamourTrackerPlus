@@ -9,8 +9,6 @@ namespace GlamourTracker.Services;
 /// </summary>
 internal static class StorageMarkerDrawer
 {
-    public static readonly Vector4 StoredGreen = new(0.31f, 0.86f, 0.35f, 1f);
-
     public static bool TryComputeUv(
         ISharedImmediateTexture? texture,
         StorageUiIconSlice slice,

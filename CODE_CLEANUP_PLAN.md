@@ -207,22 +207,24 @@ Splits are mechanical: move code, do not rewrite behaviour in the same commit.
 
 # Phase 7 — Dead code, duplication, obsolete APIs
 
-**Status:** not started
+**Status:** done (0.1.143) — Debug/Release both warning-free
 
-- [ ] Exclude `EmptyGearSlotAtlas.cs` from Release — ~150 dictionary entries ship with zero Release call sites.
-- [ ] Delete `AtkUiHelper.GetItemIconDrawNode` (private, never called) and `StorageMarkerDrawer.StoredGreen`.
-- [ ] Delete `GetLongestRowText`, which duplicates `AtkUiHelper.FindPrimaryRowLabelTextNode`.
-- [ ] `PlateSlotNodeLocator.ClearCache()` / `InvalidateLock()` are no-ops with live call sites — either restore real caching or remove both, plus the unused `IPluginLog` parameter.
-- [ ] Replace the `GcMarkerCalibrateX = 550f` magic constant with a measured offset.
-- [ ] Migrate the two obsolete `RowTemplateNodeCount` uses (CS0618) to the current ClientStructs API — the only warnings in the build.
-- [ ] Unify HR/SD texture path resolution (duplicated in `StorageIconAtlasDefaults` and `EmptyGearSlotAtlas`) into one resolver.
-- [ ] Name the atlas UV magic numbers and document that they are SD-space.
-- [ ] Move the dev-only tooltip capture path out of `StorageUiIconCache` into a dev partial.
-- [ ] Remove the never-supplied `onTooltipIconsApplied` callback from `ItemDetailEnhancer`.
-- [ ] Delete the empty `FashionReportPanel.RequestOpen()` stub.
-- [ ] Deduplicate formatting helpers shared by native and ImGui UIs (`FormatStorage`, progress/tag colors) into the existing `*Helpers` classes.
-- [ ] Derive the Fashion Report client User-Agent from the assembly version instead of the hardcoded `0.6`.
-- [ ] Pick one of `GetLocalContentId()` / `GetLocalContentIdStatic()`.
+- [x] Exclude `EmptyGearSlotAtlas.cs` from Release — ~150 dictionary entries ship with zero Release call sites.
+- [x] Delete `AtkUiHelper.GetItemIconDrawNode` (private, never called) and `StorageMarkerDrawer.StoredGreen`.
+- [x] Delete `GetLongestRowText`, which duplicates `AtkUiHelper.FindPrimaryRowLabelTextNode`.
+- [x] `PlateSlotNodeLocator.ClearCache()` / `InvalidateLock()` are no-ops with live call sites — either restore real caching or remove both, plus the unused `IPluginLog` parameter.
+- [x] Replace the `GcMarkerCalibrateX = 550f` magic constant with a measured offset.
+- [x] Migrate the two obsolete `RowTemplateNodeCount` uses (CS0618) to the current ClientStructs API — the only warnings in the build.
+- [x] Unify HR/SD texture path resolution (duplicated in `StorageIconAtlasDefaults` and `EmptyGearSlotAtlas`) into one resolver.
+- [x] Name the atlas UV magic numbers and document that they are SD-space.
+- [x] Move the dev-only tooltip capture path out of `StorageUiIconCache` into a dev partial.
+- [x] Remove the never-supplied `onTooltipIconsApplied` callback from `ItemDetailEnhancer`.
+- [x] Delete the empty `FashionReportPanel.RequestOpen()` stub.
+- [x] Deduplicate formatting helpers shared by native and ImGui UIs (`FormatStorage`, progress/tag colors) into the existing `*Helpers` classes.
+- [x] Derive the Fashion Report client User-Agent from the assembly version instead of the hardcoded `0.6`.
+- [x] Pick one of `GetLocalContentId()` / `GetLocalContentIdStatic()`.
+
+**Notes:** `FormatStorage` now shared via `TrackerNativeHelpers` (ImGui TrackerWindow). Fashion Report progress/tag color dedupe left for Phase 8 plain-English pass if still worth it — helpers already cover the native window.
 
 ---
 
@@ -456,5 +458,11 @@ Append one entry per phase. Keep it short and factual.
   prune empty caches + Settings “Forget this character”; theme rename with JSON aliases; storage
   enum docs.
 - Version: 0.1.141
-- In-game: reload once (v12→v13 migrate), Overview counts, GC markers, plate overlay theme,
-  Forget this character vs Clear saved data.
+- In-game: OK; follow-up Settings clear UX in 0.1.142.
+
+[2026-08-10] Phase 7 — dead code / obsolete APIs
+- Done: exclude EmptyGearSlotAtlas (+ DevTools / StorageUiIconCache.Dev) from Release; delete dead
+  helpers/no-ops; RowTemplateNodeCountByte; GameUldTexturePaths; SD-space UV docs; measured GC
+  marker offset rename; User-Agent from assembly; single GetLocalContentId; FormatStorage shared.
+- Version: 0.1.143
+- In-game: smoke GC markers + Fashion Report refresh after reload.

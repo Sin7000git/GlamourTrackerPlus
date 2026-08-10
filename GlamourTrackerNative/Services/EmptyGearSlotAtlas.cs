@@ -221,15 +221,7 @@ internal static class EmptyGearSlotAtlas
 
         // QoL Bar Extra sheets (10_000_000+) → ui/uld/*.tex — NOT GetIconPath.
         if (QolExtraSheets.TryGetValue(iconId, out var stem))
-        {
-            var hr = stem + "_hr1.tex";
-            if (data.FileExists(hr))
-                return hr;
-            var sd = stem + ".tex";
-            if (data.FileExists(sd))
-                return sd;
-            return hr;
-        }
+            return GameUldTexturePaths.ResolvePreferHr(data, stem);
 
         if (iconId >= QolExtraSheetBase)
         {

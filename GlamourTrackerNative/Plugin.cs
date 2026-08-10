@@ -37,6 +37,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IGameInteropProvider GameInterop { get; private set; } = null!;
     [PluginService] internal static IAetheryteList AetheryteList { get; private set; } = null!;
     [PluginService] internal static ITargetManager TargetManager { get; private set; } = null!;
+    [PluginService] internal static ICondition Condition { get; private set; } = null!;
     public Configuration Configuration { get; }
 
 #if GLAMOUR_DEV
@@ -150,7 +151,10 @@ public sealed class Plugin : IDalamudPlugin
             AddonLifecycle,
             GameGui,
             TargetManager,
+            ObjectTable,
+            Condition,
             Framework,
+            ChatGui,
             GameInterop,
             Log);
         pluginCommands = new PluginCommands(CommandManager, ChatGui, this);

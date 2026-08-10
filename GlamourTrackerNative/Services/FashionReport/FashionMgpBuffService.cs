@@ -114,50 +114,74 @@ internal sealed class FashionMgpBuffService
 
     public void TryUseVipCard()
     {
-        _ = framework.RunOnFrameworkThread(UseVipCardCore);
+        _ = framework.RunOnFrameworkThread(() =>
+        {
+            if (!TrySendVipCardUse(out var detail, printErrors: true))
+                PluginFileLog.Warn("fashion.mgp", $"VIP Card use rejected ({detail})");
+        });
     }
 
-    private unsafe void UseVipCardCore()
+    public int GetVipCardCount() => CountVipCards();
+
+    /// <summary>
+    /// Sends a use-item command. Callers must confirm with <see cref="IsVipUseConfirmed"/> —
+    /// UseItem can return success while OccupiedInEvent without consuming a card.
+    /// </summary>
+    public unsafe bool TrySendVipCardUse(out string detail, bool printErrors = false)
     {
+        detail = string.Empty;
         try
         {
             var view = GetView();
             if (!view.CanUse)
             {
-                chatGui.PrintError($"[Glamour Tracker+] {view.ButtonLabel}.");
-                return;
+                detail = view.ButtonLabel;
+                if (printErrors)
+                    chatGui.PrintError($"[Glamour Tracker+] {view.ButtonLabel}.");
+                return false;
             }
 
             var agent = AgentInventoryContext.Instance();
-            if (agent == null)
+            if (agent != null)
             {
-                chatGui.PrintError("[Glamour Tracker+] Could not use the VIP Card right now.");
-                return;
-            }
-
-            var result = agent->UseItem(VipCardItemId);
-            if (result != 0)
-            {
-                // Fallback used by many plugins for consumables.
-                var am = ActionManager.Instance();
-                if (am == null || !am->UseAction(ActionType.Item, VipCardItemId, 0xE000_0000, ushort.MaxValue))
+                var result = agent->UseItem(VipCardItemId);
+                if (result == 0)
                 {
-                    chatGui.PrintError("[Glamour Tracker+] Could not use the Gold Saucer VIP Card.");
-                    PluginFileLog.Warn("fashion.mgp", $"UseItem failed result={result}");
-                    return;
+                    detail = "UseItem sent";
+                    PluginFileLog.Info("fashion.mgp", "VIP Card UseItem sent");
+                    return true;
                 }
+
+                PluginFileLog.Info("fashion.mgp", $"UseItem result={result}; trying ActionManager");
             }
 
-            chatGui.Print("[Glamour Tracker+] Using Gold Saucer VIP Card.");
-            PluginFileLog.Info("fashion.mgp", $"Used VIP Card; remaining≈{Math.Max(0, view.CardCount - 1)}");
+            var am = ActionManager.Instance();
+            if (am != null && am->UseAction(ActionType.Item, VipCardItemId, 0xE000_0000, ushort.MaxValue))
+            {
+                detail = "UseAction sent";
+                PluginFileLog.Info("fashion.mgp", "VIP Card UseAction sent");
+                return true;
+            }
+
+            detail = "UseItem/UseAction rejected";
+            if (printErrors)
+                chatGui.PrintError("[Glamour Tracker+] Could not use the Gold Saucer VIP Card.");
+            return false;
         }
         catch (Exception ex)
         {
+            detail = ex.Message;
             PluginFileLog.Error("fashion.mgp", "VIP Card use failed", ex);
-            chatGui.PrintError("[Glamour Tracker+] Could not use the Gold Saucer VIP Card.");
+            if (printErrors)
+                chatGui.PrintError("[Glamour Tracker+] Could not use the Gold Saucer VIP Card.");
             log.Warning(ex, "VIP Card use failed");
+            return false;
         }
     }
+
+    /// <summary>True when a card was consumed or the +15% MGP buff is active.</summary>
+    public bool IsVipUseConfirmed(int cardCountBefore) =>
+        CountVipCards() < cardCountBefore || HasActiveFashionMgpBonus();
 
     private unsafe int CountVipCards()
     {

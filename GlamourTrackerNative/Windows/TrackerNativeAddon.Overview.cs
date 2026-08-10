@@ -134,25 +134,6 @@ internal sealed partial class TrackerNativeAddon
         leftCol.AttachNode(columns);
         rightCol.AttachNode(columns);
         list.AddNode(columns);
-
-        list.AddNode(new HorizontalLineNode { Size = new Vector2(width, 2f) });
-
-        // Ownership resyncs when the dresser or armoire is opened — no manual refresh control.
-        var buttons = new HorizontalListNode
-        {
-            Size = new Vector2(width, RowH),
-            ItemSpacing = 8f,
-            X = TrackerNativeHelpers.Indent,
-        };
-        buttons.AddNode(new TextButtonNode
-        {
-            Size = new Vector2(140f, RowH),
-            String = "Clear saved data",
-            TextTooltip =
-                "Deletes saved dresser/armoire ownership. Counts stay at zero until you open the dresser or armoire again.",
-            OnClick = () => plugin.ClearSavedOwnership(),
-        });
-        list.AddNode(buttons);
     }
 
     private static string FormatRatio(int have, int total) =>

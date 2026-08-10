@@ -681,5 +681,11 @@
 - Attempt: Migrate→Configuration; gate v11; document v7; Release constants for UV/slot; drop FashionReportFromDailyDuty; CharacterTrackerCache; normalize id lists; prune empties + Forget this character; theme rename + JsonProperty; storage enum docs
 - Files changed: Configuration(+Migrate), CharacterTrackerCache (replaces CharacterGlamourCache), SlotRerollDefaults, Plugin, ownership/plate/fashion progress, PlateSlotNodeLocator, StorageUiIconCache, StorageIconAtlasDefaults, GcExpertDeliveryMarkerSync, PlateEditorOverlay, TrackerWindow, Settings, enums, csproj, plan/notes
 - Backup: .cursor/backups/2026-08-10_165103_pre-phase6
-- Outcome: Debug + Release build clean. Pending in-game v13 migrate + Forget this character smoke-test.
-- Next: reload — Overview still ~71/264; Settings Forget this character; GC icons; plate overlay
+- Outcome: worked (user confirmed); follow-up UI polish in 0.1.142
+- Next: Phase 7
+
+[2026-08-10] Settings clear-data UX (0.1.142)
+- Attempt: move Clear from Overview to Settings; rename Clear all data / Clear character data; side-by-side; confirm Yes/Cancel; drop Release slot-defaults muted line
+- Files changed: TrackerNativeAddon.Settings/Overview/cs, TrackerWindow, Plugin chat copy, csproj
+- Outcome: Debug + Release build clean. Pending brief Settings confirm smoke-test.
+- Next: Phase 7 dead code

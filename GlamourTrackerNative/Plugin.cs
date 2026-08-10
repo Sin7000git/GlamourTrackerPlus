@@ -268,7 +268,7 @@ public sealed class Plugin : IDalamudPlugin
         outfitSetCatalog.Invalidate();
         fashionReport.RebindOwnership();
         ChatGui.Print(
-            "Glamour Tracker+ saved ownership cleared. Open your glamour dresser or armoire to scan again.");
+            "Glamour Tracker+ cleared all saved data. Open your glamour dresser or armoire to scan again.");
         trackerNativeAddon?.RequestFormRebuild();
     }
 
@@ -440,7 +440,7 @@ public sealed class Plugin : IDalamudPlugin
         var contentId = GetLocalContentId();
         if (contentId == 0)
         {
-            ChatGui.PrintError("[Glamour Tracker+] Log in first to forget this character's saved data.");
+            ChatGui.PrintError("[Glamour Tracker+] Log in first to clear this character's saved data.");
             return;
         }
 
@@ -455,7 +455,7 @@ public sealed class Plugin : IDalamudPlugin
         outfitSetCatalog.Invalidate();
         fashionReport.RebindOwnership();
         ChatGui.Print(
-            "Glamour Tracker+ forgot this character's saved data. Open your dresser or armoire to scan again.");
+            "Glamour Tracker+ cleared this character's saved data. Open your dresser or armoire to scan again.");
         trackerNativeAddon?.RequestFormRebuild();
     }
 }

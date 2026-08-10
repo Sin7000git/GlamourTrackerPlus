@@ -15,6 +15,7 @@ internal sealed class TrackerWindow : Window
     private bool showMissingOnly;
     private int localStyleVarsPushed;
     private int localStyleColorsPushed;
+    private int savedDataConfirm; // 0 none, 1 character, 2 all
 
     public TrackerWindow(Plugin plugin)
         : base("Glamour Tracker+###GlamourTrackerNativeMain", ImGuiWindowFlags.NoScrollbar)
@@ -108,8 +109,44 @@ internal sealed class TrackerWindow : Window
         ImGui.Text($"Armoire pieces: {index.ArmoireCount}");
         ImGui.TextDisabled($"Last refresh: {index.LastRefresh.ToLocalTime():T}");
 
-        if (ImGui.Button("Clear saved data"))
-            this.plugin.ClearSavedOwnership();
+        ImGui.Separator();
+        ImGui.TextDisabled(
+            "Clear character data removes only the character you are logged in as. Clear all data removes every character.");
+
+        if (this.savedDataConfirm == 1)
+        {
+            ImGui.TextWrapped("Clear saved data for this character only?");
+            if (ImGui.Button("Yes, clear character"))
+            {
+                this.savedDataConfirm = 0;
+                this.plugin.ForgetCurrentCharacterData();
+            }
+
+            ImGui.SameLine();
+            if (ImGui.Button("Cancel##clearChar"))
+                this.savedDataConfirm = 0;
+        }
+        else if (this.savedDataConfirm == 2)
+        {
+            ImGui.TextWrapped("Clear saved data for every character on this account? This cannot be undone.");
+            if (ImGui.Button("Yes, clear all"))
+            {
+                this.savedDataConfirm = 0;
+                this.plugin.ClearSavedOwnership();
+            }
+
+            ImGui.SameLine();
+            if (ImGui.Button("Cancel##clearAll"))
+                this.savedDataConfirm = 0;
+        }
+        else
+        {
+            if (ImGui.Button("Clear character data"))
+                this.savedDataConfirm = 1;
+            ImGui.SameLine();
+            if (ImGui.Button("Clear all data"))
+                this.savedDataConfirm = 2;
+        }
     }
 
     private void DrawOutfitSets()

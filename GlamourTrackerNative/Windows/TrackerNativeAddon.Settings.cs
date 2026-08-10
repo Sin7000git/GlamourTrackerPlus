@@ -65,24 +65,119 @@ internal sealed partial class TrackerNativeAddon
         list.AddNode(MakeMuted(
             "Fine-tune positions via /glamplus imgui → Settings → Slot button positions.",
             width));
-#else
-        list.AddNode(MakeMuted(
-            "Slot button positions use built-in defaults.",
-            width));
 #endif
 
         list.AddNode(MakeSection("Saved data"));
-        list.AddNode(MakeMuted(
-            "Clear everything removes all characters. Forget this character keeps your other alts.",
-            width));
-        list.AddNode(new TextButtonNode
-        {
-            Size = new Vector2(220f, RowH),
-            String = "Forget this character",
-            TextTooltip =
-                "Deletes dresser, armoire, plate, and Fashion Report progress saved for the character you are logged in as. Other characters are unchanged.",
-            OnClick = () => plugin.ForgetCurrentCharacterData(),
-        });
+        BuildSavedDataControls(list, width);
     }
 
+    private void BuildSavedDataControls(VerticalListNode list, float width)
+    {
+        if (savedDataConfirm == SavedDataConfirmKind.Character)
+        {
+            list.AddNode(MakeMuted(
+                "Clear saved dresser, armoire, plate, and Fashion Report data for this character only?",
+                width));
+            list.AddNode(MakeConfirmCancelRow(
+                confirmLabel: "Yes, clear character",
+                onConfirm: () =>
+                {
+                    savedDataConfirm = SavedDataConfirmKind.None;
+                    plugin.ForgetCurrentCharacterData();
+                    ScheduleRebuildForm();
+                },
+                onCancel: () =>
+                {
+                    savedDataConfirm = SavedDataConfirmKind.None;
+                    ScheduleRebuildForm();
+                },
+                width));
+            return;
+        }
+
+        if (savedDataConfirm == SavedDataConfirmKind.All)
+        {
+            list.AddNode(MakeMuted(
+                "Clear saved data for every character on this account? This cannot be undone.",
+                width));
+            list.AddNode(MakeConfirmCancelRow(
+                confirmLabel: "Yes, clear all",
+                onConfirm: () =>
+                {
+                    savedDataConfirm = SavedDataConfirmKind.None;
+                    plugin.ClearSavedOwnership();
+                    ScheduleRebuildForm();
+                },
+                onCancel: () =>
+                {
+                    savedDataConfirm = SavedDataConfirmKind.None;
+                    ScheduleRebuildForm();
+                },
+                width));
+            return;
+        }
+
+        list.AddNode(MakeMuted(
+            "Clear character data removes only the character you are logged in as. Clear all data removes every character.",
+            width));
+
+        var buttons = new HorizontalListNode
+        {
+            Size = new Vector2(width, RowH),
+            ItemSpacing = 8f,
+            X = TrackerNativeHelpers.Indent,
+        };
+        buttons.AddNode(new TextButtonNode
+        {
+            Size = new Vector2(170f, RowH),
+            String = "Clear character data",
+            TextTooltip =
+                "Deletes dresser, armoire, plate, and Fashion Report progress for the character you are logged in as. Other characters are unchanged.",
+            OnClick = () =>
+            {
+                savedDataConfirm = SavedDataConfirmKind.Character;
+                ScheduleRebuildForm();
+            },
+        });
+        buttons.AddNode(new TextButtonNode
+        {
+            Size = new Vector2(140f, RowH),
+            String = "Clear all data",
+            TextTooltip =
+                "Deletes saved dresser/armoire ownership and Fashion Report progress for every character. Counts stay at zero until you open the dresser or armoire again.",
+            OnClick = () =>
+            {
+                savedDataConfirm = SavedDataConfirmKind.All;
+                ScheduleRebuildForm();
+            },
+        });
+        list.AddNode(buttons);
+    }
+
+    private static HorizontalListNode MakeConfirmCancelRow(
+        string confirmLabel,
+        Action onConfirm,
+        Action onCancel,
+        float width)
+    {
+        var row = new HorizontalListNode
+        {
+            Size = new Vector2(width, RowH),
+            ItemSpacing = 8f,
+            X = TrackerNativeHelpers.Indent,
+        };
+        row.AddNode(new TextButtonNode
+        {
+            Size = new Vector2(180f, RowH),
+            String = confirmLabel,
+            OnClick = onConfirm,
+        });
+        row.AddNode(new TextButtonNode
+        {
+            Size = new Vector2(100f, RowH),
+            String = "Cancel",
+            OnClick = onCancel,
+        });
+        return row;
+    }
 }

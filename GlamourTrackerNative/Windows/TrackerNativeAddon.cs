@@ -75,6 +75,14 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
     private int lastOverviewOwnershipRevision = int.MinValue;
     private string lastOverviewWeek = "\0";
     private int lastOverviewProgressPacked = int.MinValue;
+    private SavedDataConfirmKind savedDataConfirm = SavedDataConfirmKind.None;
+
+    private enum SavedDataConfirmKind : byte
+    {
+        None = 0,
+        Character = 1,
+        All = 2,
+    }
 
     private Vector2 bodyOrigin;
     private Vector2 bodySize;
@@ -248,6 +256,7 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
         selectedTab = tab;
         selectedBrowserKey = string.Empty;
         lastBrowserDetailKey = string.Empty;
+        savedDataConfirm = SavedDataConfirmKind.None;
         expandedPieceKeys.Clear();
         ApplyLayout();
         RefreshActiveTab(force: true);
@@ -375,7 +384,7 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
             TabOverview =>
                 BuildOverviewSignature(index),
             TabSettings =>
-                $"st|{c.ShowPlateEditorOverlay}",
+                $"st|{c.ShowPlateEditorOverlay}|{(int)savedDataConfirm}",
             _ => selectedTab,
         };
     }

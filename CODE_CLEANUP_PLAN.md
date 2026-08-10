@@ -182,7 +182,7 @@ Splits are mechanical: move code, do not rewrite behaviour in the same commit.
 - [x] `Configuration.Save()` has no coalescing — add a dirty flag with a short debounce.
 - [x] Drop the duplicate `RebindOwnership()` call in `Plugin.RefreshAll`.
 
-**Notes:** Fashion Report item icons already used the one-time name index from Phase 3/4; dye/territory/duty indexes were the remaining full-sheet scans. Plate overlay visibility is cached per ImGui draw (not AddonLifecycle). Inventory scan uses a 2s TTL (force on week refresh).
+**Notes:** Fashion Report item icons already used the one-time name index from Phase 3/4; dye/territory/duty indexes were the remaining full-sheet scans. Plate overlay visibility is cached per ImGui draw (not AddonLifecycle). Inventory scan uses a 2s TTL (force on week refresh). The “one ImGui window for all slot rerolls” item was reverted in 0.1.140 — a single bounding-box window blocked clicks over the character preview and discard dialogs; keep one small window per slot.
 
 ---
 

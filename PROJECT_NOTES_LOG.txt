@@ -666,5 +666,13 @@
 - Attempt: gate Overview/browser rebuilds; cache outfit rows; scratch SplitPieces; throttle FR chrome; GC Tick + cheap dirty; one plate overlay window; indexes (dye/territory/duty); inventory TTL; plate compare-before-save; config save debounce; drop duplicate RebindOwnership
 - Files changed: TrackerNativeAddon (+ Overview/OutfitBrowser/AcquireLoading), TrackerNativeHelpers, OutfitSetCatalog, FashionReportNativeAddon (+ HintList), GcExpertDelivery*, PlateEditorOverlay, PlateSlotNodeLocator, FashionInventoryIndex, DyeIconIndex (new), OutfitDutyTravel, FashionVendorTravel, GlamourPlateStore, Plugin, csproj, plan/notes
 - Backup: .cursor/backups/2026-08-10_161119_pre-phase5
-- Outcome: Debug + Release build clean (same two RowTemplateNodeCount warnings). Pending in-game smoke-test.
-- Next: reload 0.1.139 — Overview idle, Outfit sets filters, Fashion Report VIP/chrome, GC markers, plate slot rerolls
+- Outcome: partial — user confirmed most things OK; plate slot rerolls regressed (below)
+- Next: fix plate overlay click-through
+
+[2026-08-10] Plate slot reroll ImGui blocked character/dialog clicks (0.1.140)
+- Symptom: with randomize buttons on, a see-through wall over the dresser blocked rotating the character and Discard OK/Cancel; worked again after disabling slot buttons.
+- Cause: Phase 5 merged 12 slot windows into one bounding-box window spanning left→right columns; ImGui captured all clicks in the empty middle.
+- Fix: restore one small ImGui window per slot (keep per-draw addon visibility cache). Plan Phase 5 note updated.
+- Files changed: PlateEditorOverlay.cs, csproj, plan/notes
+- Outcome: pending user reload smoke-test
+- Next: rotate character + Discard dialog with slot buttons enabled

@@ -179,9 +179,27 @@ internal sealed class FashionMgpBuffService
         }
     }
 
-    /// <summary>True when a card was consumed or the +15% MGP buff is active.</summary>
+    /// <summary>True when a card was consumed or any VIP/Jackpot MGP status is present.</summary>
     public bool IsVipUseConfirmed(int cardCountBefore) =>
-        CountVipCards() < cardCountBefore || HasActiveFashionMgpBonus();
+        CountVipCards() < cardCountBefore
+        || HasActiveFashionMgpBonus()
+        || HasAnyMgpBonusStatus();
+
+    /// <summary>Raw status check — buff can appear before Param/tier heuristics settle.</summary>
+    private bool HasAnyMgpBonusStatus()
+    {
+        var player = objectTable.LocalPlayer;
+        if (player == null)
+            return false;
+
+        foreach (var status in player.StatusList)
+        {
+            if (status.StatusId == VipCardStatusId || status.StatusId == JackpotStatusId)
+                return true;
+        }
+
+        return false;
+    }
 
     private unsafe int CountVipCards()
     {

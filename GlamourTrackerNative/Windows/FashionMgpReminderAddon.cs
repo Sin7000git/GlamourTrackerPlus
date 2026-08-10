@@ -13,8 +13,8 @@ internal sealed class FashionMgpReminderAddon : NativeAddon
 {
     private readonly Action onContinue;
     private readonly Action onCancel;
+    private readonly Action onUseVip;
     private readonly Func<FashionMgpBuffView> getVipView;
-    private readonly Action useVipCard;
 
     private IconImageNode? vipIconNode;
     private TextButtonNode? vipButton;
@@ -26,13 +26,13 @@ internal sealed class FashionMgpReminderAddon : NativeAddon
     public FashionMgpReminderAddon(
         Action onContinue,
         Action onCancel,
-        Func<FashionMgpBuffView> getVipView,
-        Action useVipCard)
+        Action onUseVip,
+        Func<FashionMgpBuffView> getVipView)
     {
         this.onContinue = onContinue;
         this.onCancel = onCancel;
+        this.onUseVip = onUseVip;
         this.getVipView = getVipView;
-        this.useVipCard = useVipCard;
     }
 
     protected override unsafe void OnSetup(AtkUnitBase* addon, Span<AtkValue> atkValueSpan)
@@ -69,53 +69,56 @@ internal sealed class FashionMgpReminderAddon : NativeAddon
         };
         line2.AttachNode(this);
 
+        // Compact left-packed row — VIP button sized to its label, not stretched.
         const float rowY = 56f;
         const float btnH = 28f;
         const float gap = 8f;
-        const float continueW = 110f;
-        const float cancelW = 100f;
+        const float continueW = 100f;
+        const float cancelW = 90f;
         const float iconSize = 28f;
+        const float vipBtnW = 148f;
+
+        var x = origin.X;
+        var y = origin.Y + rowY;
 
         var continueBtn = new TextButtonNode
         {
-            Position = new Vector2(origin.X, origin.Y + rowY),
+            Position = new Vector2(x, y),
             Size = new Vector2(continueW, btnH),
             String = "Continue",
-            OnClick = () => Resolve(continueJudging: true),
+            OnClick = () => Resolve(FashionMgpReminderChoice.Continue),
         };
         continueBtn.AttachNode(this);
+        x += continueW + gap;
 
-        var vipX = origin.X + continueW + gap;
         vipIconNode = new IconImageNode
         {
-            Position = new Vector2(vipX, origin.Y + rowY),
+            Position = new Vector2(x, y),
             Size = new Vector2(iconSize, iconSize),
             TextureSize = new Vector2(iconSize, iconSize),
             ImageNodeFlags = ImageNodeFlags.AutoFit,
             IconId = 26173,
         };
         vipIconNode.AttachNode(this);
-
-        var cancelX = origin.X + width - cancelW;
-        var vipBtnX = vipX + iconSize + 4f;
-        var vipBtnW = MathF.Max(140f, cancelX - gap - vipBtnX);
+        x += iconSize + 4f;
 
         vipButton = new TextButtonNode
         {
-            Position = new Vector2(vipBtnX, origin.Y + rowY),
+            Position = new Vector2(x, y),
             Size = new Vector2(vipBtnW, btnH),
             String = "Use VIP Card",
-            OnClick = () => useVipCard(),
-            TextTooltip = "Use a Gold Saucer VIP Card for +15% MGP for 120 minutes.",
+            OnClick = () => Resolve(FashionMgpReminderChoice.UseVip),
+            TextTooltip = "Closes Masked Rose, then uses a Gold Saucer VIP Card (+15% MGP).",
         };
         vipButton.AttachNode(this);
+        x += vipBtnW + gap;
 
         var cancelBtn = new TextButtonNode
         {
-            Position = new Vector2(cancelX, origin.Y + rowY),
+            Position = new Vector2(x, y),
             Size = new Vector2(cancelW, btnH),
             String = "Cancel",
-            OnClick = () => Resolve(continueJudging: false),
+            OnClick = () => Resolve(FashionMgpReminderChoice.Cancel),
         };
         cancelBtn.AttachNode(this);
 
@@ -133,7 +136,7 @@ internal sealed class FashionMgpReminderAddon : NativeAddon
     {
         // Window X / Esc — treat as Cancel so SelectString is not left blocked.
         if (!resolved)
-            Resolve(continueJudging: false);
+            Resolve(FashionMgpReminderChoice.Cancel);
         base.OnHide(addon);
     }
 
@@ -161,15 +164,14 @@ internal sealed class FashionMgpReminderAddon : NativeAddon
         if (vipButton == null)
             return;
 
-        // Compact label for this dialog; FR window keeps the longer wording.
         var label = view.State switch
         {
             FashionMgpBuffState.VipActive =>
-                view.CardCount > 0 ? $"VIP Card running · ×{view.CardCount}" : "VIP Card running",
+                view.CardCount > 0 ? $"VIP running ×{view.CardCount}" : "VIP running",
             FashionMgpBuffState.JackpotIiiActive =>
-                view.CardCount > 0 ? $"Jackpot III · ×{view.CardCount}" : "Jackpot III applied",
+                view.CardCount > 0 ? $"Jackpot III ×{view.CardCount}" : "Jackpot III",
             FashionMgpBuffState.OutOfCards => "Out of VIP Cards",
-            _ => view.CardCount > 0 ? $"Use VIP Card · ×{view.CardCount}" : "Use VIP Card",
+            _ => view.CardCount > 0 ? $"Use VIP Card ×{view.CardCount}" : "Use VIP Card",
         };
 
         if (label != lastVipLabel)
@@ -178,7 +180,9 @@ internal sealed class FashionMgpReminderAddon : NativeAddon
             lastVipLabel = label;
         }
 
-        vipButton.TextTooltip = view.Tooltip;
+        vipButton.TextTooltip = view.CanUse
+            ? "Closes Masked Rose, then uses a Gold Saucer VIP Card (+15% MGP)."
+            : view.Tooltip;
         if (view.CanUse != lastVipEnabled || vipButton.IsEnabled != view.CanUse)
         {
             vipButton.IsEnabled = view.CanUse;
@@ -186,15 +190,30 @@ internal sealed class FashionMgpReminderAddon : NativeAddon
         }
     }
 
-    private void Resolve(bool continueJudging)
+    private void Resolve(FashionMgpReminderChoice choice)
     {
         if (resolved)
             return;
         resolved = true;
         Close();
-        if (continueJudging)
-            onContinue();
-        else
-            onCancel();
+        switch (choice)
+        {
+            case FashionMgpReminderChoice.Continue:
+                onContinue();
+                break;
+            case FashionMgpReminderChoice.UseVip:
+                onUseVip();
+                break;
+            default:
+                onCancel();
+                break;
+        }
+    }
+
+    private enum FashionMgpReminderChoice : byte
+    {
+        Cancel,
+        Continue,
+        UseVip,
     }
 }

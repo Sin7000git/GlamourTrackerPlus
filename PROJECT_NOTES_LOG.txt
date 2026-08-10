@@ -718,5 +718,10 @@
 
 [2026-08-10] MGP reminder Use VIP Card button (0.1.148)
 - Attempt: icon + Use VIP Card · ×N on confirm dialog (same GetView/TryUseVipCard as FR chrome); widen window
+- Outcome: button too wide; VIP use fails while talking to Masked Rose
+- Next: close dialogue then use (0.1.149)
+
+[2026-08-10] VIP Card: dismiss Masked Rose then use (0.1.149)
+- Attempt: Use VIP closes SelectString/Talk, waits until gone, then TryUseVipCard; compact left-packed buttons
 - Outcome: pending reload
 - Next: Phase 10 after verify

@@ -71,12 +71,12 @@ internal sealed unsafe class FashionReportMgpReminderService : IDisposable
         confirmAddon = new FashionMgpReminderAddon(
             OnContinue,
             OnCancel,
-            () => mgpBuff.GetView(),
-            () => mgpBuff.TryUseVipCard())
+            OnUseVip,
+            () => mgpBuff.GetView())
         {
             InternalName = "GlamMgpRemind",
             Title = "Fashion Report",
-            Size = new System.Numerics.Vector2(560f, 160f),
+            Size = new System.Numerics.Vector2(480f, 160f),
             RememberClosePosition = false,
         };
     }
@@ -217,7 +217,7 @@ internal sealed unsafe class FashionReportMgpReminderService : IDisposable
         if (index < 0)
             return;
 
-        _ = framework.RunOnFrameworkThread(() => FireSelectString(index));
+        _ = framework.RunOnFrameworkThread(() => FireSelectString(index, warnIfMissing: true));
     }
 
     private void OnCancel()
@@ -225,17 +225,58 @@ internal sealed unsafe class FashionReportMgpReminderService : IDisposable
         pendingOptionIndex = -1;
         promptOpen = false;
         PluginFileLog.Info("fashion.mgp", "Player cancelled Fashion Report judging (no MGP buff)");
-        _ = framework.RunOnFrameworkThread(() => FireSelectString(-1));
+        _ = framework.RunOnFrameworkThread(DismissMaskedRoseDialogue);
     }
 
-    private void FireSelectString(int index)
+    /// <summary>
+    /// VIP Card can't be used while talking to Masked Rose — dismiss the menu first, then use.
+    /// </summary>
+    private void OnUseVip()
+    {
+        pendingOptionIndex = -1;
+        promptOpen = false;
+        PluginFileLog.Info("fashion.mgp", "Closing Masked Rose to use VIP Card");
+        _ = framework.RunOnFrameworkThread(() =>
+        {
+            DismissMaskedRoseDialogue();
+            ScheduleVipUseAfterDialogue(attemptsLeft: 45);
+        });
+    }
+
+    private void ScheduleVipUseAfterDialogue(int attemptsLeft)
+    {
+        if (!IsDialogueAddonVisible("SelectString") && !IsDialogueAddonVisible("Talk"))
+        {
+            mgpBuff.TryUseVipCard();
+            return;
+        }
+
+        if (attemptsLeft <= 0)
+        {
+            PluginFileLog.Warn("fashion.mgp", "Dialogue still open; trying VIP Card anyway");
+            mgpBuff.TryUseVipCard();
+            return;
+        }
+
+        _ = framework.RunOnTick(() => ScheduleVipUseAfterDialogue(attemptsLeft - 1));
+    }
+
+    private void DismissMaskedRoseDialogue()
+    {
+        // -1 cancels SelectString without picking a line (no allowance spend).
+        FireSelectString(-1, warnIfMissing: false);
+        CloseAddonIfVisible("Talk");
+    }
+
+    private void FireSelectString(int index, bool warnIfMissing = true)
     {
         try
         {
             var addon = (AtkUnitBase*)gameGui.GetAddonByName("SelectString", 1).Address;
             if (addon == null || !addon->IsVisible)
             {
-                PluginFileLog.Warn("fashion.mgp", "SelectString gone; cannot finish deferred choice");
+                if (warnIfMissing)
+                    PluginFileLog.Warn("fashion.mgp", "SelectString gone; cannot finish deferred choice");
                 return;
             }
 
@@ -250,6 +291,27 @@ internal sealed unsafe class FashionReportMgpReminderService : IDisposable
             allowNextSelect = false;
             PluginFileLog.Error("fashion.mgp", $"Deferred SelectString fire failed (index={index})", ex);
         }
+    }
+
+    private void CloseAddonIfVisible(string name)
+    {
+        try
+        {
+            var addon = (AtkUnitBase*)gameGui.GetAddonByName(name, 1).Address;
+            if (addon == null || !addon->IsVisible)
+                return;
+            addon->FireCallback(0, null, true);
+        }
+        catch (Exception ex)
+        {
+            log.Debug(ex, $"Could not close {name} before VIP Card use.");
+        }
+    }
+
+    private bool IsDialogueAddonVisible(string name)
+    {
+        var addon = gameGui.GetAddonByName(name, 1);
+        return !addon.IsNull && addon.IsVisible;
     }
 
     private bool IsMaskedRoseTargeted()

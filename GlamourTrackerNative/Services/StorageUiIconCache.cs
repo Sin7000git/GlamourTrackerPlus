@@ -114,11 +114,15 @@ internal sealed unsafe class StorageUiIconCache
             dirty = true;
         }
 
+#if GLAMOUR_DEV
         if (firstTime)
         {
             StorageIconAtlasDefaults.ApplyUvDefaults(config);
             dirty = true;
         }
+#else
+        _ = firstTime;
+#endif
 
         if (!IsReady)
             return;
@@ -226,6 +230,7 @@ internal sealed unsafe class StorageUiIconCache
         if (string.IsNullOrWhiteSpace(path))
             return default;
 
+#if GLAMOUR_DEV
         var scale = isDresser ? config.DresserIconDisplayScale : config.ArmoireIconDisplayScale;
         if (scale <= 0f)
             scale = 1f;
@@ -252,6 +257,20 @@ internal sealed unsafe class StorageUiIconCache
             DisplayWidth = MathF.Max(8f, baseW * scale),
             DisplayHeight = MathF.Max(8f, baseH * scale),
         };
+#else
+        var scale = StorageIconAtlasDefaults.DisplayScale;
+        var baseSize = StorageIconAtlasDefaults.DisplaySize;
+        return new StorageUiIconSlice
+        {
+            Path = path,
+            U = isDresser ? StorageIconAtlasDefaults.DresserU : StorageIconAtlasDefaults.ArmoireU,
+            V = ApplyOffset(StorageIconAtlasDefaults.IconV, StorageIconAtlasDefaults.BrightRowVOffset),
+            Width = StorageIconAtlasDefaults.IconW,
+            Height = StorageIconAtlasDefaults.IconH,
+            DisplayWidth = MathF.Max(8f, baseSize * scale),
+            DisplayHeight = MathF.Max(8f, baseSize * scale),
+        };
+#endif
     }
 
 #if GLAMOUR_DEV

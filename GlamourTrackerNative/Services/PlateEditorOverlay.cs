@@ -120,10 +120,10 @@ internal sealed class PlateEditorOverlay
 
         var styleVars = 0;
         var styleColors = 0;
-        if (config.UseLocalUiStyle)
+        if (config.UsePlateOverlayLocalUiStyle)
         {
-            config.LocalUiTheme ??= PluginLocalUiTheme.CreateDefault();
-            (styleVars, styleColors) = config.LocalUiTheme.Push();
+            config.PlateOverlayLocalUiTheme ??= PluginLocalUiTheme.CreateDefault();
+            (styleVars, styleColors) = config.PlateOverlayLocalUiTheme.Push();
         }
 
         try
@@ -210,9 +210,15 @@ internal sealed class PlateEditorOverlay
         // FA Sync ink fills most of the em-box; ~55% of the button leaves visible padding.
         var iconPx = buttonSide * 0.55f;
 
+#if GLAMOUR_DEV
         var gap = Math.Clamp(config.SlotRerollGap, 0f, 40f) * (plateH / 700f);
         var nudgeX = config.SlotRerollNudgeX * (plateH / 700f);
         var nudgeY = config.SlotRerollNudgeY * (plateH / 700f);
+#else
+        var gap = Math.Clamp(SlotRerollDefaults.Gap, 0f, 40f) * (plateH / 700f);
+        var nudgeX = SlotRerollDefaults.NudgeX * (plateH / 700f);
+        var nudgeY = SlotRerollDefaults.NudgeY * (plateH / 700f);
+#endif
 
         // One window per slot (not one bounding-box window): a single rect spanning left/right
         // columns eats clicks over the character preview and discard dialogs.
@@ -391,6 +397,7 @@ internal sealed class PlateEditorOverlay
         ImGui.EndCombo();
     }
 
+#if GLAMOUR_DEV
     /// <summary>Shared sliders for manual slot-button placement. Returns true if anything changed.</summary>
     internal static bool DrawSlotRerollPlacementControls(Configuration config, string idSuffix)
     {
@@ -477,6 +484,7 @@ internal sealed class PlateEditorOverlay
 
         return changed;
     }
+#endif
 
     private void StartRandomize()
     {

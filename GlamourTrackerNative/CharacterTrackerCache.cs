@@ -3,8 +3,11 @@ using Newtonsoft.Json;
 
 namespace GlamourTracker;
 
+/// <summary>
+/// Per-character persisted state: dresser/armoire ownership, glamour plates, and Fashion Report progress.
+/// </summary>
 [Serializable]
-public sealed class CharacterGlamourCache
+public sealed class CharacterTrackerCache
 {
     public List<uint> DresserBaseIds { get; set; } = [];
 
@@ -40,8 +43,16 @@ public sealed class CharacterGlamourCache
     /// <summary>True after talking to Masked Rose this judging window.</summary>
     public bool FashionReportSynced { get; set; }
 
-    /// <summary>Legacy field (DailyDuty import removed); kept for config compat.</summary>
-    public bool FashionReportFromDailyDuty { get; set; }
-
     public DateTime FashionReportNextResetUtc { get; set; }
+
+    public bool IsEmpty() =>
+        DresserBaseIds.Count == 0
+        && DresserOutfitPieceIds.Count == 0
+        && ArmoireBaseIds.Count == 0
+        && GlamourPlates.Count == 0
+        && DresserSetPresenceRowIds.Count == 0
+        && DresserCompleteSetRowIds.Count == 0
+        && DresserSlotsUsed <= 0
+        && !FashionReportSynced
+        && FashionReportHighestScore <= 0;
 }

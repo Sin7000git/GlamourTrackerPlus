@@ -7,7 +7,7 @@ using FFXIVClientStructs.FFXIV.Component.GUI;
 namespace GlamourTracker.Services;
 
 /// <summary>
-/// Places the 12 plate-editor slot anchors from manual config (fractions of the plate window).
+/// Places the 12 plate-editor slot anchors from layout fractions of the plate window.
 /// Automatic ATK node discovery was unreliable across HUD scales.
 /// </summary>
 internal static unsafe class PlateSlotNodeLocator
@@ -29,7 +29,7 @@ internal static unsafe class PlateSlotNodeLocator
 
     public static void ClearCache()
     {
-        // Layout is fully driven by Configuration each frame.
+        // Layout is fully driven by Configuration / defaults each frame.
     }
 
     public static void InvalidateLock()
@@ -37,18 +37,20 @@ internal static unsafe class PlateSlotNodeLocator
         // Kept for Plugin refresh hooks; no-op with manual layout.
     }
 
+#if GLAMOUR_DEV
     public static void ResetSlotRerollDefaults(Configuration config)
     {
-        config.SlotRerollFirstRowY = 0.17f;
-        config.SlotRerollLastRowY = 0.591f;
-        config.SlotRerollLeftColumnX = 0.137f;
-        config.SlotRerollRightColumnX = 0.867f;
-        config.SlotRerollIconSize = 0.02f;
-        config.SlotRerollTowardCenter = true;
-        config.SlotRerollNudgeX = 0f;
-        config.SlotRerollNudgeY = 0f;
-        config.SlotRerollGap = 0f;
+        config.SlotRerollFirstRowY = SlotRerollDefaults.FirstRowY;
+        config.SlotRerollLastRowY = SlotRerollDefaults.LastRowY;
+        config.SlotRerollLeftColumnX = SlotRerollDefaults.LeftColumnX;
+        config.SlotRerollRightColumnX = SlotRerollDefaults.RightColumnX;
+        config.SlotRerollIconSize = SlotRerollDefaults.IconSize;
+        config.SlotRerollTowardCenter = SlotRerollDefaults.TowardCenter;
+        config.SlotRerollNudgeX = SlotRerollDefaults.NudgeX;
+        config.SlotRerollNudgeY = SlotRerollDefaults.NudgeY;
+        config.SlotRerollGap = SlotRerollDefaults.Gap;
     }
+#endif
 
     public static bool TryGetSlotScreenRects(
         AtkUnitBase* unit,
@@ -88,11 +90,22 @@ internal static unsafe class PlateSlotNodeLocator
         Span<float> heights,
         Span<bool> buttonOnLeft)
     {
+#if GLAMOUR_DEV
         var firstFrac = Math.Clamp(config.SlotRerollFirstRowY, 0.02f, 0.90f);
         var lastFrac = Math.Clamp(config.SlotRerollLastRowY, firstFrac + 0.05f, 0.98f);
         var leftFrac = Math.Clamp(config.SlotRerollLeftColumnX, 0.01f, 0.45f);
         var rightFrac = Math.Clamp(config.SlotRerollRightColumnX, 0.55f, 0.99f);
         var iconFrac = Math.Clamp(config.SlotRerollIconSize, 0.02f, 0.15f);
+        var towardCenter = config.SlotRerollTowardCenter;
+#else
+        _ = config;
+        var firstFrac = SlotRerollDefaults.FirstRowY;
+        var lastFrac = SlotRerollDefaults.LastRowY;
+        var leftFrac = SlotRerollDefaults.LeftColumnX;
+        var rightFrac = SlotRerollDefaults.RightColumnX;
+        var iconFrac = SlotRerollDefaults.IconSize;
+        var towardCenter = SlotRerollDefaults.TowardCenter;
+#endif
 
         var icon = Math.Max(8f, addonH * iconFrac);
         var firstY = origin.Y + addonH * firstFrac;
@@ -102,8 +115,8 @@ internal static unsafe class PlateSlotNodeLocator
         var rightX = origin.X + addonW * rightFrac - icon;
 
         // buttonOnLeft true = draw to the left of the slot.
-        var leftButtonsOnLeft = !config.SlotRerollTowardCenter;
-        var rightButtonsOnLeft = config.SlotRerollTowardCenter;
+        var leftButtonsOnLeft = !towardCenter;
+        var rightButtonsOnLeft = towardCenter;
 
         for (var row = 0; row < 6; row++)
         {

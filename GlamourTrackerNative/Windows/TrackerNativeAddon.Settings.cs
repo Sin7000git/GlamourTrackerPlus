@@ -1,3 +1,4 @@
+using System.Numerics;
 using GlamourTracker.Windows.Native;
 using KamiToolKit.Nodes;
 
@@ -69,6 +70,19 @@ internal sealed partial class TrackerNativeAddon
             "Slot button positions use built-in defaults.",
             width));
 #endif
+
+        list.AddNode(MakeSection("Saved data"));
+        list.AddNode(MakeMuted(
+            "Clear everything removes all characters. Forget this character keeps your other alts.",
+            width));
+        list.AddNode(new TextButtonNode
+        {
+            Size = new Vector2(220f, RowH),
+            String = "Forget this character",
+            TextTooltip =
+                "Deletes dresser, armoire, plate, and Fashion Report progress saved for the character you are logged in as. Other characters are unchanged.",
+            OnClick = () => plugin.ForgetCurrentCharacterData(),
+        });
     }
 
 }

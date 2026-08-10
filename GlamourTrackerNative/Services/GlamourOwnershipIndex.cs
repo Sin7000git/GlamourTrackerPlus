@@ -508,6 +508,8 @@ internal sealed class GlamourOwnershipIndex
         if (!config.CharacterCaches.TryGetValue(contentId, out var cache))
             return;
 
+        Configuration.NormalizeCharacterIdLists(cache);
+
         this.snapshot.Restore(
             cache.DresserBaseIds,
             cache.DresserOutfitPieceIds,
@@ -532,7 +534,7 @@ internal sealed class GlamourOwnershipIndex
         var config = this.getConfiguration();
         if (!config.CharacterCaches.TryGetValue(contentId, out var saved))
         {
-            saved = new CharacterGlamourCache();
+            saved = new CharacterTrackerCache();
             config.CharacterCaches[contentId] = saved;
         }
 
@@ -581,11 +583,11 @@ internal sealed class GlamourOwnershipIndex
         }
 
         // Merged in place so the Fashion Report fields and saved plates survive.
-        saved.DresserBaseIds = dresserIds;
-        saved.DresserOutfitPieceIds = outfitPieceIds;
-        saved.DresserSetPresenceRowIds = setIds;
-        saved.DresserCompleteSetRowIds = completeSetIds;
-        saved.ArmoireBaseIds = armoireIds;
+        saved.DresserBaseIds = Configuration.NormalizeIds(dresserIds);
+        saved.DresserOutfitPieceIds = Configuration.NormalizeIds(outfitPieceIds);
+        saved.DresserSetPresenceRowIds = Configuration.NormalizeIds(setIds);
+        saved.DresserCompleteSetRowIds = Configuration.NormalizeIds(completeSetIds);
+        saved.ArmoireBaseIds = Configuration.NormalizeIds(armoireIds);
         saved.DresserSlotsUsed = this.snapshot.DresserSlotsUsed;
         saved.LastSavedUtc = DateTime.UtcNow;
         config.Save();

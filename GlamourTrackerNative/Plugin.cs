@@ -73,7 +73,7 @@ public sealed class Plugin : IDalamudPlugin
 
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         Configuration.AssignSave(ScheduleConfigSave);
-        MigrateIconSliceConfig(Configuration);
+        Configuration.Migrate();
         FlushConfigSave(force: true);
 
         cabinetCatalog = new CabinetCatalog();
@@ -434,107 +434,28 @@ public sealed class Plugin : IDalamudPlugin
         return uiState == null ? 0 : uiState->PlayerState.ContentId;
     }
 
-    /// <summary>Clears pre-0.4.1 icon paths that lacked atlas UV data (showed garbled atlas text).</summary>
-    private static void MigrateIconSliceConfig(Configuration config)
+    /// <summary>Removes only the logged-in character's persisted cache; other alts keep theirs.</summary>
+    public void ForgetCurrentCharacterData()
     {
-        var dirty = false;
-
-        if (!string.IsNullOrWhiteSpace(config.DresserUiIconPath) && config.DresserUiIconW == 0)
+        var contentId = GetLocalContentId();
+        if (contentId == 0)
         {
-            config.DresserUiIconPath = null;
-            dirty = true;
+            ChatGui.PrintError("[Glamour Tracker+] Log in first to forget this character's saved data.");
+            return;
         }
 
-        if (!string.IsNullOrWhiteSpace(config.ArmoireUiIconPath) && config.ArmoireUiIconW == 0)
+        if (!Configuration.ForgetCharacter(contentId))
         {
-            config.ArmoireUiIconPath = null;
-            dirty = true;
+            ChatGui.Print("[Glamour Tracker+] No saved data for this character.");
+            return;
         }
 
-        if (config.Version < 5)
-        {
-            StorageIconAtlasDefaults.ApplyUvDefaults(config);
-            if (IsReadyPath(config))
-                config.StorageIconAtlasConfigured = true;
-            config.Version = 5;
-            dirty = true;
-        }
-
-        if (config.LocalUiTheme == null)
-        {
-            config.LocalUiTheme = PluginLocalUiTheme.CreateDefault();
-            dirty = true;
-        }
-        else
-        {
-            config.LocalUiTheme.EnsureInitialized();
-        }
-
-        if (config.Version < 6)
-        {
-            config.UseLocalUiStyle = true;
-            config.Version = 6;
-            dirty = true;
-        }
-
-        if (config.Version < 8)
-        {
-            PlateSlotNodeLocator.ResetSlotRerollDefaults(config);
-            config.Version = 8;
-            dirty = true;
-        }
-
-        if (config.Version < 9)
-        {
-            StorageIconAtlasDefaults.ApplyUvDefaults(config);
-            config.Version = 9;
-            dirty = true;
-        }
-
-        if (config.Version < 10)
-        {
-            config.DresserIconDisplayScale = StorageIconAtlasDefaults.DisplayScale;
-            config.ArmoireIconDisplayScale = StorageIconAtlasDefaults.DisplayScale;
-            config.Version = 10;
-            dirty = true;
-        }
-
-        // Bake ItemDetailPutIn — Extra-sheet hunting / areamap mis-applies are not the real atlas.
-        if (config.Version < 11
-            || !StorageIconAtlasDefaults.IsItemDetailPutInPath(config.DresserUiIconPath)
-            || !StorageIconAtlasDefaults.IsItemDetailPutInPath(config.ArmoireUiIconPath))
-        {
-            // Path resolved at runtime via IDataManager once services exist; stem is enough for migration.
-            var baked = StorageIconAtlasDefaults.TextureStem + "_hr1.tex";
-            config.DresserUiIconPath = baked;
-            config.ArmoireUiIconPath = baked;
-            config.StorageIconAtlasConfigured = true;
-            if (config.Version < 11)
-                config.Version = 11;
-            dirty = true;
-        }
-
-        // v12: one-shot clear Fashion Report progress (stale Complete survived week roll via Math.Max / bad saves).
-        if (config.Version < 12)
-        {
-            foreach (var cache in config.CharacterCaches.Values)
-            {
-                cache.FashionReportHighestScore = 0;
-                cache.FashionReportAllowancesRemaining = 4;
-                cache.FashionReportSynced = false;
-                cache.FashionReportFromDailyDuty = false;
-                cache.FashionReportNextResetUtc = default;
-            }
-
-            config.Version = 12;
-            dirty = true;
-        }
-
-        if (dirty)
-            config.Save();
+        ownershipIndex.ClearSaved();
+        FlushConfigSave(force: true);
+        outfitSetCatalog.Invalidate();
+        fashionReport.RebindOwnership();
+        ChatGui.Print(
+            "Glamour Tracker+ forgot this character's saved data. Open your dresser or armoire to scan again.");
+        trackerNativeAddon?.RequestFormRebuild();
     }
-
-    private static bool IsReadyPath(Configuration config) =>
-        !string.IsNullOrWhiteSpace(config.DresserUiIconPath)
-        || !string.IsNullOrWhiteSpace(config.ArmoireUiIconPath);
 }

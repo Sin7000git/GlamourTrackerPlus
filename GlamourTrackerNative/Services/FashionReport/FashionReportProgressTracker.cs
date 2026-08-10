@@ -143,7 +143,6 @@ internal sealed unsafe class FashionReportProgressTracker : IDisposable
                 return;
 
             cache.FashionReportSynced = true;
-            cache.FashionReportFromDailyDuty = false;
             cache.FashionReportNextResetUtc = FashionReportWeek.ScoreExpiryUtc(DateTime.UtcNow);
             SaveConfig();
             PluginFileLog.Info(
@@ -192,16 +191,15 @@ internal sealed unsafe class FashionReportProgressTracker : IDisposable
     /// <summary>Config writes must not happen on the NPC event hook thread.</summary>
     private void SaveConfig() => _ = this.framework.RunOnFrameworkThread(() => getConfig().Save());
 
-    private static void ClearProgress(CharacterGlamourCache cache, DateTime nextResetUtc)
+    private static void ClearProgress(CharacterTrackerCache cache, DateTime nextResetUtc)
     {
         cache.FashionReportHighestScore = 0;
         cache.FashionReportAllowancesRemaining = 4;
         cache.FashionReportSynced = false;
-        cache.FashionReportFromDailyDuty = false;
         cache.FashionReportNextResetUtc = nextResetUtc;
     }
 
-    private CharacterGlamourCache? GetOrCreateCache()
+    private CharacterTrackerCache? GetOrCreateCache()
     {
         var contentId = getContentId();
         if (contentId == 0)
@@ -210,7 +208,7 @@ internal sealed unsafe class FashionReportProgressTracker : IDisposable
         var config = getConfig();
         if (!config.CharacterCaches.TryGetValue(contentId, out var cache))
         {
-            cache = new CharacterGlamourCache();
+            cache = new CharacterTrackerCache();
             config.CharacterCaches[contentId] = cache;
         }
 

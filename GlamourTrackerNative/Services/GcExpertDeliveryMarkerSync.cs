@@ -110,7 +110,7 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer
                         supplyUnit,
                         AtkUiHelper.ScreenToAddonLocal(supplyUnit, screenPos),
                         armoireSlice,
-                        config.FlipArmoireIconV);
+                        GetFlipV(config, isDresser: false));
                     markerX -= (armoireSize.X + MarkerIconSpacing) * uiScale;
                 }
             }
@@ -126,12 +126,23 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer
                         supplyUnit,
                         AtkUiHelper.ScreenToAddonLocal(supplyUnit, screenPos),
                         dresserSlice,
-                        config.FlipDresserIconV);
+                        GetFlipV(config, isDresser: true));
                 }
             }
         }
 
         return this.markerNodes.Count;
+    }
+
+    private static bool GetFlipV(Configuration config, bool isDresser)
+    {
+#if GLAMOUR_DEV
+        return isDresser ? config.FlipDresserIconV : config.FlipArmoireIconV;
+#else
+        _ = config;
+        _ = isDresser;
+        return StorageIconAtlasDefaults.FlipVertically;
+#endif
     }
 
     private void AttachAtkMarker(
@@ -165,6 +176,6 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer
     }
 
     private static string AtlasSignature(Configuration config, StorageUiIconSlice dresser, StorageUiIconSlice armoire) =>
-        $"{dresser.Path}|{dresser.U},{dresser.V},{dresser.Width},{dresser.Height},{dresser.DisplayWidth:F1}x{dresser.DisplayHeight:F1}|{config.FlipDresserIconV}"
-        + $"||{armoire.Path}|{armoire.U},{armoire.V},{armoire.Width},{armoire.Height},{armoire.DisplayWidth:F1}x{armoire.DisplayHeight:F1}|{config.FlipArmoireIconV}";
+        $"{dresser.Path}|{dresser.U},{dresser.V},{dresser.Width},{dresser.Height},{dresser.DisplayWidth:F1}x{dresser.DisplayHeight:F1}|{GetFlipV(config, true)}"
+        + $"||{armoire.Path}|{armoire.U},{armoire.V},{armoire.Width},{armoire.Height},{armoire.DisplayWidth:F1}x{armoire.DisplayHeight:F1}|{GetFlipV(config, false)}";
 }

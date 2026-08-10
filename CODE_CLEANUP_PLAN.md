@@ -188,18 +188,20 @@ Splits are mechanical: move code, do not rewrite behaviour in the same commit.
 
 # Phase 6 — Config and persistence cleanup (schema v13)
 
-**Status:** not started
+**Status:** done (0.1.141) — smoke-test in game recommended (schema migrates to v13 on load)
 
-- [ ] Move the migration chain out of `Plugin.cs` into `Configuration.Migrate()`; rename `MigrateIconSliceConfig` (it migrates far more than icon slices).
-- [ ] Gate the v11 icon-path repair on `Version < 11` so it can't force a save on every startup.
-- [ ] Document or no-op the skipped version 7.
-- [ ] Drop dev-only tuning fields from the Release schema: icon UV/offset/display-scale fields, slot reroll placement floats. Keep behaviour by moving the values to constants.
-- [ ] Remove `FashionReportFromDailyDuty` (written, never read) and the migration that clears it.
-- [ ] Rename `CharacterGlamourCache` — it holds Fashion Report state and outfit sets too, not just glamour. Consider splitting per concern.
-- [ ] Persist id lists as sorted arrays/sets and validate on load.
-- [ ] Add pruning or a "forget this character" action for `CharacterCaches`, which currently grows forever per alt.
-- [ ] Clarify `UseLocalUiStyle`/`LocalUiTheme` — they only affect the ImGui plate overlay, not the native UI. Rename or scope them.
-- [ ] Align `GlamourStorageLocation` (`[Flags]`) and `OutfitSetStorageLocation` (plain enum with `Both = 3`), or document why they differ.
+- [x] Move the migration chain out of `Plugin.cs` into `Configuration.Migrate()`; rename `MigrateIconSliceConfig` (it migrates far more than icon slices).
+- [x] Gate the v11 icon-path repair on `Version < 11` so it can't force a save on every startup.
+- [x] Document or no-op the skipped version 7.
+- [x] Drop dev-only tuning fields from the Release schema: icon UV/offset/display-scale fields, slot reroll placement floats. Keep behaviour by moving the values to constants.
+- [x] Remove `FashionReportFromDailyDuty` (written, never read) and the migration that clears it.
+- [x] Rename `CharacterGlamourCache` — it holds Fashion Report state and outfit sets too, not just glamour. Consider splitting per concern.
+- [x] Persist id lists as sorted arrays/sets and validate on load.
+- [x] Add pruning or a "forget this character" action for `CharacterCaches`, which currently grows forever per alt.
+- [x] Clarify `UseLocalUiStyle`/`LocalUiTheme` — they only affect the ImGui plate overlay, not the native UI. Rename or scope them.
+- [x] Align `GlamourStorageLocation` (`[Flags]`) and `OutfitSetStorageLocation` (plain enum with `Both = 3`), or document why they differ.
+
+**Notes:** Renamed cache type to `CharacterTrackerCache` (JSON shape unchanged). Theme flags keep old JSON names via `[JsonProperty]`. Release uses `SlotRerollDefaults` / `StorageIconAtlasDefaults` for layout and atlas UV; Debug still persists tuning fields. v13 also prunes empty alt caches and normalizes id lists. Split of Fashion Report fields into a separate type deferred — same object, clearer name.
 
 ---
 
@@ -446,5 +448,13 @@ Append one entry per phase. Keep it short and factual.
   inventory Scan TTL; plate store compare-before-save; config Save debounce; drop duplicate
   RebindOwnership in RefreshAll.
 - Version: 0.1.139
-- In-game: smoke-test Overview / Outfit sets filter/sort / Fashion Report chrome / GC markers /
-  plate slot rerolls after reload.
+- In-game: OK except plate overlay click-through (fixed in 0.1.140); then confirmed good.
+
+[2026-08-10] Phase 6 — config / persistence (schema v13)
+- Done: `Configuration.Migrate()`; v11 path repair gated; v7 documented; Release drops UV/slot
+  tuning fields (constants); remove DailyDuty field; `CharacterTrackerCache`; sorted id lists;
+  prune empty caches + Settings “Forget this character”; theme rename with JSON aliases; storage
+  enum docs.
+- Version: 0.1.141
+- In-game: reload once (v12→v13 migrate), Overview counts, GC markers, plate overlay theme,
+  Forget this character vs Clear saved data.

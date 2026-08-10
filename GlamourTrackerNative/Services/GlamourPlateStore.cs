@@ -20,7 +20,7 @@ internal static unsafe class GlamourPlateStore
 
         if (!config.CharacterCaches.TryGetValue(contentId, out var cache))
         {
-            cache = new CharacterGlamourCache();
+            cache = new CharacterTrackerCache();
             config.CharacterCaches[contentId] = cache;
         }
 

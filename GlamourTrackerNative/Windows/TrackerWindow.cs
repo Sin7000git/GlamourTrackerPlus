@@ -30,11 +30,11 @@ internal sealed class TrackerWindow : Window
         this.localStyleVarsPushed = 0;
         this.localStyleColorsPushed = 0;
         var config = this.plugin.Configuration;
-        if (!config.UseLocalUiStyle)
+        if (!config.UsePlateOverlayLocalUiStyle)
             return;
 
-        config.LocalUiTheme ??= PluginLocalUiTheme.CreateDefault();
-        (this.localStyleVarsPushed, this.localStyleColorsPushed) = config.LocalUiTheme.Push();
+        config.PlateOverlayLocalUiTheme ??= PluginLocalUiTheme.CreateDefault();
+        (this.localStyleVarsPushed, this.localStyleColorsPushed) = config.PlateOverlayLocalUiTheme.Push();
     }
 
     public override void PostDraw()
@@ -337,28 +337,28 @@ internal sealed class TrackerWindow : Window
 
         ImGui.Separator();
         ImGui.Text("Appearance");
-        var useLocalStyle = config.UseLocalUiStyle;
-        changed |= ImGui.Checkbox("Use Glamour Tracker+ theme", ref useLocalStyle);
+        var useLocalStyle = config.UsePlateOverlayLocalUiStyle;
+        changed |= ImGui.Checkbox("Use Glamour Tracker+ theme (ImGui windows)", ref useLocalStyle);
         ImGui.TextDisabled(
             useLocalStyle
-                ? "This window uses the plugin theme below. Other Dalamud windows keep your global style."
-                : "This window follows your Dalamud global ImGui style.");
+                ? "ImGui windows use the plugin theme below. Native tracker UI is unchanged."
+                : "ImGui windows follow your Dalamud global style.");
         if (useLocalStyle)
         {
-            config.LocalUiTheme ??= PluginLocalUiTheme.CreateDefault();
+            config.PlateOverlayLocalUiTheme ??= PluginLocalUiTheme.CreateDefault();
             if (ImGui.CollapsingHeader("Edit theme colors"))
             {
-                changed |= config.LocalUiTheme.DrawEditor();
+                changed |= config.PlateOverlayLocalUiTheme.DrawEditor();
                 if (ImGui.Button("Reset theme to defaults"))
                 {
-                    config.LocalUiTheme = PluginLocalUiTheme.CreateDefault();
+                    config.PlateOverlayLocalUiTheme = PluginLocalUiTheme.CreateDefault();
                     changed = true;
                 }
 
                 ImGui.SameLine();
                 if (ImGui.Button("Write theme snapshot"))
                 {
-                    var paths = config.LocalUiTheme.WriteSnapshot();
+                    var paths = config.PlateOverlayLocalUiTheme.WriteSnapshot();
                     if (paths.Count > 0)
                         Plugin.ChatGui.Print($"[Glamour Tracker+] Theme snapshot saved ({paths.Count} copy(ies)).");
                     else
@@ -410,7 +410,7 @@ internal sealed class TrackerWindow : Window
         if (changed)
         {
             config.Enabled = enabled;
-            config.UseLocalUiStyle = useLocalStyle;
+            config.UsePlateOverlayLocalUiStyle = useLocalStyle;
             config.ShowTooltipIcons = showIcons;
             config.ShowGcExpertDeliveryStatus = showGc;
             config.ShowPlateEditorOverlay = showPlateOverlay;

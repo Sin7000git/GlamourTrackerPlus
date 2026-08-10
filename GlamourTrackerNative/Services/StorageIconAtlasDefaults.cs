@@ -37,6 +37,7 @@ internal static class StorageIconAtlasDefaults
     public const ushort ArmoireBrightU = ArmoireU;
     public const bool FlipBrightRow = FlipVertically;
 
+#if GLAMOUR_DEV
     public static void ApplyUvDefaults(Configuration config)
     {
         config.DresserUiIconU = DresserU;
@@ -65,6 +66,7 @@ internal static class StorageIconAtlasDefaults
         config.ArmoireUiDisplayW = DisplaySize;
         config.ArmoireUiDisplayH = DisplaySize;
     }
+#endif
 
     /// <summary>Resolves <see cref="TextureStem"/> preferring HR when present.</summary>
     public static string ResolveTexturePath(IDataManager data)

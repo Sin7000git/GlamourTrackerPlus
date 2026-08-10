@@ -68,11 +68,15 @@ internal sealed unsafe class FashionReportMgpReminderService : IDisposable
 
         addonLifecycle.RegisterListener(AddonEvent.PostSetup, "SelectString", OnSelectStringSetup);
 
-        confirmAddon = new FashionMgpReminderAddon(OnContinue, OnCancel)
+        confirmAddon = new FashionMgpReminderAddon(
+            OnContinue,
+            OnCancel,
+            () => mgpBuff.GetView(),
+            () => mgpBuff.TryUseVipCard())
         {
             InternalName = "GlamMgpRemind",
             Title = "Fashion Report",
-            Size = new System.Numerics.Vector2(420f, 160f),
+            Size = new System.Numerics.Vector2(560f, 160f),
             RememberClosePosition = false,
         };
     }
@@ -294,6 +298,7 @@ internal sealed unsafe class FashionReportMgpReminderService : IDisposable
                 || label.Contains("week", StringComparison.OrdinalIgnoreCase)))
             return false;
 
+        // English client (logged once): "Present yourself for judging."
         if (label.Contains("judging", StringComparison.OrdinalIgnoreCase)
             || label.Contains("present yourself", StringComparison.OrdinalIgnoreCase)
             || label.Contains("undergo", StringComparison.OrdinalIgnoreCase))

@@ -713,5 +713,10 @@
 [2026-08-10] Phase 9 — Masked Rose MGP buff reminder + Travel to fit (0.1.147)
 - Attempt: FashionReportMgpReminderService hooks SelectString FireCallback (EventPlay cannot cancel spend); HasActiveFashionMgpBonus; FashionMgpReminderAddon Continue/Cancel; RemindFashionReportMgpBuff setting; skip closed/no allowances/buff on; log fashion.mgp. Also FitTravelLabel from button width (~6px/char).
 - Backup: .cursor/backups/2026-08-10_173936_pre-phase8 (+ travel-truncate-phase9)
-- Outcome: pending in-game (buff on/off, Cancel, Continue, setting off; Travel to full duty names). First Masked Rose menu logs option labels once for match tuning.
-- Next: Phase 10 wrap-up after verify
+- Outcome: worked — menu logged "Present yourself for judging."; option=1 prompt; Cancel kept allowances=2
+- Next: Use VIP Card on prompt (0.1.148)
+
+[2026-08-10] MGP reminder Use VIP Card button (0.1.148)
+- Attempt: icon + Use VIP Card · ×N on confirm dialog (same GetView/TryUseVipCard as FR chrome); widen window
+- Outcome: pending reload
+- Next: Phase 10 after verify

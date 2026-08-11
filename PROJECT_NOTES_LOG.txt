@@ -738,5 +738,5 @@
 
 [2026-08-11] Phase 10 — wrap up (0.1.155)
 - Attempt: Future features section in CODE_CLEANUP_PLAN (Friday VIP assist + later ideas); mark Phase 9 VIP retest deferred; Debug/Release clean; notes/README check
-- Outcome: watchlist OK (user); cleanup complete on code-cleanup; VIP assist left for later
-- Next: merge to main when asked; Friday VIP assist / future features
+- Outcome: watchlist OK (user); cleanup complete; merged `code-cleanup` → `main`
+- Next: Friday VIP assist / future features

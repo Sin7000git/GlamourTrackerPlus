@@ -272,7 +272,7 @@ When the player talks to the Masked Rose to turn in Fashion Report, prompt if no
 - [x] Debug and Release builds clean, zero warnings (verified 2026-08-11).
 - [x] `PROJECT_NOTES_LOG.txt` updated with the outcome of each phase.
 - [x] README updated if any user-visible wording changed (MGP reminder already documented).
-- [ ] Merge `code-cleanup` into `main` *(optional follow-up)*.
+- [x] Merge `code-cleanup` into `main`.
 - [x] Phase 9 prompt path (Continue / Cancel / setting) exercised earlier; full Use VIP Card assist → **Future features** (judging closed until Friday).
 
 ---
@@ -518,5 +518,5 @@ Append one entry per phase. Keep it short and factual.
 - Next: Phase 10 wrap-up; Friday VIP assist sign-off later.
 
 [2026-08-11] Phase 10 — wrap up (0.1.155)
-- Done: Debug/Release clean; Future features section; notes/README; watchlist OK (user).
-- Next: merge `code-cleanup` → `main` when ready; Friday VIP assist later.
+- Done: Debug/Release clean; Future features section; notes/README; watchlist OK (user); merged to `main`.
+- Next: Friday VIP assist / future features.

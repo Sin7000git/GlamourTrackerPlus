@@ -225,10 +225,6 @@ internal sealed class TrackerWindow : Window
         var includeArmoire = config.RandomizeIncludeArmoire;
         var changed = false;
 
-        ImGui.TextWrapped(
-            "Open Edit Glamour Plates at a dresser, select a plate, then randomize. "
-            + "All 12 slots are filled by default (including empty ones). Lock a slot to leave it unchanged.");
-
         changed |= ImGui.Checkbox("Use dresser items", ref includeDresser);
         changed |= ImGui.Checkbox("Use armoire items", ref includeArmoire);
 
@@ -236,29 +232,21 @@ internal sealed class TrackerWindow : Window
         changed |= RandomizeFilterUi.Draw(config, Plugin.DataManager, Plugin.ObjectTable, "main");
 
         ImGui.Separator();
-        ImGui.TextUnformatted("Slot locks");
-        ImGui.TextDisabled("Checked = keep current piece (or leave empty).");
+        changed |= RandomizeSlotLockUi.Draw(config, "main");
 
-        var locks = config.RandomizeLockedSlots;
         var editorOpen = this.plugin.PlateRandomizer.IsPlateEditorOpen();
         var busy = this.plugin.PlateRandomizer.IsBusy;
+
+        ImGui.Spacing();
         for (var i = 0; i < GlamourPlateSlotMap.SlotCount; i++)
         {
-            if (i % 3 != 0)
-                ImGui.SameLine(0, 16);
+            if (i % 4 != 0)
+                ImGui.SameLine(0, 8);
 
-            var locked = locks[i];
-            if (ImGui.Checkbox($"{GlamourPlateSlotMap.Labels[i]}##lock{i}", ref locked))
-            {
-                locks[i] = locked;
-                changed = true;
-            }
-
-            ImGui.SameLine(0, 4);
             ImGui.BeginDisabled(!editorOpen || busy || (!includeDresser && !includeArmoire));
             using (Plugin.PluginInterface.UiBuilder.IconFontHandle.Push())
             {
-                if (ImGui.SmallButton($"{FontAwesomeIcon.Sync.ToIconString()}##reroll{i}"))
+                if (ImGui.SmallButton($"{FontAwesomeIcon.Sync.ToIconString()} {GlamourPlateSlotMap.Labels[i]}##reroll{i}"))
                 {
                     var slot = i;
                     _ = Plugin.Framework.RunOnFrameworkThread(() =>
@@ -279,19 +267,6 @@ internal sealed class TrackerWindow : Window
                 ImGui.SetTooltip($"Reroll {GlamourPlateSlotMap.Labels[i]}");
 
             ImGui.EndDisabled();
-        }
-
-        if (ImGui.Button("Unlock all"))
-        {
-            Array.Fill(locks, false);
-            changed = true;
-        }
-
-        ImGui.SameLine();
-        if (ImGui.Button("Lock all"))
-        {
-            Array.Fill(locks, true);
-            changed = true;
         }
 
         if (changed)

@@ -101,14 +101,14 @@ internal sealed class GlamourCandidatePool
                     item,
                     needReq,
                     config.RandomizeMinRequiredLevel,
-                    config.RandomizeMaxRequiredLevel))
+                    GameLevelCaps.ResolveRequiredLevelMax(this.dataManager, config.RandomizeMaxRequiredLevel)))
                 continue;
 
             if (!ItemEquipFilter.MatchesItemLevel(
                     item,
                     needIlvl,
                     config.RandomizeMinItemLevel,
-                    config.RandomizeMaxItemLevel))
+                    GameLevelCaps.ResolveItemLevelMax(this.dataManager, config.RandomizeMaxItemLevel)))
                 continue;
 
             filtered.Add(candidate);

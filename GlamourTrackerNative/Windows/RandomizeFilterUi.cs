@@ -18,10 +18,10 @@ internal static class RandomizeFilterUi
     /// <summary>Draws filter controls. Returns true if config fields changed (caller should Save).</summary>
     public static bool Draw(Configuration config, IDataManager dataManager, IObjectTable objectTable, string idSuffix = "")
     {
+        _ = objectTable;
         var changed = false;
 
         ImGui.TextUnformatted("Filters");
-        ImGui.TextDisabled("Optional. Leave off for any owned dresser/armoire gear.");
 
         var mode = (int)config.RandomizeJobFilter;
         if (mode < 0 || mode >= JobModeLabels.Length)
@@ -34,18 +34,8 @@ internal static class RandomizeFilterUi
             changed = true;
         }
 
-        if (config.RandomizeJobFilter == RandomizeJobFilterMode.CurrentJob)
-        {
-            var player = objectTable.LocalPlayer;
-            if (player != null && dataManager.GetExcelSheet<ClassJob>().TryGetRow(player.ClassJob.RowId, out var job))
-                ImGui.TextDisabled($"Using {job.Abbreviation.ExtractText()} — {job.Name.ExtractText()}");
-            else
-                ImGui.TextDisabled("Current job unknown until you are logged in.");
-        }
-        else if (config.RandomizeJobFilter == RandomizeJobFilterMode.SpecificJob)
-        {
+        if (config.RandomizeJobFilter == RandomizeJobFilterMode.SpecificJob)
             changed |= DrawJobPicker(config, dataManager, idSuffix);
-        }
 
         var limitReq = config.RandomizeLimitRequiredLevel;
         if (ImGui.Checkbox($"Limit by required level##reqLvl{idSuffix}", ref limitReq))
@@ -57,26 +47,26 @@ internal static class RandomizeFilterUi
         if (limitReq)
         {
             ImGui.Indent();
-            var minReq = config.RandomizeMinRequiredLevel;
-            var maxReq = config.RandomizeMaxRequiredLevel;
+            var reqCap = GameLevelCaps.MaxRequiredLevel(dataManager);
+            var minReq = Math.Clamp(config.RandomizeMinRequiredLevel, 1, reqCap);
+            var maxReq = GameLevelCaps.ResolveRequiredLevelMax(dataManager, config.RandomizeMaxRequiredLevel);
+
             ImGui.SetNextItemWidth(120);
-            if (ImGui.SliderInt($"Lowest required level##minReq{idSuffix}", ref minReq, 1, 100))
+            if (ImGui.SliderInt($"Lowest required level##minReq{idSuffix}", ref minReq, 1, reqCap))
             {
                 config.RandomizeMinRequiredLevel = minReq;
                 changed = true;
             }
 
             ImGui.SetNextItemWidth(120);
-            if (ImGui.SliderInt($"Highest required level##maxReq{idSuffix}", ref maxReq, 1, 100))
+            if (ImGui.SliderInt($"Highest required level##maxReq{idSuffix}", ref maxReq, 1, reqCap))
             {
-                config.RandomizeMaxRequiredLevel = maxReq;
+                config.RandomizeMaxRequiredLevel = maxReq >= reqCap ? 0 : maxReq;
                 changed = true;
             }
 
             ImGui.Unindent();
         }
-
-        ImGui.TextDisabled("Race and gender limits always apply (unusable pieces are skipped).");
 
         var limitIlvl = config.RandomizeLimitItemLevel;
         if (ImGui.Checkbox($"Limit by item level##ilvl{idSuffix}", ref limitIlvl))
@@ -88,19 +78,21 @@ internal static class RandomizeFilterUi
         if (limitIlvl)
         {
             ImGui.Indent();
-            var minIlvl = config.RandomizeMinItemLevel;
-            var maxIlvl = config.RandomizeMaxItemLevel;
+            var ilvlCap = GameLevelCaps.MaxItemLevel(dataManager);
+            var minIlvl = Math.Clamp(config.RandomizeMinItemLevel, 1, ilvlCap);
+            var maxIlvl = GameLevelCaps.ResolveItemLevelMax(dataManager, config.RandomizeMaxItemLevel);
+
             ImGui.SetNextItemWidth(120);
-            if (ImGui.InputInt($"Minimum item level##minIlvl{idSuffix}", ref minIlvl))
+            if (ImGui.SliderInt($"Minimum item level##minIlvl{idSuffix}", ref minIlvl, 1, ilvlCap))
             {
-                config.RandomizeMinItemLevel = Math.Clamp(minIlvl, 1, 9999);
+                config.RandomizeMinItemLevel = minIlvl;
                 changed = true;
             }
 
             ImGui.SetNextItemWidth(120);
-            if (ImGui.InputInt($"Maximum item level##maxIlvl{idSuffix}", ref maxIlvl))
+            if (ImGui.SliderInt($"Maximum item level##maxIlvl{idSuffix}", ref maxIlvl, 1, ilvlCap))
             {
-                config.RandomizeMaxItemLevel = Math.Clamp(maxIlvl, 1, 9999);
+                config.RandomizeMaxItemLevel = maxIlvl >= ilvlCap ? 0 : maxIlvl;
                 changed = true;
             }
 

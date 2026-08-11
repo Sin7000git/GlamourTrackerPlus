@@ -309,8 +309,13 @@ internal sealed class PlateEditorOverlay
         ImGui.SameLine(0, 6);
 
         var menuLabel = "Glamour Tracker";
+        // Tall enough for filters + two-column slot locks without a scrollbar.
+        var popupWidth = MathF.Max(MenuWidth(), 260f * ImGuiHelpers.GlobalScale);
+        ImGui.SetNextWindowSizeConstraints(
+            new Vector2(popupWidth, 0f),
+            new Vector2(popupWidth * 1.5f, 4000f));
         ImGui.SetNextItemWidth(MenuWidth());
-        if (!ImGui.BeginCombo($"##{OverlayId}-menu", menuLabel))
+        if (!ImGui.BeginCombo($"##{OverlayId}-menu", menuLabel, ImGuiComboFlags.HeightLargest))
             return;
 
         if (ImGui.Selectable("Open tracker window"))
@@ -353,39 +358,8 @@ internal sealed class PlateEditorOverlay
             config.Save();
 
         ImGui.Separator();
-        GlamourPlateRandomizer.EnsureLockArray(config);
-        if (ImGui.BeginMenu("Slot locks"))
-        {
-            var locks = config.RandomizeLockedSlots;
-            var locksChanged = false;
-            for (var i = 0; i < GlamourPlateSlotMap.SlotCount; i++)
-            {
-                var locked = locks[i];
-                if (ImGui.Checkbox(GlamourPlateSlotMap.Labels[i], ref locked))
-                {
-                    locks[i] = locked;
-                    locksChanged = true;
-                }
-            }
-
-            if (ImGui.Button("Unlock all"))
-            {
-                Array.Fill(locks, false);
-                locksChanged = true;
-            }
-
-            ImGui.SameLine();
-            if (ImGui.Button("Lock all"))
-            {
-                Array.Fill(locks, true);
-                locksChanged = true;
-            }
-
-            if (locksChanged)
-                config.Save();
-
-            ImGui.EndMenu();
-        }
+        if (RandomizeSlotLockUi.Draw(config, "overlay"))
+            config.Save();
 
         ImGui.EndCombo();
     }

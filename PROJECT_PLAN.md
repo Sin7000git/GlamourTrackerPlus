@@ -1,36 +1,36 @@
-# Glamour Tracker+ — code cleanup plan
+# Glamour Tracker+ — project plan
 
-**Branch:** `code-cleanup` (never work on `main` for this)
-**Baseline:** 0.1.118, everything working as of 2026-08-05
-**Goal:** same behaviour, better code — efficient, readable, one rule per concept, no leftovers from trial and error.
+**Branch:** work on feature branches; ship to `main` when ready  
+**Current:** 0.1.155 on `main` (cleanup complete 2026-08-11)  
+**Goal:** keep a running history of planned work, shipped phases, and future ideas.
 
 ## How to resume this work in a new session
 
-1. `git checkout code-cleanup`
-2. Read this file top to bottom, find the first phase not marked done.
+1. Check out the active feature branch (or `main` if continuing from a shipped state).
+2. Read this file, find the first phase not marked done.
 3. Read the **Progress log** at the bottom for what actually happened.
 4. Work one phase at a time. Build, load in game, tick the checklist, append to the log.
 
 ## Ground rules
 
-- **One phase per commit.** Never mix phases; a bad phase must be revertable alone.
+- **One phase per commit** when practical. A bad phase should be revertable alone.
 - **Build after every phase:** `dotnet build GlamourTrackerNative/GlamourTrackerNative.csproj -c Release` (needs unsandboxed shell for the Dalamud SDK) and also `-c Debug` because Debug compiles the dev-only files that Release excludes.
-- **Behaviour is frozen.** If a phase would change what the user sees, stop and ask first.
+- **Ask before behaviour changes** unless the phase is explicitly a user-requested feature/fix.
 - **Version bump** one patch per shipped phase, and note it in `PROJECT_NOTES_LOG.txt`.
-- **Blast radius:** before changing any shared rule (ownership, storage, completion, week reset), list every consumer and fix them together. The Overview vs Outfit Sets bug came from skipping this.
+- **Blast radius:** before changing any shared rule (ownership, storage, completion, week reset), list every consumer and fix them together.
 - **Don't delete dev tooling.** `TrackerWindow.cs`, `FashionReportPanel.cs`, `StorageMarkerDrawer.cs` are `GLAMOUR_DEV`/Debug-only on purpose.
 
 ## Do not break (regression watchlist)
 
-Verify these in game after every phase:
+Verify these in game after relevant phases:
 
 - Overview: "Completed in dresser" ≈ 71/264, "Completed in armoire" ≈ 31/84, dresser slots ≈ 564/800, unique dresser ≈ 1230.
 - Overview counts survive a logout/login **without** opening the dresser.
 - Clear saved data resets to zeros and does **not** instantly refill.
 - Outfit sets tab: dresser pieces show, "In dresser" filter returns sets, detail piece rows show correct storage.
 - Fashion Report: current week score, no stale "Complete · Score 88" after reset, Masked Rose sync.
-- Item tooltips tint dresser/armoire icons; GC expert delivery shows markers.
-- Plate editor overlay + randomize still work.
+- Item tooltips tint dresser/armoire icons; GC expert delivery shows markers (including the **last** visible row).
+- Plate editor overlay + randomize still work; slot locks visible in two columns without a submenu.
 
 ---
 
@@ -266,7 +266,7 @@ When the player talks to the Masked Rose to turn in Fashion Report, prompt if no
 
 # Phase 10 — Wrap up
 
-**Status:** done (0.1.155) — VIP Use Card full path → Future features; merge to `main` when you want
+**Status:** done (0.1.155) — VIP Use Card full path → Future features; merged to `main`
 
 - [x] Full watchlist verification on a fresh login and on a character switch.
 - [x] Debug and Release builds clean, zero warnings (verified 2026-08-11).
@@ -277,9 +277,28 @@ When the player talks to the Masked Rose to turn in Fashion Report, prompt if no
 
 ---
 
+# Phase 11 — Plate slot locks layout + GC last-row markers
+
+**Status:** done (0.1.160) — shipped on `main`
+
+### 11.1 Randomizer ImGui — slot locks always visible (two columns)
+
+- [x] Always-visible two-column Slot locks (MH…Feet | OH…Left ring); shared `RandomizeSlotLockUi`.
+- [x] Combo `HeightLargest` + tall constraints; Unlock/Lock all kept.
+- [x] Strip explanatory blurbs — labels and fields only (0.1.157). **Done (user OK).**
+- [x] Live game caps for highest required level / maximum item level (`GameLevelCaps`; config `0` = current cap). Numeric cap from ParamGrow last `ExpToNext > 0` (100 today). **Done (user OK).**
+
+### 11.2 GC expert delivery — last-row markers
+
+- [x] Ownership + last-row position fixed (0.1.156–0.1.158). **Done (user OK).**
+
+**Blast radius:** `PlateEditorOverlay`, `RandomizeFilterUi`, `GameLevelCaps`, `Configuration` v14, `GcExpertDeliveryMarkerSync`, `AtkUiHelper`.
+
+---
+
 # Future features
 
-Backlog after cleanup is merged. Add ideas here anytime; do not block Phase 10 on them.
+Backlog after cleanup. Add ideas here anytime; do not block active phases on them.
 
 ### Masked Rose — Use VIP Card assist (Friday retest)
 
@@ -291,6 +310,13 @@ Shipped in 0.1.148–0.1.154; judging is closed mid-week so the full path cannot
 - [ ] **Continue** without buff: judging proceeds.
 - [ ] Setting off: no prompt.
 - [ ] Polish only if the Friday run still misbehaves (timing, confirm heuristics, re-talk).
+
+### GC delivery — both dresser and armoire icons
+
+Code already tries to draw both when an item is in dresser **and** armoire. Confirm in game and polish if only one appears:
+
+- [ ] When owned in both: dresser icon at the current (primary) spot, armoire icon immediately to its **right**.
+- [ ] When owned in only one place: single icon as today.
 
 ### Later ideas
 
@@ -520,3 +546,11 @@ Append one entry per phase. Keep it short and factual.
 [2026-08-11] Phase 10 — wrap up (0.1.155)
 - Done: Debug/Release clean; Future features section; notes/README; watchlist OK (user); merged to `main`.
 - Next: Friday VIP assist / future features.
+
+[2026-08-12] Rename plan → PROJECT_PLAN.md; Phase 11 start
+- Done: keep ongoing history under PROJECT_PLAN; Phase 11 = slot locks 2-col + GC last-row markers.
+
+[2026-08-12] Phase 11 — slot locks + GC last markers (0.1.156–0.1.160)
+- Done: RandomizeSlotLockUi; trim ImGui help; GC markers; GameLevelCaps live numeric caps (100 / ilvl).
+- Future: dual dresser+armoire icons when owned in both.
+- Shipped to `main` (0.1.160).

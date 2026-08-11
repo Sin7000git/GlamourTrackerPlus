@@ -8,7 +8,7 @@ namespace GlamourTracker;
 [Serializable]
 public sealed partial class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 13;
+    public int Version { get; set; } = 14;
 
     public bool Enabled { get; set; } = true;
 
@@ -95,14 +95,22 @@ public sealed partial class Configuration : IPluginConfiguration
     /// <summary>Minimum LevelEquip (character level requirement). Used when limit is on.</summary>
     public int RandomizeMinRequiredLevel { get; set; } = 1;
 
-    /// <summary>Maximum LevelEquip (character level requirement). Used when limit is on.</summary>
-    public int RandomizeMaxRequiredLevel { get; set; } = 100;
+    /// <summary>
+    /// Maximum LevelEquip (character level requirement). Used when limit is on.
+    /// 0 = current game maximum (tracks expansions via ParamGrow).
+    /// </summary>
+    public int RandomizeMaxRequiredLevel { get; set; }
 
     /// <summary>When true, only items whose item level is within min/max.</summary>
     public bool RandomizeLimitItemLevel { get; set; }
 
     public int RandomizeMinItemLevel { get; set; } = 1;
-    public int RandomizeMaxItemLevel { get; set; } = 800;
+
+    /// <summary>
+    /// Maximum item level when the limit is on.
+    /// 0 = current game maximum (highest LevelItem in the Item sheet).
+    /// </summary>
+    public int RandomizeMaxItemLevel { get; set; }
 
     /// <summary>Game texture path for the glamour dresser symbol (baked ItemDetailPutIn).</summary>
     public string? DresserUiIconPath { get; set; }

@@ -59,7 +59,13 @@ internal static unsafe class GcMarkerOverlayGuard
 
         var markerMin = topLeft;
         var markerMax = topLeft + markerSize;
-        if (!RectsOverlap(markerMin, markerMax, supplyMin, supplyMax))
+        // Small pad so the last partially-visible list row is not rejected for a 1–2px overhang.
+        const float edgePad = 6f;
+        if (!RectsOverlap(
+                markerMin,
+                markerMax,
+                supplyMin - new Vector2(edgePad, edgePad),
+                supplyMax + new Vector2(edgePad, edgePad)))
             return false;
 
         if (IsBlockedByItemDetail(gameGui, markerMin, markerMax))

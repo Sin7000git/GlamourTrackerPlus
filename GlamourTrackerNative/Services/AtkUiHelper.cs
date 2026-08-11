@@ -259,7 +259,8 @@ internal static unsafe class AtkUiHelper
         float gapBeforeIcon = 6f,
         float markerHeight = 20f,
         float markerWidth = 20f,
-        float uiScale = 1f)
+        float uiScale = 1f,
+        bool preferOwnerNode = true)
     {
         if (renderer == null || list == null)
             return null;
@@ -280,20 +281,29 @@ internal static unsafe class AtkUiHelper
         var rowTop = listY + (list->ScrollOffset + (slot * itemHeight)) * scale;
         var rowLeft = listX + (renderer->Left * scale);
 
+        var rowNode = renderer->OwnerNode != null
+            ? (AtkResNode*)renderer->OwnerNode
+            : null;
+
+        // OwnerNode is only safe when IsItemVisible — pooled renderers for other indices often
+        // still point at the first visible row (markers jump to the top of the list).
+        if (preferOwnerNode && rowNode != null && rowNode->ScreenY > 1f)
+            rowTop = rowNode->ScreenY;
+
         var x = rowLeft
             + (GcRowIconPadLeft - gapBeforeIcon - markerWidth + GcExpertListMarkerXOffset) * scale;
 
         var y = rowTop + MathF.Max(0f, (itemHeight - markerHeight) * 0.5f * scale);
 
-        var rowNode = renderer->OwnerNode != null
-            ? (AtkResNode*)renderer->OwnerNode
-            : null;
-        var textNode = GetRowLabelTextNode(renderer, rowNode);
-        var textTopLeft = ResolveNodeScreenTopLeft(rowNode, textNode);
-        if (textTopLeft != null && textNode != null)
+        if (preferOwnerNode)
         {
-            var textHeight = textNode->Height > 0 ? (float)textNode->Height : (float)itemHeight;
-            y = textTopLeft.Value.Y + MathF.Max(0f, (textHeight - markerHeight) * 0.5f * scale);
+            var textNode = GetRowLabelTextNode(renderer, rowNode);
+            var textTopLeft = ResolveNodeScreenTopLeft(rowNode, textNode);
+            if (textTopLeft != null && textNode != null)
+            {
+                var textHeight = textNode->Height > 0 ? (float)textNode->Height : (float)itemHeight;
+                y = textTopLeft.Value.Y + MathF.Max(0f, (textHeight - markerHeight) * 0.5f * scale);
+            }
         }
 
         y += GcExpertListMarkerYOffset * scale;

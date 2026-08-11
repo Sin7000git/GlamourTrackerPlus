@@ -740,3 +740,32 @@
 - Attempt: Future features section in CODE_CLEANUP_PLAN (Friday VIP assist + later ideas); mark Phase 9 VIP retest deferred; Debug/Release clean; notes/README check
 - Outcome: watchlist OK (user); cleanup complete; merged `code-cleanup` → `main`
 - Next: Friday VIP assist / future features
+
+[2026-08-12] Rename CODE_CLEANUP_PLAN → PROJECT_PLAN + Phase 11 (0.1.156)
+- Attempt: Ongoing plan rename; always-visible two-column slot locks (RandomizeSlotLockUi); overlay combo HeightLargest; GC last-row via GetItemRenderer (skip IsItemVisible), OwnerNode.ScreenY, clip edge pad; DEBUG gc.markers
+- Files: PROJECT_PLAN.md, RandomizeSlotLockUi.cs, PlateEditorOverlay, TrackerWindow, GcExpertDeliveryMarkerSync, AtkUiHelper, GcMarkerOverlayGuard, csproj
+- Backup: .cursor/backups/2026-08-12_005546_phase11
+- Outcome: locks UI OK; GC last row OK but false-owned icons (pooled renderers)
+- Next: 0.1.157 ownership match fix
+
+[2026-08-12] Phase 11 fix — GC false owned + trim ImGui copy (0.1.157)
+- Attempt: visible window+1 only; list-label match first; icon fallback only if IsItemVisible; strip filter/lock help text; Future feature note for dual dresser+armoire icons (already attempted in code)
+- Backup: .cursor/backups/2026-08-12_010413_phase11-fix
+- Outcome: ownership OK; ImGui OK; last-row still wrong — +1 placed next-below-fold item icon on first row
+- Next: 0.1.158 viewport gate + OwnerNode only when IsItemVisible; GameLevelCaps Max
+
+[2026-08-12] Phase 11 — GC last-row position + live Max levels (0.1.158)
+- Attempt: extend window only if next row formula Y inside list; preferOwnerNode:=IsItemVisible; reject out-of-list anchors; GameLevelCaps from ParamGrow/Item; config 0=Max; migrate v14 from 100/800
+- Backup: .cursor/backups/2026-08-12_011435_phase11-gc-caps
+- Outcome: GC OK (user); level slider used ParamGrow row count → 200 + “Max” label felt wrong
+- Next: 0.1.159 ExpToNext-based cap; show numeric 100; mark GC done
+
+[2026-08-12] Phase 11 — real level caps as numbers (0.1.159)
+- Attempt: ParamGrow last ExpToNext>0 then +1 (=100 now); ilvl from named items only; sliders show 100 not “Max”; GC checklist done
+- Outcome: showed 101 (row 100 still has ExpToNext; +1 was wrong)
+- Next: 0.1.160 drop +1
+
+[2026-08-12] Phase 11 — required level cap 100 (0.1.160)
+- Attempt: GameLevelCaps MaxRequiredLevel = last ParamGrow row with ExpToNext>0 (no +1)
+- Outcome: worked (user); Phase 11 done; ship to main
+- Next: future features (dual GC icons, VIP Friday, etc.)

@@ -134,6 +134,18 @@ public sealed partial class Configuration
             dirty = true;
         }
 
+        // v14: 0 = live game max for randomize level caps (was hard-coded 100 / 800).
+        if (Version < 14)
+        {
+            if (RandomizeMaxRequiredLevel is 0 or 100)
+                RandomizeMaxRequiredLevel = 0;
+            if (RandomizeMaxItemLevel is 0 or 800)
+                RandomizeMaxItemLevel = 0;
+
+            Version = 14;
+            dirty = true;
+        }
+
         if (dirty)
             Save();
     }

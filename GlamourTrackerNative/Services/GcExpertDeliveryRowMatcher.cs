@@ -11,10 +11,23 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer
         ExpertDeliveryMatchIndex index,
         AtkComponentList* list,
         int itemIndex,
-        AtkResNode* rowRoot)
+        AtkResNode* rowRoot,
+        bool allowIconFallback = true)
     {
+        // Prefer the list's own label for this index — stable even when a pooled renderer is stale.
+        var listLabel = GetListItemLabel(list, itemIndex);
+        if (!string.IsNullOrWhiteSpace(listLabel))
+        {
+            var byListLabel = index.MatchByRowLabel(listLabel);
+            if (byListLabel != null)
+                return byListLabel;
+        }
+
+        if (!allowIconFallback)
+            return null;
+
         var rowLabel = GetRowDisplayLabel(list, itemIndex, rowRoot);
-        if (!string.IsNullOrWhiteSpace(rowLabel))
+        if (!string.IsNullOrWhiteSpace(rowLabel) && rowLabel != listLabel)
         {
             var byLabel = index.MatchByRowLabel(rowLabel);
             if (byLabel != null)
@@ -41,14 +54,20 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer
         return item.Name.ToString();
     }
 
+    private static string GetListItemLabel(AtkComponentList* list, int itemIndex)
+    {
+        if (itemIndex < 0 || itemIndex >= list->ListLength)
+            return string.Empty;
+
+        var label = list->GetItemLabel(itemIndex).ToString();
+        return string.IsNullOrWhiteSpace(label) ? string.Empty : label;
+    }
+
     private static string GetRowDisplayLabel(AtkComponentList* list, int itemIndex, AtkResNode* rowRoot)
     {
-        if (itemIndex >= 0 && itemIndex < list->ListLength)
-        {
-            var label = list->GetItemLabel(itemIndex).ToString();
-            if (!string.IsNullOrWhiteSpace(label))
-                return label;
-        }
+        var listLabel = GetListItemLabel(list, itemIndex);
+        if (!string.IsNullOrWhiteSpace(listLabel))
+            return listLabel;
 
         var textNode = AtkUiHelper.FindPrimaryRowLabelTextNode(rowRoot);
         if (textNode == null)

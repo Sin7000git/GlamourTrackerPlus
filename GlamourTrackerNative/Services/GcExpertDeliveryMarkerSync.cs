@@ -65,17 +65,37 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer
         var markerHeight = Math.Max(dresserSize.Y, armoireSize.Y);
         var ownershipCache = new Dictionary<uint, (bool Dresser, bool Armoire)>();
 
-        for (var itemIndex = 0; itemIndex < list->ListLength; itemIndex++)
-        {
-            if (!list->IsItemVisible(itemIndex))
-                continue;
+        // Visible window from FirstVisible + NumVisibleRows. Optionally one more row when its
+        // formula Y is still inside the list (partial bottom). Never include a fully off-screen
+        // next row — GetItemRenderer reuses the top pooled node and the icon jumped to row 0.
+        var listNode = AtkUiHelper.GetComponentOwnerResNode((AtkComponentBase*)list);
+        if (listNode == null)
+            return 0;
 
+        var firstVisible = Math.Max(0, list->FirstVisibleItemIndex);
+        var visibleRows = Math.Max((int)list->NumVisibleRows, 1);
+        var endExclusive = Math.Min(list->ListLength, firstVisible + visibleRows);
+        var itemHeight = list->ItemHeight > 0 ? list->ItemHeight : (short)40;
+        var listBottom = listNode->ScreenY + (listNode->Height * uiScale);
+        if (endExclusive < list->ListLength)
+        {
+            var slot = endExclusive - firstVisible;
+            var nextTop = listNode->ScreenY + ((list->ScrollOffset + (slot * itemHeight)) * uiScale);
+            if (nextTop < listBottom - 2f)
+                endExclusive++;
+        }
+
+        for (var itemIndex = firstVisible; itemIndex < endExclusive; itemIndex++)
+        {
             var renderer = list->GetItemRenderer(itemIndex);
             if (renderer == null)
                 continue;
 
+            var isVisible = list->IsItemVisible(itemIndex);
             var rowRoot = GetRowRoot(renderer);
-            var gcItem = FindMatchingExpertItem(matchIndex, list, itemIndex, rowRoot);
+            // Partial bottom rows may report !IsItemVisible — match by list label only, position by slot math.
+            var gcItem = FindMatchingExpertItem(
+                matchIndex, list, itemIndex, rowRoot, allowIconFallback: isVisible);
             if (gcItem == null)
                 continue;
 
@@ -92,9 +112,32 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer
                 continue;
 
             var anchor = AtkUiHelper.TryGetListRowMarkerAnchor(
-                list, renderer, itemIndex, MarkerGapBeforeIcon, markerHeight, markerWidth, uiScale);
+                list,
+                renderer,
+                itemIndex,
+                MarkerGapBeforeIcon,
+                markerHeight,
+                markerWidth,
+                uiScale,
+                preferOwnerNode: isVisible);
             if (anchor == null)
+            {
+                PluginFileLog.Write(
+                    "DEBUG",
+                    "gc.markers",
+                    $"skip listIdx={itemIndex} id={itemId}: no anchor");
                 continue;
+            }
+
+            // Drop markers whose row top is clearly outside the list (stale pool / bad index).
+            if (anchor.Value.Y < listNode->ScreenY - 4f || anchor.Value.Y > listBottom + 4f)
+            {
+                PluginFileLog.Write(
+                    "DEBUG",
+                    "gc.markers",
+                    $"skip listIdx={itemIndex} id={itemId}: anchor Y outside list");
+                continue;
+            }
 
             var markerX = anchor.Value.X;
             var rowCenterY = anchor.Value.Y;
@@ -113,6 +156,13 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer
                         GetFlipV(config, isDresser: false));
                     markerX -= (armoireSize.X + MarkerIconSpacing) * uiScale;
                 }
+                else
+                {
+                    PluginFileLog.Write(
+                        "DEBUG",
+                        "gc.markers",
+                        $"skip listIdx={itemIndex} id={itemId}: armoire blocked/out of clip");
+                }
             }
 
             if (inDresser)
@@ -127,6 +177,13 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer
                         AtkUiHelper.ScreenToAddonLocal(supplyUnit, screenPos),
                         dresserSlice,
                         GetFlipV(config, isDresser: true));
+                }
+                else
+                {
+                    PluginFileLog.Write(
+                        "DEBUG",
+                        "gc.markers",
+                        $"skip listIdx={itemIndex} id={itemId}: dresser blocked/out of clip");
                 }
             }
         }

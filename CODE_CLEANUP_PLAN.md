@@ -244,7 +244,7 @@ Splits are mechanical: move code, do not rewrite behaviour in the same commit.
 
 # Phase 9 — Masked Rose MGP buff reminder
 
-**Status:** done (0.1.147) — in-game verify: buff on / buff off / Cancel / Continue / setting off
+**Status:** shipped (0.1.147–0.1.154) — prompt path verified; full **Use VIP Card → re-talk** path deferred until judging reopens (Friday+)
 
 When the player talks to the Masked Rose to turn in Fashion Report, prompt if no MGP bonus is active yet, so they do not burn an allowance without VIP Card / Jackpot III.
 
@@ -256,23 +256,45 @@ When the player talks to the Masked Rose to turn in Fashion Report, prompt if no
 - [x] Plain UI copy (see Phase 8 wording rules): short, player-facing, no jargon like "status ID".
 - [x] Log the decision at INFO (`fashion.mgp`) without spamming every talk.
 - [x] Blast radius: progress tracker hooks, MGP buff view, Fashion Report native UI, any existing Masked Rose chat tips.
+- [x] Follow-ups through 0.1.154: Use VIP Card on the prompt (closes Leave., uses card, re-talks via `InteractWithObject` only). Leave as-is until Friday retest — see **Future features**.
 
 **Behaviour change** (user-requested): this phase intentionally adds a confirmation, unlike earlier cleanup phases.
 
-**Notes:** First Masked Rose menu open logs option labels once (`fashion.mgp`) so judging-option matching can be tightened if a client language differs. Theme-only options (e.g. “confirm this week’s … challenge”) are excluded.
+**Notes:** Menu labels (EN): `Present yourself for judging.` / `Leave.` Prompt Continue/Cancel confirmed. Use VIP assist still needs a clean Friday pass (buff off → Use VIP Card → card applies → Masked Rose menu reopens, no Contact List flash).
 
 ---
 
 # Phase 10 — Wrap up
 
-**Status:** not started
+**Status:** done (0.1.155) — VIP Use Card full path → Future features; merge to `main` when you want
 
-- [ ] Full watchlist verification on a fresh login and on a character switch.
-- [ ] Debug and Release builds clean, zero warnings.
-- [ ] `PROJECT_NOTES_LOG.txt` updated with the outcome of each phase.
-- [ ] README updated if any user-visible wording changed.
-- [ ] Merge `code-cleanup` into `main` only after a full in-game session with no regressions.
-- [ ] Confirm Phase 9 Masked Rose prompt in game (buff on / buff off / dismiss / continue).
+- [x] Full watchlist verification on a fresh login and on a character switch.
+- [x] Debug and Release builds clean, zero warnings (verified 2026-08-11).
+- [x] `PROJECT_NOTES_LOG.txt` updated with the outcome of each phase.
+- [x] README updated if any user-visible wording changed (MGP reminder already documented).
+- [ ] Merge `code-cleanup` into `main` *(optional follow-up)*.
+- [x] Phase 9 prompt path (Continue / Cancel / setting) exercised earlier; full Use VIP Card assist → **Future features** (judging closed until Friday).
+
+---
+
+# Future features
+
+Backlog after cleanup is merged. Add ideas here anytime; do not block Phase 10 on them.
+
+### Masked Rose — Use VIP Card assist (Friday retest)
+
+Shipped in 0.1.148–0.1.154; judging is closed mid-week so the full path cannot be signed off yet.
+
+- [ ] Buff **off**: Use VIP Card → Leave. → card consumed (~0.5s after UI closes) → Masked Rose Talk/SelectString reopens (no Contact List / other UI flash).
+- [ ] Buff **on**: no prompt when picking Present yourself for judging.
+- [ ] **Cancel** / window X: no allowance spent; menu closes cleanly.
+- [ ] **Continue** without buff: judging proceeds.
+- [ ] Setting off: no prompt.
+- [ ] Polish only if the Friday run still misbehaves (timing, confirm heuristics, re-talk).
+
+### Later ideas
+
+- [ ] *(add more here as they come up)*
 
 ---
 
@@ -488,3 +510,13 @@ Append one entry per phase. Keep it short and factual.
   Also fit Outfit sets “Travel to” labels to button width (was cutting mid-word).
 - Version: 0.1.147
 - In-game: verify buff on/off, Cancel, Continue, setting off; Travel to full duty names.
+
+[2026-08-10–11] Phase 9 follow-ups — Use VIP Card on prompt (0.1.148–0.1.154)
+- Done: Use VIP Card button; dismiss Leave. then use; confirm count; re-talk via InteractWithObject;
+  ~0.5s after UI close; drop General Action fallbacks (Contact List flash).
+- In-game: partial (card use + re-talk worked once; full Friday retest deferred — Future features).
+- Next: Phase 10 wrap-up; Friday VIP assist sign-off later.
+
+[2026-08-11] Phase 10 — wrap up (0.1.155)
+- Done: Debug/Release clean; Future features section; notes/README; watchlist OK (user).
+- Next: merge `code-cleanup` → `main` when ready; Friday VIP assist later.

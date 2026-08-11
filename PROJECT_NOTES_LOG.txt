@@ -728,5 +728,15 @@
 
 [2026-08-10] VIP Card wait-for-free + re-talk Masked Rose (0.1.150)
 - Attempt: Leave. dismiss; wait !Talk/SelectString + !Occupied*; TrySendVipCardUse + IsVipUseConfirmed; TargetSystem.InteractWithObject Masked Rose (no menu pick)
-- Outcome: pending reload
-- Next: Phase 10 after verify
+- Outcome: still needed confirm-before-retalk and shorter wait (later builds)
+- Next: 0.1.151+
+
+[2026-08-10–11] VIP Card assist polish (0.1.151–0.1.154)
+- Attempt: confirm via card count / buff before re-talk; send UseItem once (+ one retry); wait ~0.5s after Talk/SelectString gone (not long Occupied wait); drop General Action fallbacks [4,7,9,10] that opened Contact List
+- Outcome: prompt path OK; Use VIP worked in one session; Contact List flash fixed in 0.1.154. Judging closed mid-week — full Friday retest → Future features
+- Next: Phase 10 wrap-up; leave VIP assist as-is
+
+[2026-08-11] Phase 10 — wrap up (0.1.155)
+- Attempt: Future features section in CODE_CLEANUP_PLAN (Friday VIP assist + later ideas); mark Phase 9 VIP retest deferred; Debug/Release clean; notes/README check
+- Outcome: watchlist OK (user); cleanup complete on code-cleanup; VIP assist left for later
+- Next: merge to main when asked; Friday VIP assist / future features

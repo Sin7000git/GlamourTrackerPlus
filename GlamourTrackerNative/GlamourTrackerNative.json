@@ -5,6 +5,7 @@
   "Punchline": "Track your glams, Fashion Reports, and more with a cool native UI.",
   "Description": "Track glamour dresser and armoire items, Fashion Report, and randomize glamour plates.",
   "ApplicableVersion": "any",
+  "IconUrl": "https://raw.githubusercontent.com/Sin7000git/DalamudPluginRepo/main/icons/GlamourTrackerNative.png",
   "Tags": [
     "glamour",
     "armoire",

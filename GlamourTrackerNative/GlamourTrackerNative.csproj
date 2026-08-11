@@ -30,4 +30,11 @@
   <ItemGroup>
     <ProjectReference Include="..\KamiToolKit\KamiToolKit.csproj" />
   </ItemGroup>
+
+  <!-- Installer / packager icon (512×512). Custom repo also hosts a copy via IconUrl. -->
+  <ItemGroup>
+    <None Update="images\icon.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>

@@ -42,9 +42,9 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
     private bool categoryScanRunning;
     private int detailRebuildEpoch;
     private bool suppressDetailScrollTop;
-
     private TabBarNode? tabBar;
-    private ScrollingNode<VerticalListNode>? formScroll;
+    private ScrollingNode<VerticalListNode>? overviewScroll;
+    private ScrollingNode<VerticalListNode>? settingsScroll;
     private ResNode? browserToolbar;
     private SearchInputNode? outfitFilterInput;
     private CheckboxNode? missingOnlyCheckbox;
@@ -69,8 +69,10 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
     private OutfitCategoryFilter categoryFilter = OutfitCategoryFilter.All;
     private OutfitStorageFilter storageFilter = OutfitStorageFilter.All;
     private string selectedBrowserKey = string.Empty;
-    private string lastFormSignature = string.Empty;
+    private string lastOverviewFormSignature = string.Empty;
+    private string lastSettingsFormSignature = string.Empty;
     private string lastBrowserListSignature = string.Empty;
+    private string lastBrowserFilterSignature = string.Empty;
     private string lastBrowserDetailKey = string.Empty;
     private List<TrackerNativeListRow>? cachedOutfitRows;
     private string cachedOutfitRowsInputSig = string.Empty;
@@ -172,17 +174,10 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
         tabBar.AddTab(TabOutfitSets, () => SelectTab(TabOutfitSets));
         tabBar.AddTab(TabSettings, () => SelectTab(TabSettings));
 
-        formScroll = new ScrollingNode<VerticalListNode>
-        {
-            Position = bodyOrigin,
-            Size = bodySize,
-            AutoHideScrollBar = true,
-            ScrollSpeed = 28,
-        };
-        formScroll.ContentNode.FitContents = true;
-        formScroll.ContentNode.FitWidth = true;
-        formScroll.ContentNode.ItemSpacing = 4f;
-        formScroll.AttachNode(this);
+        overviewScroll = CreateFormScroll();
+        overviewScroll.AttachNode(this);
+        settingsScroll = CreateFormScroll();
+        settingsScroll.AttachNode(this);
 
         browserToolbar = new ResNode
         {
@@ -247,8 +242,10 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
     {
         base.OnShow(addon);
         plugin.RefreshAll(true);
-        lastFormSignature = string.Empty;
+        lastOverviewFormSignature = string.Empty;
+        lastSettingsFormSignature = string.Empty;
         lastBrowserListSignature = string.Empty;
+        lastBrowserFilterSignature = string.Empty;
         lastBrowserDetailKey = string.Empty;
         // RefreshAll may fill dresser set completes after the first paint — force a rebuild.
         ScheduleRebuildForm();
@@ -272,7 +269,8 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
         windowCts = null;
         expandedPieceKeys.Clear();
         tabBar = null;
-        formScroll = null;
+        overviewScroll = null;
+        settingsScroll = null;
         browserToolbar = null;
         outfitFilterInput = null;
         missingOnlyCheckbox = null;
@@ -283,8 +281,10 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
         storageDropDown = null;
         browserList = null;
         browserDetail = null;
-        lastFormSignature = string.Empty;
+        lastOverviewFormSignature = string.Empty;
+        lastSettingsFormSignature = string.Empty;
         lastBrowserListSignature = string.Empty;
+        lastBrowserFilterSignature = string.Empty;
         lastBrowserDetailKey = string.Empty;
         cachedOutfitRows = null;
         cachedOutfitRowsInputSig = string.Empty;
@@ -326,7 +326,9 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
             pendingForceSelectDetail = true;
 
         tabBar.SelectTab(tab);
-        RefreshActiveTab(force: true);
+        // Form tabs: do not force Clear/rebuild — that stacks ContentNode.Y. Outfit sets still
+        // refreshes the list. Overview/Settings rebuild only when their own signature changes.
+        RefreshActiveTab(force: IsBrowserTab);
     }
 
     private void SelectTab(string tab)
@@ -342,20 +344,46 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
         pendingBrowserKey = null;
         pendingExpandItemId = null;
         ApplyLayout();
-        RefreshActiveTab(force: true);
+        RefreshActiveTab(force: IsBrowserTab);
         if (tab == TabOutfitSets)
             _ = ScanAllSetCategoriesAsync();
     }
 
     private bool IsBrowserTab => selectedTab == TabOutfitSets;
 
+    private ScrollingNode<VerticalListNode>? ActiveFormScroll =>
+        selectedTab switch
+        {
+            TabOverview => overviewScroll,
+            TabSettings => settingsScroll,
+            _ => null,
+        };
+
+    private ScrollingNode<VerticalListNode> CreateFormScroll()
+    {
+        var scroll = new ScrollingNode<VerticalListNode>
+        {
+            Position = bodyOrigin,
+            Size = bodySize,
+            AutoHideScrollBar = true,
+            ScrollSpeed = 28,
+            IsVisible = false,
+        };
+        scroll.ContentNode.FitContents = true;
+        scroll.ContentNode.FitWidth = true;
+        scroll.ContentNode.ItemSpacing = 4f;
+        return scroll;
+    }
+
     private void ApplyLayout()
     {
         var browser = IsBrowserTab;
         var toolbarH = browser ? ToolbarH + 2f : 0f;
 
-        if (formScroll != null)
-            formScroll.IsVisible = !browser;
+        if (overviewScroll != null)
+            overviewScroll.IsVisible = selectedTab == TabOverview;
+        if (settingsScroll != null)
+            settingsScroll.IsVisible = selectedTab == TabSettings;
 
         if (browserToolbar != null)
             browserToolbar.IsVisible = browser;
@@ -424,6 +452,7 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
 
     private void RebuildForm(bool force)
     {
+        var formScroll = ActiveFormScroll;
         if (formScroll == null)
             return;
 
@@ -432,11 +461,24 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
             return;
 
         var signature = BuildFormSignature();
-        if (!force && signature == lastFormSignature)
+        // Per-tab signatures — a shared lastFormSignature forced Settings to Clear every time
+        // you left Overview (signature string changed), which stacked ContentNode.Y.
+        var lastSignature = selectedTab == TabSettings
+            ? lastSettingsFormSignature
+            : lastOverviewFormSignature;
+        if (!force && signature == lastSignature)
             return;
-        lastFormSignature = signature;
+
+        if (selectedTab == TabSettings)
+            lastSettingsFormSignature = signature;
+        else if (selectedTab == TabOverview)
+            lastOverviewFormSignature = signature;
 
         var list = formScroll.ContentNode;
+        var savedScroll = formScroll.ScrollBarNode.ScrollPosition;
+
+        // Only when content actually changes: zero via ATK, Clear, rebuild, restore offset.
+        formScroll.ApplyScrollPosition(0);
         list.Clear();
         var width = MathF.Max(160f, formScroll.Width - 18f);
 
@@ -452,6 +494,7 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
 
         list.RecalculateLayout();
         formScroll.RecalculateSizes();
+        formScroll.ApplyScrollPosition(savedScroll);
     }
 
     /// <summary>
@@ -467,7 +510,7 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
             TabOverview =>
                 BuildOverviewSignature(index),
             TabSettings =>
-                $"st|{c.ShowPlateEditorOverlay}|{c.ShowArmoireCandidates}|{(int)savedDataConfirm}|{HaselTweaksGate.IsGlamourDresserAlertEnabled(Plugin.PluginInterface)}",
+                $"st|{c.ShowArmoireCandidates}|{(int)savedDataConfirm}|{HaselTweaksGate.IsGlamourDresserAlertEnabled(Plugin.PluginInterface)}",
             _ => selectedTab,
         };
     }
@@ -481,11 +524,16 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
         return contentId == 0 ? null : OutfitWishlist.GetOrCreateCache(plugin.Configuration, contentId);
     }
 
-    private void NotifyWishlistChanged()
+    /// <param name="rebuildDetail">
+    /// Outfit detail wishlist buttons update their own label in-place; leave false to avoid
+    /// tearing down CollapsingHeaders. True only when Overview/list contents must change structure.
+    /// </param>
+    private void NotifyWishlistChanged(bool rebuildDetail = false)
     {
         wishlistRevision++;
         plugin.Configuration.Save();
-        detailRebuildEpoch++;
+        if (rebuildDetail)
+            detailRebuildEpoch++;
         lastBrowserListSignature = string.Empty;
         lastOverviewWishlistRevision = int.MinValue;
         // Never rebuild nodes inside a click handler — schedule for next tick.
@@ -494,7 +542,7 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
             if (!IsOpen)
                 return;
             if (IsBrowserTab)
-                RefreshBrowserList(force: true, rebuildDetail: true);
+                RefreshBrowserList(force: true, rebuildDetail: rebuildDetail);
             else
                 RebuildForm(force: true);
         }, delayTicks: 1);

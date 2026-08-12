@@ -232,6 +232,10 @@ internal sealed partial class TrackerNativeAddon
 
         lastBrowserListSignature = inputSig;
 
+        var filterSig = BuildOutfitFilterSignature();
+        var filtersChanged = filterSig != lastBrowserFilterSignature;
+        lastBrowserFilterSignature = filterSig;
+
         browserList.OptionsList = rows;
         browserList.SelectedItems.Clear();
 
@@ -245,6 +249,11 @@ internal sealed partial class TrackerNativeAddon
 
         browserList.Update();
 
+        // Filter/sort changes: jump to top so a short result list is not left off-screen.
+        // Ownership/wishlist refreshes keep scroll (filtersChanged false).
+        if (filtersChanged)
+            browserList.ResetScroll();
+
         if (select != null)
         {
             var selectionChanged = selectedBrowserKey != select.Key;
@@ -255,8 +264,8 @@ internal sealed partial class TrackerNativeAddon
             if (forceDetail)
                 RebuildBrowserDetail(select, force: true, scrollToTop: scrollDetail);
 
-            // Scroll the list so the selected row is in view after a deep-link.
-            if (forceDetail)
+            // Deep-link / selection change: bring the selected row into view (after filter reset).
+            if (forceDetail && !filtersChanged)
             {
                 var idx = rows.IndexOf(select);
                 if (idx >= 0)
@@ -279,9 +288,12 @@ internal sealed partial class TrackerNativeAddon
         }
     }
 
+    private string BuildOutfitFilterSignature() =>
+        $"{outfitFilter}|{showMissingOnly}|{showOwnedOnly}|{showWishlistOnly}|{(int)sortMode}|{(int)categoryFilter}|{(int)storageFilter}";
+
     private string BuildOutfitRowsInputSignature() =>
         $"{plugin.OwnershipIndex.Revision}|{plugin.OutfitSets.CatalogEpoch}|{categoryCacheEpoch}|{wishlistRevision}|"
-        + $"{outfitFilter}|{showMissingOnly}|{showOwnedOnly}|{showWishlistOnly}|{(int)sortMode}|{(int)categoryFilter}|{(int)storageFilter}";
+        + BuildOutfitFilterSignature();
 
     private List<TrackerNativeListRow> BuildOutfitRows()
     {
@@ -395,6 +407,10 @@ internal sealed partial class TrackerNativeAddon
         if (row == null)
             return;
 
+        // Same attire re-clicked (ListNode toggles selection) — keep detail mounted.
+        if (selectedBrowserKey == row.Key && lastBrowserDetailKey.StartsWith(row.Key, StringComparison.Ordinal))
+            return;
+
         if (selectedBrowserKey != row.Key)
             expandedPieceKeys.Clear();
 
@@ -423,18 +439,23 @@ internal sealed partial class TrackerNativeAddon
         }
 
         // Only rebuild when the selected set / load state / ownership changes — not on global cache growth.
-        var detailKey = $"{row.Key}|{set.OwnedPieceCount}|{set.MissingPieces}|{loaded}|{(int)storageFilter}|{detailRebuildEpoch}|{wishlistRevision}";
+        // Wishlist toggles bump wishlistRevision but update button labels in-place — omit it here so
+        // soft refreshes do not tear down CollapsingHeaders.
+        var detailKey = $"{row.Key}|{set.OwnedPieceCount}|{set.MissingPieces}|{loaded}|{(int)storageFilter}|{detailRebuildEpoch}";
         if (!force && detailKey == lastBrowserDetailKey)
             return;
         lastBrowserDetailKey = detailKey;
 
         var list = browserDetail.ContentNode;
+        // Hide during Clear+Build so ATK does not flash disposed children for a frame.
+        list.IsVisible = false;
         list.Clear();
         var width = MathF.Max(120f, browserDetail.Width - 18f);
 
         BuildOutfitDetail(list, set, width);
 
         list.RecalculateLayout();
+        list.IsVisible = true;
         var doScrollTop = scrollToTop && !suppressDetailScrollTop;
         suppressDetailScrollTop = false;
 
@@ -442,14 +463,18 @@ internal sealed partial class TrackerNativeAddon
         // stale ContentNode.Y and leaves empty space after wishlist rebuilds / height changes.
         ApplyBrowserDetailScroll(scrollToTop: doScrollTop);
 
-        var key = row.Key;
-        var keepTop = doScrollTop;
-        _ = Plugin.Framework.RunOnTick(() =>
+        // Height can settle a tick later after collapse; skip the second pass when we already
+        // forced top — double Apply was a visible hitch on attire switch.
+        if (!doScrollTop)
         {
-            if (browserDetail == null || selectedBrowserKey != key)
-                return;
-            ApplyBrowserDetailScroll(scrollToTop: keepTop);
-        }, delayTicks: 1);
+            var key = row.Key;
+            _ = Plugin.Framework.RunOnTick(() =>
+            {
+                if (browserDetail == null || selectedBrowserKey != key)
+                    return;
+                ApplyBrowserDetailScroll(scrollToTop: false);
+            }, delayTicks: 1);
+        }
 
         if (NeedsAcquireLoad(set.SetId))
             _ = LoadSetAcquireAsync(set, refreshUi: true, WindowToken);

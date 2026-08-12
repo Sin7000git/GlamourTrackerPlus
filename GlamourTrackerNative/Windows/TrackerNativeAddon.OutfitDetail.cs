@@ -31,21 +31,27 @@ internal sealed partial class TrackerNativeAddon
                 Size = new Vector2(width, RowH),
                 ItemSpacing = 0f,
             };
-            wishlistRow.AddNode(new TextButtonNode
+            var setWishlistBtn = new TextButtonNode
             {
                 Size = new Vector2(MathF.Min(200f, width), RowH),
                 String = setOnWishlist ? "Remove set from wishlist" : "Add set to wishlist",
-                OnClick = () =>
-                {
-                    var cache = EnsureWishlistCache();
-                    if (cache != null
-                        && OutfitWishlist.ToggleSet(
-                            cache,
-                            set.SetId,
-                            markAutoPrune: plugin.Configuration.AutoRemoveOwnedWishlist))
-                        NotifyWishlistChanged();
-                },
-            });
+            };
+            setWishlistBtn.OnClick = () =>
+            {
+                var cache = EnsureWishlistCache();
+                if (cache == null
+                    || !OutfitWishlist.ToggleSet(
+                        cache,
+                        set.SetId,
+                        markAutoPrune: plugin.Configuration.AutoRemoveOwnedWishlist))
+                    return;
+
+                var on = OutfitWishlist.IsSetWishlisted(cache, set.SetId);
+                setWishlistBtn.String = on ? "Remove set from wishlist" : "Add set to wishlist";
+                // List badges/filters only — keep piece headers mounted.
+                NotifyWishlistChanged(rebuildDetail: false);
+            };
+            wishlistRow.AddNode(setWishlistBtn);
             list.AddNode(wishlistRow);
         }
 
@@ -151,22 +157,27 @@ internal sealed partial class TrackerNativeAddon
         if (wishlistCache != null)
         {
             var pieceOnWishlist = OutfitWishlist.IsPieceWishlisted(wishlistCache, set.SetId, piece.ItemId);
-            header.AddNode(new TextButtonNode
+            var pieceWishlistBtn = new TextButtonNode
             {
                 Size = new Vector2(MathF.Min(180f, contentWidth), RowH),
                 String = pieceOnWishlist ? "Remove from wishlist" : "Add to wishlist",
-                OnClick = () =>
-                {
-                    var cache = EnsureWishlistCache();
-                    if (cache != null
-                        && OutfitWishlist.TogglePiece(
-                            cache,
-                            set.SetId,
-                            piece.ItemId,
-                            markAutoPrune: plugin.Configuration.AutoRemoveOwnedWishlist))
-                        NotifyWishlistChanged();
-                },
-            });
+            };
+            pieceWishlistBtn.OnClick = () =>
+            {
+                var cache = EnsureWishlistCache();
+                if (cache == null
+                    || !OutfitWishlist.TogglePiece(
+                        cache,
+                        set.SetId,
+                        piece.ItemId,
+                        markAutoPrune: plugin.Configuration.AutoRemoveOwnedWishlist))
+                    return;
+
+                var on = OutfitWishlist.IsPieceWishlisted(cache, set.SetId, piece.ItemId);
+                pieceWishlistBtn.String = on ? "Remove from wishlist" : "Add to wishlist";
+                NotifyWishlistChanged(rebuildDetail: false);
+            };
+            header.AddNode(pieceWishlistBtn);
         }
 
         if (itemAcquireCache.TryGetValue(piece.ItemId, out var acquired))
@@ -274,8 +285,7 @@ internal sealed partial class TrackerNativeAddon
     }
 
     /// <summary>
-    /// Reset scroll through 0 so the native scrollbar rewrites ContentNode.Y, then restore a
-    /// clamped offset (or stay at top). Avoids empty-space desync after collapse / wishlist rebuild.
+    /// Reapply scroll after detail height changes via <see cref="ScrollingNode{T}.ApplyScrollPosition"/>.
     /// </summary>
     private void ApplyBrowserDetailScroll(bool scrollToTop)
     {
@@ -284,14 +294,8 @@ internal sealed partial class TrackerNativeAddon
 
         var savedScroll = scrollToTop ? 0f : browserDetail.ScrollBarNode.ScrollPosition;
         browserDetail.ContentNode.RecalculateLayout();
-        browserDetail.ContentNode.Y = 0f;
-        browserDetail.ScrollBarNode.ScrollPosition = 0;
         browserDetail.RecalculateSizes();
-
-        var max = browserDetail.ScrollBarNode.ScrollMaxPosition;
-        var pos = Math.Clamp(savedScroll, 0f, max);
-        if (pos > 0f)
-            browserDetail.ScrollBarNode.ScrollPosition = pos;
+        browserDetail.ApplyScrollPosition(savedScroll);
     }
 
     private static string PieceKey(uint setId, OutfitPieceInfo piece) =>

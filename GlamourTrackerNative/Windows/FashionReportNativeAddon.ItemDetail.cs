@@ -33,6 +33,8 @@ internal sealed partial class FashionReportNativeAddon
         lastDetailKey = detailKey;
 
         var list = detailScroll.ContentNode;
+        // ContentNode.Y survives Clear — park at top before tearing down (Settings lesson).
+        detailScroll.ApplyScrollPosition(0);
         list.Clear();
         autocraftButton = null;
         craftingLogButton = null;
@@ -71,7 +73,7 @@ internal sealed partial class FashionReportNativeAddon
 
         list.RecalculateLayout();
         detailScroll.RecalculateSizes();
-        detailScroll.ScrollToTop();
+        detailScroll.ApplyScrollPosition(0);
     }
 
     private void ClearDetail(string message)
@@ -80,6 +82,7 @@ internal sealed partial class FashionReportNativeAddon
             return;
         lastDetailKey = "clear:" + message;
         var list = detailScroll.ContentNode;
+        detailScroll.ApplyScrollPosition(0);
         list.Clear();
         autocraftButton = null;
         craftingLogButton = null;
@@ -88,6 +91,7 @@ internal sealed partial class FashionReportNativeAddon
         list.AddNode(MakeWrappedText(message, 13, FashionReportNativeHelpers.ColorMuted, detailScroll.Width - 18f));
         list.RecalculateLayout();
         detailScroll.RecalculateSizes();
+        detailScroll.ApplyScrollPosition(0);
     }
 
     private void AddItemDetail(VerticalListNode list, FashionResolvedItem item, float width)

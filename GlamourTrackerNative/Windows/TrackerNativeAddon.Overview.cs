@@ -18,7 +18,7 @@ internal sealed partial class TrackerNativeAddon
         var packed = ((int)progress.Kind << 16) ^ progress.HighestScore;
         var catalogEpoch = plugin.OutfitSets.CatalogEpoch;
 
-        if (lastFormSignature.Length > 0
+        if (lastOverviewFormSignature.Length > 0
             && index.Revision == lastOverviewOwnershipRevision
             && catalogEpoch == lastOverviewCatalogEpoch
             && wishlistRevision == lastOverviewWishlistRevision

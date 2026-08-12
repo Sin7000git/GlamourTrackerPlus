@@ -126,21 +126,18 @@ internal sealed partial class TrackerNativeAddon
         {
             config.ShowPlateEditorOverlay = v;
             config.Save();
-            // Nested "Place on the right" appears/disappears — rebuild next tick only.
-            ScheduleRebuildForm();
+            // No show/hide and no IsEnabled — both change ATK layout/scroll. Placement
+            // preference stays editable; it only applies when the overlay is shown.
         }));
-        if (config.ShowPlateEditorOverlay)
-        {
-            list.AddNode(MakeIndentedCheckbox(
-                "Place on the right",
-                config.PlateEditorOverlayOnRight,
-                v =>
-                {
-                    config.PlateEditorOverlayOnRight = v;
-                    config.Save();
-                },
-                width));
-        }
+        list.AddNode(MakeIndentedCheckbox(
+            "Place on the right",
+            config.PlateEditorOverlayOnRight,
+            v =>
+            {
+                config.PlateEditorOverlayOnRight = v;
+                config.Save();
+            },
+            width));
 
         list.AddNode(MakeCheckbox("Show reroll next to each slot", config.ShowSlotRerollButtons, v =>
         {

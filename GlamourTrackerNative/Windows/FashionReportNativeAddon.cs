@@ -49,6 +49,7 @@ internal sealed partial class FashionReportNativeAddon : NativeAddon
     private string selectedRowKey = string.Empty;
     private string lastTabsSignature = string.Empty;
     private string lastListSignature = string.Empty;
+    private string lastListScrollSignature = string.Empty;
     private string lastDetailKey = string.Empty;
     private string lastWeekText = string.Empty;
     private string lastStatusText = string.Empty;
@@ -294,6 +295,7 @@ internal sealed partial class FashionReportNativeAddon : NativeAddon
         lastStatusFontSize = 0;
         lastTabsSignature = string.Empty;
         lastListSignature = string.Empty;
+        lastListScrollSignature = string.Empty;
         lastDetailKey = string.Empty;
     }
 
@@ -386,9 +388,17 @@ internal sealed partial class FashionReportNativeAddon : NativeAddon
             return;
 
         lastListSignature = signature;
+        var scrollSig = $"{selectedTabKey}|{ownedOnly}";
+        var resetListScroll = scrollSig != lastListScrollSignature;
+        lastListScrollSignature = scrollSig;
+
         var rows = BuildRows(snap);
         itemList.OptionsList = rows;
         itemList.Update();
+
+        // Tab / owned-only changes: jump to top (same as Outfit sets filters).
+        if (resetListScroll)
+            itemList.ResetScroll();
 
         FashionReportNativeRow? keep = null;
         if (!string.IsNullOrEmpty(selectedRowKey))

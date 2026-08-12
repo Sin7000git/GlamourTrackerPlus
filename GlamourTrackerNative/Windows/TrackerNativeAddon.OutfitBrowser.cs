@@ -83,6 +83,15 @@ internal sealed partial class TrackerNativeAddon
         };
         storageDropDown.AttachNode(browserToolbar);
 
+        wishlistOnlyCheckbox = MakeCheckbox("Wishlist", showWishlistOnly, v =>
+        {
+            showWishlistOnly = v;
+            RefreshBrowserList(force: true);
+        });
+        wishlistOnlyCheckbox.TextTooltip =
+            "Only sets on your wishlist, or sets that contain a wishlisted piece.";
+        wishlistOnlyCheckbox.AttachNode(browserToolbar);
+
         missingOnlyCheckbox = MakeCheckbox("Missing pieces", showMissingOnly, v =>
         {
             showMissingOnly = v;
@@ -94,7 +103,6 @@ internal sealed partial class TrackerNativeAddon
 
             RefreshBrowserList(force: true);
         });
-        missingOnlyCheckbox.Position = new Vector2(0f, 34f);
         missingOnlyCheckbox.TextTooltip = "Sets that are not fully complete.";
         missingOnlyCheckbox.AttachNode(browserToolbar);
 
@@ -109,9 +117,47 @@ internal sealed partial class TrackerNativeAddon
 
             RefreshBrowserList(force: true);
         });
-        ownedOnlyCheckbox.Position = new Vector2(140f, 34f);
         ownedOnlyCheckbox.TextTooltip = "Sets where you own at least one piece (includes incomplete sets).";
         ownedOnlyCheckbox.AttachNode(browserToolbar);
+
+        // Pack by real label width — hardcoded X left a big gap after the short "Wishlist" label.
+        const float filterGap = 12f;
+        var filterX = 0f;
+        wishlistOnlyCheckbox.Position = new Vector2(filterX, 34f);
+        filterX += wishlistOnlyCheckbox.Width + filterGap;
+        missingOnlyCheckbox.Position = new Vector2(filterX, 34f);
+        filterX += missingOnlyCheckbox.Width + filterGap;
+        ownedOnlyCheckbox.Position = new Vector2(filterX, 34f);
+    }
+
+    private void SyncBrowserFilterControls()
+    {
+        if (outfitFilterInput != null)
+            outfitFilterInput.String = outfitFilter;
+
+        if (sortDropDown != null)
+            sortDropDown.SelectedOption = TrackerNativeHelpers.SortModeLabels[(int)sortMode];
+        if (categoryDropDown != null)
+            categoryDropDown.SelectedOption = TrackerNativeHelpers.CategoryFilterLabels[(int)categoryFilter];
+        if (storageDropDown != null)
+            storageDropDown.SelectedOption = TrackerNativeHelpers.StorageFilterLabels[(int)storageFilter];
+
+        SyncMissingCheckbox();
+        SyncOwnedCheckbox();
+        SyncWishlistCheckbox();
+    }
+
+    private void SyncWishlistCheckbox()
+    {
+        if (wishlistOnlyCheckbox == null)
+            return;
+        wishlistOnlyCheckbox.OnClick = null;
+        wishlistOnlyCheckbox.IsChecked = showWishlistOnly;
+        wishlistOnlyCheckbox.OnClick = v =>
+        {
+            showWishlistOnly = v;
+            RefreshBrowserList(force: true);
+        };
     }
 
     private void SyncOwnedCheckbox()
@@ -178,7 +224,7 @@ internal sealed partial class TrackerNativeAddon
             {
                 var selected = rows.FirstOrDefault(r => r.Key == selectedBrowserKey);
                 if (selected != null)
-                    RebuildBrowserDetail(selected, force: true);
+                    RebuildBrowserDetail(selected, force: true, scrollToTop: false);
             }
 
             return;
@@ -187,7 +233,7 @@ internal sealed partial class TrackerNativeAddon
         lastBrowserListSignature = inputSig;
 
         browserList.OptionsList = rows;
-        browserList.Update();
+        browserList.SelectedItems.Clear();
 
         TrackerNativeListRow? select = null;
         if (!string.IsNullOrEmpty(selectedBrowserKey))
@@ -195,30 +241,53 @@ internal sealed partial class TrackerNativeAddon
         select ??= rows.FirstOrDefault();
 
         if (select != null)
+            browserList.SelectedItems.Add(select);
+
+        browserList.Update();
+
+        if (select != null)
         {
             var selectionChanged = selectedBrowserKey != select.Key;
             selectedBrowserKey = select.Key;
-            if (selectionChanged || rebuildDetail)
-                RebuildBrowserDetail(select, force: selectionChanged || rebuildDetail);
+            var forceDetail = selectionChanged || rebuildDetail || pendingForceSelectDetail;
+            var scrollDetail = selectionChanged || pendingForceSelectDetail;
+            pendingForceSelectDetail = false;
+            if (forceDetail)
+                RebuildBrowserDetail(select, force: true, scrollToTop: scrollDetail);
+
+            // Scroll the list so the selected row is in view after a deep-link.
+            if (forceDetail)
+            {
+                var idx = rows.IndexOf(select);
+                if (idx >= 0)
+                {
+                    var spacing = browserList.ItemSpacing;
+                    browserList.ScrollBarNode.ScrollPosition =
+                        (int)(idx * (TrackerNativeListItemNode.ItemHeight + spacing));
+                    browserList.Update();
+                }
+            }
         }
         else
         {
+            pendingForceSelectDetail = false;
             selectedBrowserKey = string.Empty;
             ClearBrowserDetail(
                 categoryFilter != OutfitCategoryFilter.All && categoryScanRunning
-                    ? "Still checking where these sets come from — results will fill in shortly."
+                    ? "Still checking where these sets come from. Crafting is instant; other sources share one lookup per piece and get faster after the first pass."
                     : "No outfit sets match your filters.");
         }
     }
 
     private string BuildOutfitRowsInputSignature() =>
-        $"{plugin.OwnershipIndex.Revision}|{plugin.OutfitSets.CatalogEpoch}|{categoryCacheEpoch}|"
-        + $"{outfitFilter}|{showMissingOnly}|{showOwnedOnly}|{(int)sortMode}|{(int)categoryFilter}|{(int)storageFilter}";
+        $"{plugin.OwnershipIndex.Revision}|{plugin.OutfitSets.CatalogEpoch}|{categoryCacheEpoch}|{wishlistRevision}|"
+        + $"{outfitFilter}|{showMissingOnly}|{showOwnedOnly}|{showWishlistOnly}|{(int)sortMode}|{(int)categoryFilter}|{(int)storageFilter}";
 
     private List<TrackerNativeListRow> BuildOutfitRows()
     {
         var isArmoireEligible = plugin.CabinetCatalog.IsArmoireEligible;
         var matched = new List<OutfitSetInfo>();
+        var wishlistCache = showWishlistOnly ? CurrentWishlistCache() : null;
 
         foreach (var set in plugin.OutfitSets.GetSets())
         {
@@ -236,6 +305,10 @@ internal sealed partial class TrackerNativeAddon
             {
                 continue;
             }
+
+            if (showWishlistOnly
+                && (wishlistCache == null || !OutfitWishlist.SetHasWishlistMatch(wishlistCache, set)))
+                continue;
 
             if (categoryFilter != OutfitCategoryFilter.All
                 && (!setCategoryCache.TryGetValue(set.SetId, out var cat) || cat != categoryFilter))
@@ -326,18 +399,31 @@ internal sealed partial class TrackerNativeAddon
             expandedPieceKeys.Clear();
 
         selectedBrowserKey = row.Key;
-        RebuildBrowserDetail(row, force: true);
+        RebuildBrowserDetail(row, force: true, scrollToTop: true);
     }
 
-    private void RebuildBrowserDetail(TrackerNativeListRow row, bool force)
+    private void RebuildBrowserDetail(TrackerNativeListRow row, bool force, bool scrollToTop = false)
     {
         if (browserDetail == null || row.OutfitSet == null)
             return;
 
         var set = row.OutfitSet;
         var loaded = setAcquireLoaded.ContainsKey(set.SetId);
+        if (pendingExpandItemId is uint expandId && expandId != 0)
+        {
+            foreach (var piece in set.Pieces)
+            {
+                if (ItemIdHelper.GlamourBaseId(piece.ItemId) == ItemIdHelper.GlamourBaseId(expandId))
+                    expandedPieceKeys.Add(PieceKey(set.SetId, piece));
+            }
+
+            pendingExpandItemId = null;
+            force = true;
+            scrollToTop = true;
+        }
+
         // Only rebuild when the selected set / load state / ownership changes — not on global cache growth.
-        var detailKey = $"{row.Key}|{set.OwnedPieceCount}|{set.MissingPieces}|{loaded}|{(int)storageFilter}|{detailRebuildEpoch}";
+        var detailKey = $"{row.Key}|{set.OwnedPieceCount}|{set.MissingPieces}|{loaded}|{(int)storageFilter}|{detailRebuildEpoch}|{wishlistRevision}";
         if (!force && detailKey == lastBrowserDetailKey)
             return;
         lastBrowserDetailKey = detailKey;
@@ -349,10 +435,21 @@ internal sealed partial class TrackerNativeAddon
         BuildOutfitDetail(list, set, width);
 
         list.RecalculateLayout();
-        browserDetail.RecalculateSizes();
-        if (!suppressDetailScrollTop)
-            browserDetail.ScrollToTop();
+        var doScrollTop = scrollToTop && !suppressDetailScrollTop;
         suppressDetailScrollTop = false;
+
+        // Always reset-through-0 then restore (or stay at 0). RecalculateSizes alone preserves a
+        // stale ContentNode.Y and leaves empty space after wishlist rebuilds / height changes.
+        ApplyBrowserDetailScroll(scrollToTop: doScrollTop);
+
+        var key = row.Key;
+        var keepTop = doScrollTop;
+        _ = Plugin.Framework.RunOnTick(() =>
+        {
+            if (browserDetail == null || selectedBrowserKey != key)
+                return;
+            ApplyBrowserDetailScroll(scrollToTop: keepTop);
+        }, delayTicks: 1);
 
         if (NeedsAcquireLoad(set.SetId))
             _ = LoadSetAcquireAsync(set, refreshUi: true, WindowToken);
@@ -367,7 +464,7 @@ internal sealed partial class TrackerNativeAddon
         list.Clear();
         list.AddNode(MakeMuted(message, MathF.Max(120f, browserDetail.Width - 18f)));
         list.RecalculateLayout();
-        browserDetail.RecalculateSizes();
+        ApplyBrowserDetailScroll(scrollToTop: true);
     }
 
 }

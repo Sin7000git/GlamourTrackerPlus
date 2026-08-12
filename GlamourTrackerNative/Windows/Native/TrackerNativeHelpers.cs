@@ -280,4 +280,53 @@ internal static class TrackerNativeHelpers
 
         return counts.OrderByDescending(kv => kv.Value).First().Key;
     }
+
+    /// <summary>
+    /// When some piece kinds are still unknown, return a category only if a strict majority is already locked
+    /// (or every piece has been resolved). Unresolved slots are passed as null.
+    /// </summary>
+    public static bool TryAggregateSetCategoryPartial(
+        IReadOnlyList<FashionItemAcquireKind?> kindsOrNull,
+        out OutfitCategoryFilter category)
+    {
+        category = OutfitCategoryFilter.Other;
+        var total = kindsOrNull.Count;
+        if (total == 0)
+            return true;
+
+        var counts = new Dictionary<OutfitCategoryFilter, int>();
+        var unresolved = 0;
+        foreach (var kind in kindsOrNull)
+        {
+            if (kind is null)
+            {
+                unresolved++;
+                continue;
+            }
+
+            if (kind is FashionItemAcquireKind.Owned or FashionItemAcquireKind.Unknown)
+                continue;
+
+            var cat = CategoryFromAcquireKind(kind.Value);
+            if (cat == OutfitCategoryFilter.All)
+                continue;
+            counts[cat] = counts.GetValueOrDefault(cat) + 1;
+        }
+
+        if (counts.Count == 0)
+        {
+            if (unresolved == 0)
+                return true;
+            return false;
+        }
+
+        var best = counts.OrderByDescending(kv => kv.Value).First();
+        if (best.Value * 2 > total || unresolved == 0)
+        {
+            category = best.Key;
+            return true;
+        }
+
+        return false;
+    }
 }

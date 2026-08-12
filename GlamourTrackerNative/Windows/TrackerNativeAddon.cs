@@ -31,6 +31,7 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
     private readonly Plugin plugin;
     private readonly ConcurrentDictionary<uint, OutfitCategoryFilter> setCategoryCache = new();
     private readonly ConcurrentDictionary<uint, FashionResolvedItem> itemAcquireCache = new();
+    private readonly ConcurrentDictionary<uint, FashionItemAcquireKind> itemAcquireKindCache = new();
     private readonly ConcurrentDictionary<uint, byte> setAcquireLoaded = new();
     private readonly ConcurrentDictionary<uint, byte> setAcquireInFlight = new();
     private readonly ConcurrentDictionary<uint, byte> setAcquirePendingUi = new();
@@ -48,6 +49,7 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
     private SearchInputNode? outfitFilterInput;
     private CheckboxNode? missingOnlyCheckbox;
     private CheckboxNode? ownedOnlyCheckbox;
+    private CheckboxNode? wishlistOnlyCheckbox;
     private StringDropDownNode? sortDropDown;
     private StringDropDownNode? categoryDropDown;
     private StringDropDownNode? storageDropDown;
@@ -56,9 +58,13 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
 
     private string selectedTab = TabOverview;
     private string? pendingSelectTab;
+    private string? pendingBrowserKey;
+    private uint? pendingExpandItemId;
+    private bool pendingForceSelectDetail;
     private string outfitFilter = string.Empty;
     private bool showMissingOnly;
     private bool showOwnedOnly;
+    private bool showWishlistOnly;
     private OutfitSortMode sortMode = OutfitSortMode.Name;
     private OutfitCategoryFilter categoryFilter = OutfitCategoryFilter.All;
     private OutfitStorageFilter storageFilter = OutfitStorageFilter.All;
@@ -69,10 +75,12 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
     private List<TrackerNativeListRow>? cachedOutfitRows;
     private string cachedOutfitRowsInputSig = string.Empty;
     private int categoryCacheEpoch;
+    private int wishlistRevision;
     private readonly List<OutfitPieceInfo> splitStoredScratch = [];
     private readonly List<OutfitPieceInfo> splitMissingScratch = [];
     private int lastOverviewCatalogEpoch = int.MinValue;
     private int lastOverviewOwnershipRevision = int.MinValue;
+    private int lastOverviewWishlistRevision = int.MinValue;
     private string lastOverviewWeek = "\0";
     private int lastOverviewProgressPacked = int.MinValue;
     private SavedDataConfirmKind savedDataConfirm = SavedDataConfirmKind.None;
@@ -97,6 +105,8 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
     public void OpenSettingsTab()
     {
         pendingSelectTab = TabSettings;
+        pendingBrowserKey = null;
+        pendingExpandItemId = null;
         _ = Plugin.Framework.RunOnFrameworkThread(() =>
         {
             if (!IsOpen)
@@ -104,6 +114,41 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
             else
                 ApplyPendingTab();
         });
+    }
+
+    /// <summary>Open Outfit sets and select a set (optionally expand a piece).</summary>
+    public void OpenOutfitSet(uint setId, uint? pieceItemId = null)
+    {
+        if (setId == 0)
+            return;
+
+        // Clear filters so the target set is not hidden by the current browser filters.
+        outfitFilter = string.Empty;
+        showMissingOnly = false;
+        showOwnedOnly = false;
+        showWishlistOnly = false;
+        categoryFilter = OutfitCategoryFilter.All;
+        storageFilter = OutfitStorageFilter.All;
+        SyncBrowserFilterControls();
+
+        pendingSelectTab = TabOutfitSets;
+        pendingBrowserKey = $"set|{setId}";
+        pendingExpandItemId = pieceItemId is > 0 ? pieceItemId : null;
+        pendingForceSelectDetail = true;
+        // Next tick — avoid tearing down Overview nodes inside the icon click handler.
+        _ = Plugin.Framework.RunOnTick(() =>
+        {
+            if (!IsOpen)
+                Open();
+
+            // OnSetup may have already consumed the pending tab/key when opening from closed.
+            if (pendingSelectTab != null)
+                ApplyPendingTab();
+            else if (IsBrowserTab && pendingForceSelectDetail)
+                RefreshBrowserList(force: true, rebuildDetail: true);
+            else if (IsBrowserTab && !string.IsNullOrEmpty(selectedBrowserKey))
+                RefreshBrowserList(force: true, rebuildDetail: true);
+        }, delayTicks: 1);
     }
 
     protected override unsafe void OnSetup(AtkUnitBase* addon, Span<AtkValue> atkValueSpan)
@@ -175,7 +220,7 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
             ScrollBarWidth = 8f,
             IsVisible = false,
         };
-        browserDetail.ScrollBarNode.MinThumbHeight = 48;
+        browserDetail.ScrollBarNode.MinThumbHeight = 0;
         browserDetail.ContentNode.FitContents = true;
         browserDetail.ContentNode.FitWidth = true;
         browserDetail.ContentNode.ItemSpacing = 3f;
@@ -184,6 +229,13 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
         var openTab = pendingSelectTab ?? selectedTab;
         pendingSelectTab = null;
         selectedTab = openTab;
+        if (pendingBrowserKey != null)
+        {
+            selectedBrowserKey = pendingBrowserKey;
+            pendingBrowserKey = null;
+            pendingForceSelectDetail = true;
+        }
+
         tabBar.SelectTab(openTab);
         ApplyLayout();
         RefreshActiveTab(force: true);
@@ -225,6 +277,7 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
         outfitFilterInput = null;
         missingOnlyCheckbox = null;
         ownedOnlyCheckbox = null;
+        wishlistOnlyCheckbox = null;
         sortDropDown = null;
         categoryDropDown = null;
         storageDropDown = null;
@@ -244,8 +297,36 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
 
         var tab = pendingSelectTab;
         pendingSelectTab = null;
-        SelectTab(tab);
+        var browserKey = pendingBrowserKey;
+        var expandItemId = pendingExpandItemId;
+        pendingBrowserKey = null;
+        pendingExpandItemId = null;
+
+        if (selectedTab != tab)
+        {
+            selectedTab = tab;
+            selectedBrowserKey = browserKey ?? string.Empty;
+            lastBrowserDetailKey = string.Empty;
+            savedDataConfirm = SavedDataConfirmKind.None;
+            expandedPieceKeys.Clear();
+            ApplyLayout();
+            if (tab == TabOutfitSets)
+                _ = ScanAllSetCategoriesAsync();
+        }
+        else if (browserKey != null)
+        {
+            selectedBrowserKey = browserKey;
+            lastBrowserDetailKey = string.Empty;
+            expandedPieceKeys.Clear();
+        }
+
+        if (expandItemId is > 0)
+            pendingExpandItemId = expandItemId;
+        if (browserKey != null)
+            pendingForceSelectDetail = true;
+
         tabBar.SelectTab(tab);
+        RefreshActiveTab(force: true);
     }
 
     private void SelectTab(string tab)
@@ -258,6 +339,8 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
         lastBrowserDetailKey = string.Empty;
         savedDataConfirm = SavedDataConfirmKind.None;
         expandedPieceKeys.Clear();
+        pendingBrowserKey = null;
+        pendingExpandItemId = null;
         ApplyLayout();
         RefreshActiveTab(force: true);
         if (tab == TabOutfitSets)
@@ -384,9 +467,45 @@ internal sealed partial class TrackerNativeAddon : NativeAddon
             TabOverview =>
                 BuildOverviewSignature(index),
             TabSettings =>
-                $"st|{c.ShowPlateEditorOverlay}|{(int)savedDataConfirm}",
+                $"st|{c.ShowPlateEditorOverlay}|{c.ShowArmoireCandidates}|{(int)savedDataConfirm}|{HaselTweaksGate.IsGlamourDresserAlertEnabled(Plugin.PluginInterface)}",
             _ => selectedTab,
         };
     }
 
+    private CharacterTrackerCache? CurrentWishlistCache() =>
+        OutfitWishlist.TryGetCache(plugin.Configuration, Plugin.GetLocalContentId());
+
+    private CharacterTrackerCache? EnsureWishlistCache()
+    {
+        var contentId = Plugin.GetLocalContentId();
+        return contentId == 0 ? null : OutfitWishlist.GetOrCreateCache(plugin.Configuration, contentId);
+    }
+
+    private void NotifyWishlistChanged()
+    {
+        wishlistRevision++;
+        plugin.Configuration.Save();
+        detailRebuildEpoch++;
+        lastBrowserListSignature = string.Empty;
+        lastOverviewWishlistRevision = int.MinValue;
+        // Never rebuild nodes inside a click handler — schedule for next tick.
+        _ = Plugin.Framework.RunOnTick(() =>
+        {
+            if (!IsOpen)
+                return;
+            if (IsBrowserTab)
+                RefreshBrowserList(force: true, rebuildDetail: true);
+            else
+                RebuildForm(force: true);
+        }, delayTicks: 1);
+    }
+
+    /// <summary>Called after ownership refresh auto-prunes wishlist entries.</summary>
+    internal void NotifyWishlistPruned()
+    {
+        wishlistRevision++;
+        detailRebuildEpoch++;
+        lastBrowserListSignature = string.Empty;
+        lastOverviewWishlistRevision = int.MinValue;
+    }
 }

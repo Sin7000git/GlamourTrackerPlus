@@ -111,6 +111,24 @@ internal sealed partial class FashionReportService : IDisposable
         return ResolveItem(name, detail?.GarlandUrl, detail, null, null, playerContext, inventory);
     }
 
+    /// <summary>
+    /// Category-filter path: HTTP (+ in-memory detail cache) only — no inventory / framework hop.
+    /// </summary>
+    public async Task<FashionItemAcquireKind> ResolveAcquireKindAsync(string name, CancellationToken ct = default)
+    {
+        var detail = await GetCachedItemDetailAsync(name, ct).ConfigureAwait(false);
+        if (detail is not { Found: true })
+            return FashionItemAcquireKind.Unknown;
+
+        var (kind, _, _, _) = FashionAcquisitionParser.Parse(
+            detail.Sections,
+            vendorLocator,
+            playerContext: null,
+            owned: false,
+            ownedWhereLabel: null);
+        return kind;
+    }
+
     public void Dispose()
     {
         gameInventory.InventoryChanged -= OnInventoryChanged;

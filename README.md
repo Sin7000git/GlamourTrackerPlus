@@ -10,11 +10,11 @@ Tracks what’s in your glamour dresser and armoire, see which pieces are missin
 
 ### Overview
 
-A quick snapshot of dresser usage, Outfit set progress, and Fashion Report status. Open Fashion Report from here when you need the full weekly board.
+A quick snapshot of dresser usage, Outfit set progress, and Fashion Report status. Open Fashion Report from here when you need the full weekly board. See wishlisted sets or pieces to keep track of galm you want.
 
-### Outfit sets
+### Outfit sets and wishlists
 
-Browse Outfit sets and see which pieces you already have in the dresser or armoire (and which you’re still missing). Filter by category and storage, sort the list, and see details and acquisition tips where available.
+Browse Outfit sets and see which pieces you already have in the dresser or armoire (and which you’re still missing). Filter by category and storage, sort the list, and see details and acquisition tips where available. Add items to your wishlist from here.
 
 ### Fashion Report
 
@@ -28,11 +28,17 @@ Open **Edit Glamour Plates** at a dresser, then use the floating controls above 
 
 Optional markers on item tooltips and Grand Company expert delivery lists show whether something lives in your dresser or armoire, so you can avoid turning in glam pieces by mistake.
 
+### Armoire warning
+
+Notifies you that an item in your dresser can be placed in the armoire instead.
+
 ### Settings
 
 Toggle tooltip icons, GC markers, the Fashion Report MGP-buff reminder, the plate-editor overlay, and other preferences from the Settings tab.
 
 ---
+
+
 
 ## Getting started
 
@@ -41,6 +47,8 @@ Toggle tooltip icons, GC markers, the Fashion Report MGP-buff reminder, the plat
 3. Run `/glamplus` for the main UI.
 
 ---
+
+
 
 ## Commands
 
@@ -55,6 +63,8 @@ Toggle tooltip icons, GC markers, the Fashion Report MGP-buff reminder, the plat
 Type `/glamplus help` in chat for every accepted alias.
 
 ---
+
+
 
 ## Credits
 

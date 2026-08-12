@@ -1,4 +1,5 @@
 using System.Numerics;
+using GlamourTracker.Services;
 using GlamourTracker.Windows.Native;
 using KamiToolKit.Nodes;
 
@@ -34,6 +35,49 @@ internal sealed partial class TrackerNativeAddon
             config.ShowGcExpertDeliveryStatus = v;
             config.Save();
         }));
+
+        list.AddNode(MakeSection("Outfit wishlist"));
+        list.AddNode(MakeCheckbox(
+            "Remove from wishlist when owned",
+            config.AutoRemoveOwnedWishlist,
+            v =>
+            {
+                config.AutoRemoveOwnedWishlist = v;
+                config.Save();
+            }));
+        list.AddNode(MakeMuted(
+            "Only applies to sets and pieces you add while this is on. Older wishlist entries stay until you remove them.",
+            width));
+
+        list.AddNode(MakeSection("Glamour dresser"));
+        var haselAlert = HaselTweaksGate.IsGlamourDresserAlertEnabled(Plugin.PluginInterface);
+        var armoireCb = MakeCheckbox(
+            "Show armoire notes beside dresser",
+            config.ShowArmoireCandidates,
+            v =>
+            {
+                if (HaselTweaksGate.IsGlamourDresserAlertEnabled(Plugin.PluginInterface))
+                    return;
+                config.ShowArmoireCandidates = v;
+                config.Save();
+            });
+        armoireCb.IsEnabled = !haselAlert;
+        armoireCb.TextTooltip = haselAlert
+            ? "Unavailable while HaselTweaks Glamour Dresser Alert is on."
+            : "Lists dresser pieces that can go in the armoire.";
+        list.AddNode(armoireCb);
+        if (haselAlert)
+        {
+            list.AddNode(MakeMuted(
+                "HaselTweaks Glamour Dresser Alert is on, so this stays off.",
+                width));
+        }
+        else
+        {
+            list.AddNode(MakeMuted(
+                "When the dresser is open, list pieces that can move to the armoire.",
+                width));
+        }
 
         list.AddNode(MakeSection("Fashion Report"));
         list.AddNode(MakeCheckbox(
@@ -89,7 +133,7 @@ internal sealed partial class TrackerNativeAddon
         if (savedDataConfirm == SavedDataConfirmKind.Character)
         {
             list.AddNode(MakeMuted(
-                "Clear saved dresser, armoire, plate, and Fashion Report data for this character only?",
+                "Clear saved dresser, armoire, plate, wishlist, and Fashion Report data for this character only?",
                 width));
             list.AddNode(MakeConfirmCancelRow(
                 confirmLabel: "Yes, clear character",
@@ -145,7 +189,7 @@ internal sealed partial class TrackerNativeAddon
             Size = new Vector2(170f, RowH),
             String = "Clear character data",
             TextTooltip =
-                "Deletes dresser, armoire, plate, and Fashion Report progress for the character you are logged in as. Other characters are unchanged.",
+                "Deletes dresser, armoire, plate, wishlist, and Fashion Report progress for the character you are logged in as. Other characters are unchanged.",
             OnClick = () =>
             {
                 savedDataConfirm = SavedDataConfirmKind.Character;
@@ -157,7 +201,7 @@ internal sealed partial class TrackerNativeAddon
             Size = new Vector2(140f, RowH),
             String = "Clear all data",
             TextTooltip =
-                "Deletes saved dresser/armoire ownership and Fashion Report progress for every character. Counts stay at zero until you open the dresser or armoire again.",
+                "Deletes saved dresser/armoire ownership, wishlists, and Fashion Report progress for every character. Counts stay at zero until you open the dresser or armoire again.",
             OnClick = () =>
             {
                 savedDataConfirm = SavedDataConfirmKind.All;

@@ -53,6 +53,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly GlamourCandidatePool candidatePool;
     private readonly GlamourPlateRandomizer plateRandomizer;
     private readonly PlateEditorOverlay plateEditorOverlay;
+    private readonly ArmoireCandidatesOverlay armoireCandidatesOverlay;
     private readonly ItemDetailEnhancer itemDetailEnhancer;
     private readonly GcExpertDeliveryEnhancer gcExpertDeliveryEnhancer;
     private readonly FashionReportService fashionReport;
@@ -62,6 +63,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly FashionReportMgpReminderService fashionMgpReminder;
     private readonly ArtisanIpcClient artisanIpc;
     private readonly FashionRecipeLookup recipeLookup;
+    private readonly OutfitSetCategoryStore outfitSetCategoryStore;
     private readonly PluginCommands pluginCommands;
 
     private DateTime lastBackgroundRefresh = DateTime.MinValue;
@@ -99,6 +101,13 @@ public sealed class Plugin : IDalamudPlugin
             plateRandomizer,
             ToggleMainUi,
             () => RefreshAll(true));
+        armoireCandidatesOverlay = new ArmoireCandidatesOverlay(
+            GameGui,
+            PluginInterface,
+            DataManager,
+            () => Configuration,
+            ownershipIndex,
+            cabinetCatalog);
         gcExpertDeliveryEnhancer = new GcExpertDeliveryEnhancer(
             AddonLifecycle,
             GameGui,
@@ -138,6 +147,7 @@ public sealed class Plugin : IDalamudPlugin
             Log);
         artisanIpc = new ArtisanIpcClient(PluginInterface, Log);
         recipeLookup = new FashionRecipeLookup(DataManager);
+        outfitSetCategoryStore = new OutfitSetCategoryStore(PluginInterface);
         fashionProgress = new FashionReportProgressTracker(
             GameInterop,
             () => Configuration,
@@ -246,6 +256,7 @@ public sealed class Plugin : IDalamudPlugin
     internal FashionReportProgressTracker FashionProgress => fashionProgress;
     internal ArtisanIpcClient ArtisanIpc => artisanIpc;
     internal FashionRecipeLookup RecipeLookup => recipeLookup;
+    internal OutfitSetCategoryStore OutfitSetCategories => outfitSetCategoryStore;
 
     /// <summary>Must run on the framework thread (unsafe agent writes).</summary>
     internal PlateRandomizeResult BeginRandomizeOpenPlate(Action<PlateRandomizeResult>? onComplete = null) =>
@@ -297,6 +308,9 @@ public sealed class Plugin : IDalamudPlugin
 
         if (ClientState.IsLoggedIn)
             GlamourPlateStore.SyncFromGame(Configuration, GetLocalContentId());
+
+        if (OutfitWishlist.PruneOwnedIfEnabled(Configuration, outfitSetCatalog, GetLocalContentId()))
+            trackerNativeAddon?.NotifyWishlistPruned();
 
         // Dresser/armoire UI events update ownership without going through OnShow —
         // Overview must rebuild or it stays stuck on stale 0/N after Clear + resync.
@@ -355,6 +369,7 @@ public sealed class Plugin : IDalamudPlugin
     private void DrawUi()
     {
         plateEditorOverlay.Draw();
+        armoireCandidatesOverlay.Draw();
         gcExpertDeliveryEnhancer.DrawOverlays();
 #if GLAMOUR_DEV
         WindowSystem.Draw();

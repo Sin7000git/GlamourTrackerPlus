@@ -8,7 +8,7 @@ namespace GlamourTracker;
 [Serializable]
 public sealed partial class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 14;
+    public int Version { get; set; } = 16;
 
     public bool Enabled { get; set; } = true;
 
@@ -25,6 +25,19 @@ public sealed partial class Configuration : IPluginConfiguration
 
     public bool ShowTooltipIcons { get; set; } = true;
     public bool ShowGcExpertDeliveryStatus { get; set; } = true;
+
+    /// <summary>
+    /// When the glamour dresser is open, show a note for pieces that can move to the armoire
+    /// (or that exist in both). Auto-off while HaselTweaks is loaded.
+    /// </summary>
+    public bool ShowArmoireCandidates { get; set; } = true;
+
+    /// <summary>
+    /// When on, wishlist entries added after this is enabled are removed once owned
+    /// (piece stored, or whole set complete). Entries added while this was off are never auto-removed.
+    /// Default off.
+    /// </summary>
+    public bool AutoRemoveOwnedWishlist { get; set; }
 
     /// <summary>
     /// When talking to the Masked Rose for Fashion Report judging, warn if no VIP Card / Jackpot III

@@ -146,6 +146,33 @@ public sealed partial class Configuration
             dirty = true;
         }
 
+        // v15: wishlist lists on character caches (defaults empty).
+        if (Version < 15)
+        {
+            foreach (var cache in CharacterCaches.Values)
+            {
+                cache.WishlistSetRowIds ??= [];
+                cache.WishlistPieceKeys ??= [];
+                OutfitWishlist.NormalizePieceKeys(cache);
+            }
+
+            Version = 15;
+            dirty = true;
+        }
+
+        // v16: auto-prune eligibility lists (empty = pre-setting wishlist stays).
+        if (Version < 16)
+        {
+            foreach (var cache in CharacterCaches.Values)
+            {
+                cache.WishlistAutoPruneSetRowIds ??= [];
+                cache.WishlistAutoPrunePieceKeys ??= [];
+            }
+
+            Version = 16;
+            dirty = true;
+        }
+
         if (dirty)
             Save();
     }
@@ -162,6 +189,12 @@ public sealed partial class Configuration
         cache.ArmoireBaseIds = NormalizeIds(cache.ArmoireBaseIds);
         cache.DresserSetPresenceRowIds = NormalizeIds(cache.DresserSetPresenceRowIds);
         cache.DresserCompleteSetRowIds = NormalizeIds(cache.DresserCompleteSetRowIds);
+        cache.WishlistSetRowIds = NormalizeIds(cache.WishlistSetRowIds ?? []);
+        cache.WishlistAutoPruneSetRowIds = NormalizeIds(cache.WishlistAutoPruneSetRowIds ?? []);
+        cache.WishlistPieceKeys ??= [];
+        cache.WishlistAutoPrunePieceKeys ??= [];
+        OutfitWishlist.NormalizePieceKeys(cache);
+        OutfitWishlist.NormalizeAutoPrunePieceKeys(cache);
     }
 
     public static List<uint> NormalizeIds(IEnumerable<uint> ids)

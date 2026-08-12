@@ -85,6 +85,18 @@ internal sealed class GlamourOwnershipIndex
     public int OutfitSetsInDresser => this.snapshot.SetsInDresserCount;
     public bool HasPersistedData => this.snapshot.HasAnyItems;
 
+    /// <summary>Loose dresser item ids (may include outfit set row ids).</summary>
+    public IReadOnlyCollection<uint> DresserItemIds => this.snapshot.DresserItems;
+
+    /// <summary>Pieces held inside stored dresser outfits.</summary>
+    public IReadOnlyCollection<uint> DresserOutfitPieceIds => this.snapshot.DresserOutfitPieces;
+
+    /// <summary>Armoire item base ids.</summary>
+    public IReadOnlyCollection<uint> ArmoireItemIds => this.snapshot.ArmoireItems;
+
+    /// <summary>Outfit set row ids currently present in the dresser.</summary>
+    public IReadOnlyCollection<uint> DresserSetPresenceIds => this.snapshot.SetsInDresser;
+
     public void OnCharacterLogin(ulong contentId)
     {
         if (contentId == 0)

@@ -45,6 +45,24 @@ public sealed class CharacterTrackerCache
 
     public DateTime FashionReportNextResetUtc { get; set; }
 
+    /// <summary>Outfit set row ids on this character's wishlist.</summary>
+    public List<uint> WishlistSetRowIds { get; set; } = [];
+
+    /// <summary>Wishlisted pieces as "setId:itemId" (glamour base item id).</summary>
+    public List<string> WishlistPieceKeys { get; set; } = [];
+
+    /// <summary>
+    /// Set ids added to the wishlist while auto-remove-owned was on.
+    /// Only these are eligible for automatic prune when the set becomes fully owned.
+    /// </summary>
+    public List<uint> WishlistAutoPruneSetRowIds { get; set; } = [];
+
+    /// <summary>
+    /// Piece keys added while auto-remove-owned was on.
+    /// Only these are eligible for automatic prune when the piece becomes owned.
+    /// </summary>
+    public List<string> WishlistAutoPrunePieceKeys { get; set; } = [];
+
     public bool IsEmpty() =>
         DresserBaseIds.Count == 0
         && DresserOutfitPieceIds.Count == 0
@@ -54,5 +72,9 @@ public sealed class CharacterTrackerCache
         && DresserCompleteSetRowIds.Count == 0
         && DresserSlotsUsed <= 0
         && !FashionReportSynced
-        && FashionReportHighestScore <= 0;
+        && FashionReportHighestScore <= 0
+        && WishlistSetRowIds.Count == 0
+        && WishlistPieceKeys.Count == 0
+        && WishlistAutoPruneSetRowIds.Count == 0
+        && WishlistAutoPrunePieceKeys.Count == 0;
 }

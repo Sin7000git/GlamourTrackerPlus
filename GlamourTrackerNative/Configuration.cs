@@ -8,7 +8,7 @@ namespace GlamourTracker;
 [Serializable]
 public sealed partial class Configuration : IPluginConfiguration
 {
-    public int Version { get; set; } = 16;
+    public int Version { get; set; } = 17;
 
     public bool Enabled { get; set; } = true;
 
@@ -25,6 +25,25 @@ public sealed partial class Configuration : IPluginConfiguration
 
     public bool ShowTooltipIcons { get; set; } = true;
     public bool ShowGcExpertDeliveryStatus { get; set; } = true;
+
+    /// <summary>
+    /// On the Glamour Creation list (crystallize pane), show dresser/armoire ownership icons.
+    /// Default on.
+    /// </summary>
+    public bool ShowGlamourCreationOwnershipIcons { get; set; } = true;
+
+    /// <summary>
+    /// Glamour Creation only: when true, owned storage icons are tinted green; missing stay
+    /// untinted (same look as GC delivery). When false, all creation icons are untinted.
+    /// Does not affect item tooltips.
+    /// </summary>
+    public bool ColorCodeStorageIcons { get; set; } = true;
+
+    /// <summary>
+    /// Glamour Creation only: when true, only show icons for storage you already own.
+    /// Does not affect item tooltips (tooltips keep their own show setting).
+    /// </summary>
+    public bool StorageIconsOnlyWhenOwned { get; set; }
 
     /// <summary>
     /// When the glamour dresser is open, show a note for pieces that can move to the armoire

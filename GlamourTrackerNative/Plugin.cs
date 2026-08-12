@@ -56,6 +56,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ArmoireCandidatesOverlay armoireCandidatesOverlay;
     private readonly ItemDetailEnhancer itemDetailEnhancer;
     private readonly GcExpertDeliveryEnhancer gcExpertDeliveryEnhancer;
+    private readonly GlamourCreationEnhancer glamourCreationEnhancer;
     private readonly FashionReportService fashionReport;
     private readonly FashionMgpBuffService fashionMgpBuff;
     private readonly FashionVendorTravel vendorTravel;
@@ -113,6 +114,14 @@ public sealed class Plugin : IDalamudPlugin
             GameGui,
             DataManager,
             TextureProvider,
+            () => Configuration,
+            ownershipIndex);
+        glamourCreationEnhancer = new GlamourCreationEnhancer(
+            AddonLifecycle,
+            GameGui,
+            DataManager,
+            TextureProvider,
+            cabinetCatalog,
             () => Configuration,
             ownershipIndex);
         itemDetailEnhancer = new ItemDetailEnhancer(
@@ -225,6 +234,7 @@ public sealed class Plugin : IDalamudPlugin
         fashionProgress.Dispose();
         artisanIpc.Dispose();
         itemDetailEnhancer.Dispose();
+        glamourCreationEnhancer.Dispose();
         gcExpertDeliveryEnhancer.Dispose();
 
         KamiToolKitLibrary.Dispose();
@@ -380,6 +390,7 @@ public sealed class Plugin : IDalamudPlugin
     {
         FlushConfigSave(force: false);
         gcExpertDeliveryEnhancer.Tick();
+        glamourCreationEnhancer.Tick();
 
         if (!ClientState.IsLoggedIn)
             return;
@@ -433,6 +444,7 @@ public sealed class Plugin : IDalamudPlugin
         FlushConfigSave(force: true);
         itemDetailEnhancer.RestoreVisibleTooltip();
         gcExpertDeliveryEnhancer.ResetCaches();
+        glamourCreationEnhancer.ResetCaches();
     }
 
     private void OnDresserUiRefresh(AddonEvent type, AddonArgs args) => TryRefreshAllFromUiEvent();

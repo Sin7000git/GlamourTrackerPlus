@@ -2,6 +2,7 @@ using System.Numerics;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using KamiToolKit.Enums;
+using KamiToolKit.Nodes;
 using KamiToolKit.Nodes.Simplified;
 
 namespace GlamourTracker.Services;
@@ -10,6 +11,8 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer
 {
     private const float MarkerGapBeforeIcon = 4f;
     private const float MarkerIconSpacing = 2f;
+
+    private ResNode? listClipNode;
 
     private int SyncNativeMarkers(AddonGrandCompanySupplyList* addon, AtkUnitBase* supplyUnit)
     {
@@ -39,7 +42,8 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer
             || supplyAddress != this.lastSupplyAddonAddress
             || ownershipRevision != this.lastOwnershipRevision
             || Math.Abs(uiScale - this.lastAddonScale) > 0.001f
-            || this.markerNodes.Count == 0;
+            || this.markerNodes.Count == 0
+            || this.listClipNode == null;
 
         this.iconCache.EnsureBakedTexturePath();
         var dresserSlice = this.iconCache.GetResolvedDresserSlice();
@@ -85,6 +89,19 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer
                 endExclusive++;
         }
 
+        // Clip children to the list viewport so partial rows are cut off (not UV-shrunk / shifted).
+        var listScreen = new Vector2(listNode->ScreenX, listNode->ScreenY);
+        var clipLocal = AtkUiHelper.ScreenToAddonLocal(supplyUnit, listScreen);
+        var clip = new ResNode
+        {
+            Position = clipLocal,
+            Size = new Vector2(listNode->Width, listNode->Height),
+            IsVisible = true,
+        };
+        clip.AddNodeFlags(NodeFlags.Visible, NodeFlags.Enabled, NodeFlags.Clip);
+        clip.AttachNode(supplyUnit);
+        this.listClipNode = clip;
+
         for (var itemIndex = firstVisible; itemIndex < endExclusive; itemIndex++)
         {
             var renderer = list->GetItemRenderer(itemIndex);
@@ -119,7 +136,7 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer
                 markerHeight,
                 markerWidth,
                 uiScale,
-                preferOwnerNode: isVisible);
+                preferOwnerNode: true);
             if (anchor == null)
             {
                 PluginFileLog.Write(
@@ -144,51 +161,79 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer
 
             if (inArmoire)
             {
-                var screenPos = new Vector2(
-                    markerX,
-                    rowCenterY + MathF.Max(0f, (markerHeight - armoireSize.Y) * 0.5f * uiScale));
-                if (GcMarkerOverlayGuard.ShouldDrawMarkerAt(this.gameGui, supplyUnit, screenPos, armoireSize * uiScale))
-                {
-                    AttachAtkMarker(
-                        supplyUnit,
-                        AtkUiHelper.ScreenToAddonLocal(supplyUnit, screenPos),
-                        armoireSlice,
-                        GetFlipV(config, isDresser: false));
-                    markerX -= (armoireSize.X + MarkerIconSpacing) * uiScale;
-                }
-                else
-                {
-                    PluginFileLog.Write(
-                        "DEBUG",
-                        "gc.markers",
-                        $"skip listIdx={itemIndex} id={itemId}: armoire blocked/out of clip");
-                }
+                TryPlaceMarkerInListClip(
+                    clip,
+                    clipLocal,
+                    supplyUnit,
+                    ref markerX,
+                    rowCenterY,
+                    armoireSlice,
+                    armoireSize,
+                    markerHeight,
+                    uiScale,
+                    GetFlipV(config, isDresser: false));
             }
 
             if (inDresser)
             {
-                var screenPos = new Vector2(
-                    markerX,
-                    rowCenterY + MathF.Max(0f, (markerHeight - dresserSize.Y) * 0.5f * uiScale));
-                if (GcMarkerOverlayGuard.ShouldDrawMarkerAt(this.gameGui, supplyUnit, screenPos, dresserSize * uiScale))
-                {
-                    AttachAtkMarker(
-                        supplyUnit,
-                        AtkUiHelper.ScreenToAddonLocal(supplyUnit, screenPos),
-                        dresserSlice,
-                        GetFlipV(config, isDresser: true));
-                }
-                else
-                {
-                    PluginFileLog.Write(
-                        "DEBUG",
-                        "gc.markers",
-                        $"skip listIdx={itemIndex} id={itemId}: dresser blocked/out of clip");
-                }
+                TryPlaceMarkerInListClip(
+                    clip,
+                    clipLocal,
+                    supplyUnit,
+                    ref markerX,
+                    rowCenterY,
+                    dresserSlice,
+                    dresserSize,
+                    markerHeight,
+                    uiScale,
+                    GetFlipV(config, isDresser: true));
             }
         }
 
         return this.markerNodes.Count;
+    }
+
+    private void TryPlaceMarkerInListClip(
+        ResNode clip,
+        Vector2 clipAddonLocal,
+        AtkUnitBase* supplyUnit,
+        ref float markerX,
+        float rowCenterY,
+        StorageUiIconSlice slice,
+        Vector2 sliceSize,
+        float markerHeight,
+        float uiScale,
+        bool flipV)
+    {
+        // Always step X so a failed draw does not shove the sibling icon sideways.
+        var step = (sliceSize.X + MarkerIconSpacing) * uiScale;
+        if (!slice.IsValid || string.IsNullOrWhiteSpace(slice.Path))
+        {
+            markerX -= step;
+            return;
+        }
+
+        var screenPos = new Vector2(
+            markerX,
+            rowCenterY + MathF.Max(0f, (markerHeight - sliceSize.Y) * 0.5f * uiScale));
+
+        if (!GcMarkerOverlayGuard.ShouldDrawMarkerAt(this.gameGui, supplyUnit, screenPos, sliceSize * uiScale))
+        {
+            markerX -= step;
+            return;
+        }
+
+        var addonPos = AtkUiHelper.ScreenToAddonLocal(supplyUnit, screenPos);
+        var relative = addonPos - clipAddonLocal;
+        AttachAtkMarker(
+            clip,
+            relative,
+            sliceSize,
+            slice.Path,
+            new Vector2(slice.U, slice.V),
+            new Vector2(slice.Width, slice.Height),
+            flipV);
+        markerX -= step;
     }
 
     private static bool GetFlipV(Configuration config, bool isDresser)
@@ -203,32 +248,35 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer
     }
 
     private void AttachAtkMarker(
-        AtkUnitBase* supplyUnit,
-        Vector2 rootRelativePos,
-        StorageUiIconSlice slice,
+        ResNode parent,
+        Vector2 parentRelativePos,
+        Vector2 displaySize,
+        string path,
+        Vector2 textureUv,
+        Vector2 textureSize,
         bool flipV)
     {
-        if (!slice.IsValid || string.IsNullOrWhiteSpace(slice.Path))
+        if (displaySize.X < 1f || displaySize.Y < 1f)
             return;
 
         var node = new SimpleImageNode
         {
-            Size = slice.DisplaySize,
-            Position = rootRelativePos,
+            Size = displaySize,
+            Position = parentRelativePos,
             IsVisible = true,
             PartId = 0,
         };
 
-        node.LoadTexture(slice.Path);
-        node.TextureCoordinates = new Vector2(slice.U, slice.V);
-        node.TextureSize = new Vector2(slice.Width, slice.Height);
+        node.LoadTexture(path);
+        node.TextureCoordinates = textureUv;
+        node.TextureSize = textureSize;
         node.WrapMode = WrapMode.Stretch;
 
         if (flipV)
             node.ImageNodeFlags = ImageNodeFlags.FlipV;
 
         node.AddNodeFlags(NodeFlags.Visible, NodeFlags.Enabled);
-        node.AttachNode(supplyUnit);
+        node.AttachNode(parent);
         this.markerNodes.Add(node);
     }
 

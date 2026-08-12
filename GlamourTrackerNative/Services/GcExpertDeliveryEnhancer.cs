@@ -76,18 +76,6 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer : IDisposable
 
     private void DisposeNativeMarkers()
     {
-        if (this.markerNodes.Count == 0)
-        {
-            this.lastScrollOffset = int.MinValue;
-            this.lastFirstVisible = int.MinValue;
-            this.lastListLength = -1;
-            this.lastAddonScale = float.NaN;
-            this.lastSupplyAddonAddress = 0;
-            this.lastAtlasSignature = string.Empty;
-            this.lastOwnershipRevision = -1;
-            return;
-        }
-
         foreach (var node in this.markerNodes)
         {
             try
@@ -101,6 +89,21 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer : IDisposable
         }
 
         this.markerNodes.Clear();
+
+        if (this.listClipNode != null)
+        {
+            try
+            {
+                this.listClipNode.Dispose();
+            }
+            catch
+            {
+                // Addon may already be torn down.
+            }
+
+            this.listClipNode = null;
+        }
+
         this.lastScrollOffset = int.MinValue;
         this.lastFirstVisible = int.MinValue;
         this.lastListLength = -1;
@@ -116,7 +119,7 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer : IDisposable
         var config = this.getConfiguration();
         if (!config.Enabled || !config.ShowGcExpertDeliveryStatus)
         {
-            if (this.markerNodes.Count > 0)
+            if (this.markerNodes.Count > 0 || this.listClipNode != null)
                 DisposeNativeMarkers();
             return;
         }
@@ -124,7 +127,7 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer : IDisposable
         var addonPtr = this.gameGui.GetAddonByName(SupplyAddonName, 1);
         if (addonPtr.Address == nint.Zero)
         {
-            if (this.markerNodes.Count > 0)
+            if (this.markerNodes.Count > 0 || this.listClipNode != null)
                 DisposeNativeMarkers();
             return;
         }
@@ -132,7 +135,7 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer : IDisposable
         var supplyUnit = (AtkUnitBase*)addonPtr.Address;
         if (!GcMarkerOverlayGuard.ShouldDrawAnyMarkers(supplyUnit))
         {
-            if (this.markerNodes.Count > 0)
+            if (this.markerNodes.Count > 0 || this.listClipNode != null)
                 DisposeNativeMarkers();
             return;
         }

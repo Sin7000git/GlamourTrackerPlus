@@ -22,6 +22,8 @@ internal static unsafe class GcMarkerOverlayGuard
         "ScreenFrame",
         "ManagedScreenFrame",
         "GrandCompanySupplyList",
+        "MiragePrismPrismBox",
+        "MiragePrismPrismBoxCrystallize",
     ];
 
     private static readonly Vector2[] MarkerProbeFractions =

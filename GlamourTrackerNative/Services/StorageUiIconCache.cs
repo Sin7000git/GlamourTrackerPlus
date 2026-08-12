@@ -51,9 +51,9 @@ internal sealed unsafe partial class StorageUiIconCache
 
     public Vector2 GetArmoireSize() => GetResolvedArmoireSlice().DisplaySize;
 
-    public StorageUiIconSlice GetResolvedDresserSlice() => BuildResolvedSlice(isDresser: true);
+    public StorageUiIconSlice GetResolvedDresserSlice() => BuildResolvedSlice(StorageIconKind.Dresser);
 
-    public StorageUiIconSlice GetResolvedArmoireSlice() => BuildResolvedSlice(isDresser: false);
+    public StorageUiIconSlice GetResolvedArmoireSlice() => BuildResolvedSlice(StorageIconKind.Armoire);
 
     /// <summary>Bake <c>ui/uld/ItemDetailPutIn</c>; keeps atlas UV.</summary>
     public string ApplyItemDetailPutInSheet()
@@ -92,47 +92,53 @@ internal sealed unsafe partial class StorageUiIconCache
         ReloadTextures();
     }
 
-    private StorageUiIconSlice BuildResolvedSlice(bool isDresser)
+    private StorageUiIconSlice BuildResolvedSlice(StorageIconKind kind)
     {
         var config = this.getConfiguration();
-        var path = isDresser ? config.DresserUiIconPath : config.ArmoireUiIconPath;
+        var isDresserFamily = kind == StorageIconKind.Dresser;
+        var path = isDresserFamily ? config.DresserUiIconPath : config.ArmoireUiIconPath;
         if (string.IsNullOrWhiteSpace(path))
             return default;
 
 #if GLAMOUR_DEV
-        var scale = isDresser ? config.DresserIconDisplayScale : config.ArmoireIconDisplayScale;
+        var scale = isDresserFamily ? config.DresserIconDisplayScale : config.ArmoireIconDisplayScale;
         if (scale <= 0f)
             scale = 1f;
 
-        var baseW = isDresser ? config.DresserUiDisplayW : config.ArmoireUiDisplayW;
-        var baseH = isDresser ? config.DresserUiDisplayH : config.ArmoireUiDisplayH;
+        var baseW = isDresserFamily ? config.DresserUiDisplayW : config.ArmoireUiDisplayW;
+        var baseH = isDresserFamily ? config.DresserUiDisplayH : config.ArmoireUiDisplayH;
         if (baseW <= 0f)
             baseW = StorageIconAtlasDefaults.DisplaySize;
         if (baseH <= 0f)
             baseH = StorageIconAtlasDefaults.DisplaySize;
 
-        var uOff = isDresser ? config.DresserIconUOffset : config.ArmoireIconUOffset;
-        var vOff = isDresser ? config.DresserIconVOffset : config.ArmoireIconVOffset;
-        var wOff = isDresser ? config.DresserIconWOffset : config.ArmoireIconWOffset;
-        var hOff = isDresser ? config.DresserIconHOffset : config.ArmoireIconHOffset;
+        var uOff = isDresserFamily ? config.DresserIconUOffset : config.ArmoireIconUOffset;
+        var vOff = isDresserFamily ? config.DresserIconVOffset : config.ArmoireIconVOffset;
+        var wOff = isDresserFamily ? config.DresserIconWOffset : config.ArmoireIconWOffset;
+        var hOff = isDresserFamily ? config.DresserIconHOffset : config.ArmoireIconHOffset;
+
+        var baseU = isDresserFamily ? config.DresserUiIconU : config.ArmoireUiIconU;
 
         return new StorageUiIconSlice
         {
             Path = path,
-            U = ApplyOffset(isDresser ? config.DresserUiIconU : config.ArmoireUiIconU, uOff),
-            V = ApplyOffset(isDresser ? config.DresserUiIconV : config.ArmoireUiIconV, vOff),
-            Width = ApplyOffset(isDresser ? config.DresserUiIconW : config.ArmoireUiIconW, wOff),
-            Height = ApplyOffset(isDresser ? config.DresserUiIconH : config.ArmoireUiIconH, hOff),
+            U = ApplyOffset(baseU, uOff),
+            V = ApplyOffset(isDresserFamily ? config.DresserUiIconV : config.ArmoireUiIconV, vOff),
+            Width = ApplyOffset(isDresserFamily ? config.DresserUiIconW : config.ArmoireUiIconW, wOff),
+            Height = ApplyOffset(isDresserFamily ? config.DresserUiIconH : config.ArmoireUiIconH, hOff),
             DisplayWidth = MathF.Max(8f, baseW * scale),
             DisplayHeight = MathF.Max(8f, baseH * scale),
         };
 #else
         var scale = StorageIconAtlasDefaults.DisplayScale;
         var baseSize = StorageIconAtlasDefaults.DisplaySize;
+        var baseU = isDresserFamily
+            ? StorageIconAtlasDefaults.DresserU
+            : StorageIconAtlasDefaults.ArmoireU;
         return new StorageUiIconSlice
         {
             Path = path,
-            U = isDresser ? StorageIconAtlasDefaults.DresserU : StorageIconAtlasDefaults.ArmoireU,
+            U = baseU,
             V = ApplyOffset(StorageIconAtlasDefaults.IconV, StorageIconAtlasDefaults.BrightRowVOffset),
             Width = StorageIconAtlasDefaults.IconW,
             Height = StorageIconAtlasDefaults.IconH,
@@ -140,6 +146,12 @@ internal sealed unsafe partial class StorageUiIconCache
             DisplayHeight = MathF.Max(8f, baseSize * scale),
         };
 #endif
+    }
+
+    private enum StorageIconKind : byte
+    {
+        Dresser = 0,
+        Armoire = 1,
     }
 
     private static ushort ApplyOffset(ushort value, int offset)

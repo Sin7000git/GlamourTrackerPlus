@@ -120,6 +120,58 @@ internal static unsafe class AtkUiHelper
     }
 
     /// <summary>
+    /// Crops an image marker to a vertical screen clip range (list header/footer), adjusting
+    /// display height and atlas UV so partially scrolled rows match native item-icon clipping.
+    /// </summary>
+    public static bool TryClipImageVertically(
+        Vector2 screenTopLeft,
+        Vector2 fullDisplaySize,
+        float uiScale,
+        float clipScreenTop,
+        float clipScreenBottom,
+        Vector2 textureUv,
+        Vector2 textureSize,
+        bool flipV,
+        out Vector2 clippedScreenTopLeft,
+        out Vector2 clippedDisplaySize,
+        out Vector2 clippedTextureUv,
+        out Vector2 clippedTextureSize)
+    {
+        clippedScreenTopLeft = default;
+        clippedDisplaySize = default;
+        clippedTextureUv = default;
+        clippedTextureSize = default;
+
+        var scale = Math.Max(uiScale, 0.01f);
+        var fullH = fullDisplaySize.Y * scale;
+        if (fullH < 1f || fullDisplaySize.X <= 0f || textureSize.Y <= 0f)
+            return false;
+
+        var top = screenTopLeft.Y;
+        var bottom = top + fullH;
+        if (bottom <= clipScreenTop + 0.5f || top >= clipScreenBottom - 0.5f)
+            return false;
+
+        var visibleTop = MathF.Max(top, clipScreenTop);
+        var visibleBottom = MathF.Min(bottom, clipScreenBottom);
+        var visibleH = visibleBottom - visibleTop;
+        if (visibleH < 1f)
+            return false;
+
+        var cropTopFrac = (visibleTop - top) / fullH;
+        var cropBotFrac = (bottom - visibleBottom) / fullH;
+        if (flipV)
+            (cropTopFrac, cropBotFrac) = (cropBotFrac, cropTopFrac);
+
+        var texH = textureSize.Y;
+        clippedScreenTopLeft = new Vector2(screenTopLeft.X, visibleTop);
+        clippedDisplaySize = new Vector2(fullDisplaySize.X, fullDisplaySize.Y * (visibleH / fullH));
+        clippedTextureUv = new Vector2(textureUv.X, textureUv.Y + (texH * cropTopFrac));
+        clippedTextureSize = new Vector2(textureSize.X, texH * (1f - cropTopFrac - cropBotFrac));
+        return clippedTextureSize.Y >= 0.5f;
+    }
+
+    /// <summary>
     /// Top-left screen corner for a node. List item icons often anchor <see cref="AtkResNode.ScreenY"/> at the bottom edge.
     /// </summary>
     public static Vector2 GetNodeScreenTopLeft(AtkResNode* node)
@@ -251,6 +303,7 @@ internal static unsafe class AtkUiHelper
     /// <summary>
     /// GC expert delivery draws item icons via the list, not inside row nodes — use list + renderer layout.
     /// <paramref name="uiScale"/> is the addon Scale; list ItemHeight/ScrollOffset/Left are local units.
+    /// Centers in the visible part of the row so the last/partial row does not sit low.
     /// </summary>
     public static unsafe Vector2? TryGetListRowMarkerAnchor(
         AtkComponentList* list,
@@ -275,6 +328,7 @@ internal static unsafe class AtkUiHelper
             return null;
 
         var scale = Math.Max(uiScale, 0.01f);
+        var listBottom = listY + (listNode->Height * scale);
         var itemHeight = list->ItemHeight > 0 ? list->ItemHeight : (short)40;
         var slot = Math.Max(0, itemIndex - list->FirstVisibleItemIndex);
         // ScreenY is scaled; ItemHeight/ScrollOffset/Left are local — multiply local deltas by scale.
@@ -285,26 +339,33 @@ internal static unsafe class AtkUiHelper
             ? (AtkResNode*)renderer->OwnerNode
             : null;
 
-        // OwnerNode is only safe when IsItemVisible — pooled renderers for other indices often
-        // still point at the first visible row (markers jump to the top of the list).
-        if (preferOwnerNode && rowNode != null && rowNode->ScreenY > 1f)
-            rowTop = rowNode->ScreenY;
+        // Prefer OwnerNode whenever it sits in the list viewport — including partial bottom rows
+        // that report !IsItemVisible (still a real on-screen row, not a pooled stale top node).
+        if (rowNode != null && rowNode->ScreenY > 1f)
+        {
+            var nodeY = rowNode->ScreenY;
+            if (preferOwnerNode || (nodeY >= listY - 4f && nodeY <= listBottom + 4f))
+                rowTop = nodeY;
+        }
+
+        var rowHLocal = rowNode != null && rowNode->Height > 0
+            ? (float)rowNode->Height
+            : (float)itemHeight;
+        var rowBottom = rowTop + (rowHLocal * scale);
 
         var x = rowLeft
             + (GcRowIconPadLeft - gapBeforeIcon - markerWidth + GcExpertListMarkerXOffset) * scale;
 
-        var y = rowTop + MathF.Max(0f, (itemHeight - markerHeight) * 0.5f * scale);
-
-        if (preferOwnerNode)
-        {
-            var textNode = GetRowLabelTextNode(renderer, rowNode);
-            var textTopLeft = ResolveNodeScreenTopLeft(rowNode, textNode);
-            if (textTopLeft != null && textNode != null)
-            {
-                var textHeight = textNode->Height > 0 ? (float)textNode->Height : (float)itemHeight;
-                y = textTopLeft.Value.Y + MathF.Max(0f, (textHeight - markerHeight) * 0.5f * scale);
-            }
-        }
+        // Center on the visible band of the row (full-row center sits low on the last/partial row).
+        var visTop = MathF.Max(rowTop, listY);
+        var visBottom = MathF.Min(rowBottom, listBottom);
+        var visH = MathF.Max(0f, visBottom - visTop);
+        var markerHScreen = markerHeight * scale;
+        float y;
+        if (visH >= 1f)
+            y = visTop + MathF.Max(0f, (visH - markerHScreen) * 0.5f);
+        else
+            y = rowTop + MathF.Max(0f, (rowHLocal - markerHeight) * 0.5f * scale);
 
         y += GcExpertListMarkerYOffset * scale;
 

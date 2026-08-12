@@ -28,6 +28,9 @@ internal sealed partial class TrackerNativeAddon
             config.ShowTooltipIcons = v;
             config.Save();
         }));
+        list.AddNode(MakeMuted(
+            "On item tooltips: green when stored, red when not (for storage that item can use).",
+            width));
 
         list.AddNode(MakeSection("Grand Company delivery"));
         list.AddNode(MakeCheckbox("Show dresser/armoire icons", config.ShowGcExpertDeliveryStatus, v =>
@@ -35,6 +38,32 @@ internal sealed partial class TrackerNativeAddon
             config.ShowGcExpertDeliveryStatus = v;
             config.Save();
         }));
+
+        list.AddNode(MakeSection("Glamour Creation"));
+        list.AddNode(MakeCheckbox("Show dresser/armoire ownership icons", config.ShowGlamourCreationOwnershipIcons, v =>
+        {
+            config.ShowGlamourCreationOwnershipIcons = v;
+            config.Save();
+        }));
+        list.AddNode(MakeMuted(
+            "On the crystallize list. Dresser sits on the right; armoire on the left when both apply.",
+            width));
+        list.AddNode(MakeCheckbox("Color-code owned icons green", config.ColorCodeStorageIcons, v =>
+        {
+            config.ColorCodeStorageIcons = v;
+            config.Save();
+        }));
+        list.AddNode(MakeMuted(
+            "Owned icons turn green. Missing icons stay normal (untinted), like Grand Company delivery.",
+            width));
+        list.AddNode(MakeCheckbox("Only show icons where owned", config.StorageIconsOnlyWhenOwned, v =>
+        {
+            config.StorageIconsOnlyWhenOwned = v;
+            config.Save();
+        }));
+        list.AddNode(MakeMuted(
+            "Hides dresser or armoire icons for storage you do not already have. Crystallize list only.",
+            width));
 
         list.AddNode(MakeSection("Outfit wishlist"));
         list.AddNode(MakeCheckbox(

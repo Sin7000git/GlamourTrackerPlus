@@ -101,8 +101,8 @@ internal sealed class ItemDetailEnhancer : IDisposable
                 return;
             }
 
-            var itemId = agent->ItemId;
-            if (!this.dataManager.GetExcelSheet<Item>().TryGetRow(itemId, out var item))
+            var itemId = ItemIdHelper.SheetItemId(agent->ItemId);
+            if (itemId == 0 || !this.dataManager.GetExcelSheet<Item>().TryGetRow(itemId, out var item))
             {
                 RestoreTooltip(addon);
                 return;

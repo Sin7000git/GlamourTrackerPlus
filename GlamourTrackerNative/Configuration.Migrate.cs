@@ -173,6 +173,15 @@ public sealed partial class Configuration
             dirty = true;
         }
 
+        // v17: Glamour Creation placement baked; shared storage icon style defaults.
+        if (Version < 17)
+        {
+            ColorCodeStorageIcons = true;
+            StorageIconsOnlyWhenOwned = false;
+            Version = 17;
+            dirty = true;
+        }
+
         if (dirty)
             Save();
     }

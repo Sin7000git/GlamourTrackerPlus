@@ -344,6 +344,9 @@ internal sealed class TrackerWindow : Window
         var enabled = config.Enabled;
         var showIcons = config.ShowTooltipIcons;
         var showGc = config.ShowGcExpertDeliveryStatus;
+        var showCreation = config.ShowGlamourCreationOwnershipIcons;
+        var colorCode = config.ColorCodeStorageIcons;
+        var onlyOwned = config.StorageIconsOnlyWhenOwned;
         var changed = false;
 
         changed |= ImGui.Checkbox("Enable plugin", ref enabled);
@@ -392,6 +395,12 @@ internal sealed class TrackerWindow : Window
         ImGui.TextDisabled("Green = stored, red = missing (for items that can use that storage).");
         changed |= ImGui.Checkbox("Show dresser/armoire icons on GC expert delivery", ref showGc);
         ImGui.TextDisabled("Uses ui/uld/ItemDetailPutIn (baked). Atlas UV can still be tuned below.");
+        changed |= ImGui.Checkbox("Show dresser/armoire ownership icons on Glamour Creation", ref showCreation);
+        ImGui.TextDisabled("Crystallize list. Dresser on the right; armoire on the left when both apply.");
+        changed |= ImGui.Checkbox("Color-code owned Glamour Creation icons green", ref colorCode);
+        ImGui.TextDisabled("Owned = green; missing stay normal (untinted). Crystallize list only.");
+        changed |= ImGui.Checkbox("Only show Glamour Creation icons where owned", ref onlyOwned);
+        ImGui.TextDisabled("Hides missing storage icons on the crystallize list only.");
 
         ImGui.Separator();
         var showPlateOverlay = config.ShowPlateEditorOverlay;
@@ -425,7 +434,10 @@ internal sealed class TrackerWindow : Window
             config.Enabled = enabled;
             config.UsePlateOverlayLocalUiStyle = useLocalStyle;
             config.ShowTooltipIcons = showIcons;
+            config.ColorCodeStorageIcons = colorCode;
+            config.StorageIconsOnlyWhenOwned = onlyOwned;
             config.ShowGcExpertDeliveryStatus = showGc;
+            config.ShowGlamourCreationOwnershipIcons = showCreation;
             config.ShowPlateEditorOverlay = showPlateOverlay;
             config.PlateEditorOverlayOnRight = overlayOnRight;
             config.ShowSlotRerollButtons = showSlotReroll;

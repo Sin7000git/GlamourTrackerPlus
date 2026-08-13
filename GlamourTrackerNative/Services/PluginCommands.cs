@@ -20,7 +20,6 @@ internal sealed class PluginCommands : IDisposable
             HelpMessage =
                 "main UI\n"
                 + "/glamplus fashion → Fashion Report\n"
-                + "/glamplus refresh → Force refresh\n"
                 + "/glamplus help → Command aliases",
         });
     }
@@ -56,11 +55,6 @@ internal sealed class PluginCommands : IDisposable
                 this.plugin.OpenFashionReportWindow();
                 return;
 
-            case "refresh":
-                this.plugin.RefreshAll(true);
-                this.chatGui.Print("Glamour Tracker+ refreshed dresser and armoire data.");
-                return;
-
 #if GLAMOUR_DEV
             case "gcdebug":
             case "gcicons":
@@ -84,7 +78,6 @@ internal sealed class PluginCommands : IDisposable
         this.chatGui.Print("[Glamour Tracker+] Command aliases:");
         this.chatGui.Print("  /glamplus  (also: open, ui) → main UI");
         this.chatGui.Print("  /glamplus fashion  (also: fr, report) → Fashion Report");
-        this.chatGui.Print("  /glamplus refresh → Force refresh dresser/armoire data");
 #if GLAMOUR_DEV
         this.chatGui.Print("  /glamplus imgui  (also: old) → legacy ImGui UI (Dev)");
         this.chatGui.Print("  /glamplus gcdebug  (also: gcicons) → GC marker diagnostics (Dev)");

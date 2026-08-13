@@ -303,7 +303,7 @@ internal static unsafe class AtkUiHelper
     /// <summary>
     /// GC expert delivery draws item icons via the list, not inside row nodes — use list + renderer layout.
     /// <paramref name="uiScale"/> is the addon Scale; list ItemHeight/ScrollOffset/Left are local units.
-    /// Centers in the visible part of the row so the last/partial row does not sit low.
+    /// Centers on the native item icon (or full row). Partial rows are UV-cropped to the list.
     /// </summary>
     public static unsafe Vector2? TryGetListRowMarkerAnchor(
         AtkComponentList* list,
@@ -315,7 +315,7 @@ internal static unsafe class AtkUiHelper
         float uiScale = 1f,
         bool preferOwnerNode = true)
     {
-        if (renderer == null || list == null)
+        if (list == null)
             return null;
 
         var listNode = GetComponentOwnerResNode((AtkComponentBase*)list);
@@ -328,44 +328,62 @@ internal static unsafe class AtkUiHelper
             return null;
 
         var scale = Math.Max(uiScale, 0.01f);
-        var listBottom = listY + (listNode->Height * scale);
         var itemHeight = list->ItemHeight > 0 ? list->ItemHeight : (short)40;
         var slot = Math.Max(0, itemIndex - list->FirstVisibleItemIndex);
-        // ScreenY is scaled; ItemHeight/ScrollOffset/Left are local — multiply local deltas by scale.
-        var rowTop = listY + (list->ScrollOffset + (slot * itemHeight)) * scale;
-        var rowLeft = listX + (renderer->Left * scale);
+        var scroll = (float)list->ScrollOffset;
+        if (scroll < 0f || scroll > itemHeight)
+            scroll = 0f;
 
-        var rowNode = renderer->OwnerNode != null
+        // ScreenY is scaled; ItemHeight/ScrollOffset/Left are local. Scroll down moves content up.
+        var formulaTop = listY + ((slot * itemHeight) - scroll) * scale;
+        var rowTop = formulaTop;
+        var rowLeft = listX;
+        if (renderer != null)
+            rowLeft += renderer->Left * scale;
+
+        var listBottom = listY + (listNode->Height * scale);
+        var firstRowTop = listY - (scroll * scale);
+        var rowNode = renderer != null && renderer->OwnerNode != null
             ? (AtkResNode*)renderer->OwnerNode
             : null;
 
-        // Prefer OwnerNode whenever it sits in the list viewport — including partial bottom rows
-        // that report !IsItemVisible (still a real on-screen row, not a pooled stale top node).
-        if (rowNode != null && rowNode->ScreenY > 1f)
+        var usedOwnerNode = false;
+        if (preferOwnerNode && rowNode != null && rowNode->ScreenY > 1f)
         {
             var nodeY = rowNode->ScreenY;
-            if (preferOwnerNode || (nodeY >= listY - 4f && nodeY <= listBottom + 4f))
+            var looksLikePooledTop = slot > 0
+                && MathF.Abs(nodeY - firstRowTop) <= itemHeight * scale * 0.5f;
+            if (!looksLikePooledTop && nodeY >= listY - (itemHeight * scale) && nodeY <= listBottom + 4f)
+            {
                 rowTop = nodeY;
+                usedOwnerNode = true;
+            }
         }
 
-        var rowHLocal = rowNode != null && rowNode->Height > 0
+        var rowHLocal = usedOwnerNode && rowNode != null && rowNode->Height > 0
             ? (float)rowNode->Height
             : (float)itemHeight;
-        var rowBottom = rowTop + (rowHLocal * scale);
 
         var x = rowLeft
             + (GcRowIconPadLeft - gapBeforeIcon - markerWidth + GcExpertListMarkerXOffset) * scale;
 
-        // Center on the visible band of the row (full-row center sits low on the last/partial row).
-        var visTop = MathF.Max(rowTop, listY);
-        var visBottom = MathF.Min(rowBottom, listBottom);
-        var visH = MathF.Max(0f, visBottom - visTop);
         var markerHScreen = markerHeight * scale;
-        float y;
-        if (visH >= 1f)
-            y = visTop + MathF.Max(0f, (visH - markerHScreen) * 0.5f);
-        else
-            y = rowTop + MathF.Max(0f, (rowHLocal - markerHeight) * 0.5f * scale);
+        var y = rowTop + MathF.Max(0f, (rowHLocal * scale - markerHScreen) * 0.5f);
+
+        // Same vertical center as the native item graphic so a bottom sliver still overlaps the list.
+        if (usedOwnerNode && rowNode != null)
+        {
+            var iconNode = FindLeftmostItemGraphicNode(rowNode);
+            if (iconNode != null && iconNode->Height > 0 && iconNode->ScreenY > 1f)
+            {
+                var iconH = iconNode->Height * scale;
+                var iconTop = iconNode->ScreenY;
+                if (UsesBottomScreenAnchor(iconNode))
+                    iconTop -= iconH;
+                if (MathF.Abs(iconTop - rowTop) <= rowHLocal * scale)
+                    y = iconTop + MathF.Max(0f, (iconH - markerHScreen) * 0.5f);
+            }
+        }
 
         y += GcExpertListMarkerYOffset * scale;
 

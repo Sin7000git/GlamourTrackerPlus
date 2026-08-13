@@ -90,20 +90,6 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer : IDisposable
 
         this.markerNodes.Clear();
 
-        if (this.listClipNode != null)
-        {
-            try
-            {
-                this.listClipNode.Dispose();
-            }
-            catch
-            {
-                // Addon may already be torn down.
-            }
-
-            this.listClipNode = null;
-        }
-
         this.lastScrollOffset = int.MinValue;
         this.lastFirstVisible = int.MinValue;
         this.lastListLength = -1;
@@ -119,7 +105,7 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer : IDisposable
         var config = this.getConfiguration();
         if (!config.Enabled || !config.ShowGcExpertDeliveryStatus)
         {
-            if (this.markerNodes.Count > 0 || this.listClipNode != null)
+            if (this.markerNodes.Count > 0)
                 DisposeNativeMarkers();
             return;
         }
@@ -127,7 +113,7 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer : IDisposable
         var addonPtr = this.gameGui.GetAddonByName(SupplyAddonName, 1);
         if (addonPtr.Address == nint.Zero)
         {
-            if (this.markerNodes.Count > 0 || this.listClipNode != null)
+            if (this.markerNodes.Count > 0)
                 DisposeNativeMarkers();
             return;
         }
@@ -135,7 +121,7 @@ internal sealed unsafe partial class GcExpertDeliveryEnhancer : IDisposable
         var supplyUnit = (AtkUnitBase*)addonPtr.Address;
         if (!GcMarkerOverlayGuard.ShouldDrawAnyMarkers(supplyUnit))
         {
-            if (this.markerNodes.Count > 0 || this.listClipNode != null)
+            if (this.markerNodes.Count > 0)
                 DisposeNativeMarkers();
             return;
         }

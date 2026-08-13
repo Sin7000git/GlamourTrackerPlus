@@ -2,8 +2,8 @@
   "Author": "Sin7000",
   "Name": "Glamour Tracker+",
   "InternalName": "GlamourTrackerNative",
-  "Punchline": "Track your glams, Fashion Reports, and more with a cool native UI.",
-  "Description": "Track glamour dresser and armoire items, Fashion Report, and randomize glamour plates.",
+  "Punchline": "Track glams, Fashion Report, randomize glamour plates and more. All with a cool native UI.",
+  "Description": "Track glamour dresser and armoire items, Fashion Report, randomize glamour plates, see whether you already own the item at a single glance, favorite and keep track of outfits you wish to get.",
   "ApplicableVersion": "any",
   "IconUrl": "https://raw.githubusercontent.com/Sin7000git/DalamudPluginRepo/main/icons/GlamourTrackerNative.png",
   "Tags": [

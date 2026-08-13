@@ -10,7 +10,7 @@ Tracks what’s in your glamour dresser and armoire, see which pieces are missin
 
 ### Overview
 
-A quick snapshot of dresser usage, Outfit set progress, and Fashion Report status. Open Fashion Report from here when you need the full weekly board. See wishlisted sets or pieces to keep track of galm you want.
+A quick snapshot of dresser usage, Outfit set progress, and Fashion Report status. Open Fashion Report from here when you need the full weekly board. See wishlisted sets or pieces to keep track of glam you want.
 
 ### Outfit sets and wishlists
 
@@ -24,9 +24,9 @@ Weekly Fashion Report helper in a dedicated window: slot themes, recommended ite
 
 Open **Edit Glamour Plates** at a dresser, then use the floating controls above the plate editor to roll a full plate, or reroll individual slots. Filters (job, level, dresser/armoire sources, slot locks).
 
-### Item tooltips & GC delivery
+### Item tooltips, Glamour dresser & GC delivery
 
-Optional markers on item tooltips and Grand Company expert delivery lists show whether something lives in your dresser or armoire, so you can avoid turning in glam pieces by mistake.
+Optional markers on item tooltips, glamour dresser and Grand Company expert delivery lists show whether you own the item in your dresser or armoire, so you can efficiently put stuff in your dresser/armoire and avoid turning in items by mistake in GC delivery.
 
 ### Armoire warning
 
